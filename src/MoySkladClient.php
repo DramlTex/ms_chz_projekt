@@ -27,9 +27,11 @@ class MoySkladClient
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_USERPWD, $this->login . ':' . $this->password);
+        curl_setopt($ch, CURLOPT_ENCODING, 'gzip');
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
             'Accept: application/json',
-            'Content-Type: application/json'
+            'Content-Type: application/json; charset=utf-8',
+            'Accept-Encoding: gzip'
         ]);
 
         $response = curl_exec($ch);
