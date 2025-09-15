@@ -26,7 +26,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $response = curl_exec($ch);
     $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($ch);
     curl_close($ch);
+
+    $logPath = __DIR__ . '/../moysklad.log';
+    $logEntry = sprintf('[%s] STATUS:%s CURL_ERROR:%s RESPONSE:%s\n', date('c'), $status, $curlError, $response);
+    file_put_contents($logPath, $logEntry, FILE_APPEND);
 
     if ($response === false) {
         $error = 'Ошибка соединения с сервисом "Мой Склад"';
