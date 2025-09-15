@@ -2,13 +2,6 @@
 session_start();
 require_once __DIR__ . '/../src/MoySkladClient.php';
 
-// Ограниченный список пользователей, которым разрешён доступ.
-const USERS = [
-    'admin' => true,
-    'admin@markustester' => true,
-    'test' => true,
-];
-
 const MY_SKLAD_URL = 'https://api.moysklad.ru/api/remap/1.2/context/usersettings';
 
 // Выход из системы.
@@ -25,30 +18,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = $_POST['username'] ?? '';
     $password = $_POST['password'] ?? '';
 
-    if (!isset(USERS[$username])) {
-        $error = 'Доступ запрещён биллингом';
+    $ch = curl_init(MY_SKLAD_URL);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_USERPWD, $username . ':' . $password);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Accept: application/json']);
+
+    $response = curl_exec($ch);
+    $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($response === false) {
+        $error = 'Ошибка соединения с сервисом "Мой Склад"';
+    } elseif ($status === 200) {
+        $_SESSION['user'] = $username;
+        $_SESSION['password'] = $password;
+        header('Location: index.php');
+        exit;
     } else {
-        $ch = curl_init(MY_SKLAD_URL);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_USERPWD, $username . ':' . $password);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 5);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Accept: application/json']);
-
-        $response = curl_exec($ch);
-        $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $curlError = curl_error($ch);
-        curl_close($ch);
-
-        if ($response === false) {
-            $error = 'Ошибка соединения с сервисом "Мой Склад"';
-        } elseif ($status === 200) {
-            $_SESSION['user'] = $username;
-            $_SESSION['password'] = $password;
-            header('Location: index.php');
-            exit;
-        } else {
-            $error = 'Ошибка авторизации в "Моём Складе"';
-        }
+        $error = 'Ошибка авторизации в "Моём Складе"';
     }
 }
 

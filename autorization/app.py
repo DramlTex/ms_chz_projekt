@@ -18,26 +18,8 @@ app.secret_key = 'change_this_secret'
 #           x_prefix        – чтобы подставлять /test во все url_for()
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1, x_prefix=1)
 
-# Простое хранилище пользователей в памяти.
-# В реальных приложениях учётные данные хранятся в БД.
-USERS = {
-    'admin': 'password',
-    'admin@markustester': 'qwerty',
-    'test': 'test'
-}
-
 # URL для запроса настроек пользователя "Моего Склада"
 MY_SKLAD_URL = 'https://api.moysklad.ru/api/remap/1.2/context/usersettings'
-
-
-def billing_allows(username: str) -> bool:
-    """Проверка разрешения логина в биллинге.
-
-    В реальном приложении здесь могла бы быть HTTP-запрос или проверка в БД.
-    Сейчас функция является заглушкой и допускает только пользователей из
-    словаря ``USERS``.
-    """
-    return username in USERS
 
 
 def login_required(f):
@@ -77,10 +59,6 @@ def login():
         # Получаем данные из формы
         username = request.form.get('username')
         password = request.form.get('password')
-
-        if not billing_allows(username):
-            # Биллинг отклонил пользователя
-            return render_template('login.html', error='Доступ запрещён биллингом')
 
         try:
             resp = requests.get(MY_SKLAD_URL, auth=(username, password), timeout=5)
