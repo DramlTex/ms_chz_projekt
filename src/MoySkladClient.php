@@ -24,6 +24,7 @@ class MoySkladClient
     public function getAssortment(): array
     {
         $url = $this->baseUrl . '/entity/assortment';
+        error_log('Requesting MoySklad assortment from ' . $url . ' using login ' . $this->login);
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_USERPWD, $this->login . ':' . $this->password);
@@ -37,6 +38,7 @@ class MoySkladClient
         $response = curl_exec($ch);
         if ($response === false) {
             $error = curl_error($ch);
+            error_log('Curl error during MoySklad request: ' . $error);
             curl_close($ch);
             throw new RuntimeException('Curl error: ' . $error);
         }
@@ -44,6 +46,7 @@ class MoySkladClient
         $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
         if ($status !== 200) {
+            error_log('MoySklad API error, HTTP ' . $status . ' response: ' . $response);
             throw new RuntimeException('MoySklad API error: HTTP ' . $status . ' response: ' . $response);
         }
 
