@@ -1,0 +1,160 @@
+:root {
+  --color-bg: #ffffff;
+  --color-text: #333333;
+  --color-accent: #234187;
+  --color-muted: #eeeeee;
+  --color-error: #e74c3c;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: 'Open Sans', sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+h1 {
+  font-size: 36px;
+  font-weight: 700;
+  margin-bottom: 20px;
+}
+
+h2 {
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
+
+h3 {
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.button {
+  display: inline-block;
+  background-color: var(--color-muted);
+  color: var(--color-text);
+  border: none;
+  border-radius: 5px;
+  padding: 10px 20px;
+  cursor: pointer;
+  text-decoration: none;
+  font-weight: 600;
+  transition: background-color 0.2s ease;
+}
+
+.button:hover {
+  background-color: #ddd;
+}
+
+.button--primary {
+  background-color: var(--color-accent);
+  color: #fff;
+}
+
+.button--primary:hover {
+  background-color: #234187;
+}
+
+a {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+input[type="text"],
+input[type="password"],
+input[type="email"],
+textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  margin-bottom: 15px;
+  font-size: 16px;
+  box-sizing: border-box;
+}
+
+.error {
+  color: var(--color-error);
+  font-size: 14px;
+  margin-top: -10px;
+  margin-bottom: 15px;
+}
+
+.section {
+  padding: 60px 0;
+}
+
+.navbar {
+  background-color: #fff;
+  border-bottom: 1px solid #eee;
+  padding: 15px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.navbar a {
+  margin-left: 20px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.navbar a:hover {
+  color: var(--color-accent);
+}
+
+.icon {
+  width: 40px;
+  height: 40px;
+  fill: var(--color-accent);
+}
+
+/* Centered login container */
+.login-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+}
+
+.login-container {
+  width: 20%;
+  border: 2px solid var(--color-accent);
+  padding: 20px;
+  box-sizing: border-box;
+  border-radius: 10px;
+}
+
+@media (max-width: 768px) {
+  h1 {
+    font-size: 28px;
+  }
+
+  h2 {
+    font-size: 22px;
+  }
+
+  .navbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .navbar a {
+    margin: 10px 0 0 0;
+  }
+}
