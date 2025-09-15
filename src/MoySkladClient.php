@@ -8,6 +8,7 @@ class MoySkladClient
     private string $password;
     private string $baseUrl;
     private string $logFile;
+    private string $userAgent = 'AssortmentDemo/1.0 (+Ваш email/телефон)';
 
     public function __construct(
         string $login,
@@ -27,42 +28,64 @@ class MoySkladClient
         error_log($entry, 3, $this->logFile);
     }
 
-    /**
-     * Fetches the assortment of products from MoySklad.
-     *
-     * @return array List of items from the assortment.
-     * @throws RuntimeException When the API request fails.
-     */
-    public function getAssortment(): array
+    private function request(string $method, string $path, array $query = []): array
     {
-        $url = $this->baseUrl . '/entity/assortment';
-        $this->log('Requesting MoySklad assortment from ' . $url . ' using login ' . $this->login);
+        $url = $this->baseUrl . '/' . ltrim($path, '/');
+        if ($query) {
+            $url .= (str_contains($url, '?') ? '&' : '?') . http_build_query($query);
+        }
+
+        $this->log('REQ ' . $method . ' ' . $url . ' login=' . $this->login);
+
         $ch = curl_init($url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_USERPWD, $this->login . ':' . $this->password);
-        curl_setopt($ch, CURLOPT_ENCODING, 'gzip');
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            'Accept: application/json',
-            'Content-Type: application/json; charset=utf-8',
-            'Accept-Encoding: gzip'
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_USERPWD        => $this->login . ':' . $this->password,
+            CURLOPT_HTTPAUTH       => CURLAUTH_BASIC,
+            CURLOPT_ENCODING       => 'gzip',
+            CURLOPT_HTTPHEADER     => [
+                'Accept: application/json',
+                'Accept-Encoding: gzip',
+                'Content-Type: application/json; charset=utf-8',
+                'User-Agent: ' . $this->userAgent,
+            ],
+            CURLOPT_TIMEOUT        => 20,
         ]);
 
         $response = curl_exec($ch);
         if ($response === false) {
             $error = curl_error($ch);
-            $this->log('Curl error during MoySklad request: ' . $error);
+            $code = curl_errno($ch);
             curl_close($ch);
+            $this->log('Curl error: ' . $error . ' (code ' . $code . ')');
             throw new RuntimeException('Curl error: ' . $error);
         }
 
-        $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $status = curl_getinfo($ch, CURLINFO_HTTP_CODE) ?: 0;
         curl_close($ch);
+
         if ($status !== 200) {
-            $this->log('MoySklad API error, HTTP ' . $status . ' response: ' . $response);
+            $this->log('API error HTTP ' . $status . ' response: ' . mb_substr($response, 0, 2000));
             throw new RuntimeException('MoySklad API error: HTTP ' . $status . ' response: ' . $response);
         }
 
         $data = json_decode($response, true);
+        if (!is_array($data)) {
+            $this->log('JSON decode error, raw: ' . mb_substr((string)$response, 0, 1000));
+            throw new RuntimeException('Не удалось разобрать ответ API');
+        }
+        return $data;
+    }
+
+    /**
+     * Получение ассортимента.
+     * $params например: ['limit'=>100, 'expand'=>'product,attributes']
+     */
+    public function getAssortment(array $params = []): array
+    {
+        // разумные дефолты
+        $params = array_replace(['limit' => 100, 'expand' => 'product,attributes'], $params);
+        $data = $this->request('GET', '/entity/assortment', $params);
         return $data['rows'] ?? [];
     }
 }
