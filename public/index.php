@@ -2,81 +2,82 @@
 session_start();
 require_once __DIR__ . '/../src/MoySkladClient.php';
 
-const MY_SKLAD_URL = 'https://api.moysklad.ru/api/remap/1.2/context/employee'; // <-- проверенный эндпоинт
+const MY_SKLAD_URL = 'https://api.moysklad.ru/api/remap/1.2/context/employee/';
 
+// Обработка формы авторизации.
 $logPath = __DIR__ . '/../moysklad.log';
 
-function log_line(string $msg): void {
+function log_line(string $msg) {
     global $logPath;
     file_put_contents($logPath, sprintf("[%s] %s\n", date('c'), $msg), FILE_APPEND);
 }
 
-function tail_log(string $path, int $lines = 80): string {
+function tail_log(string $path, int $lines = 120): string {
     if (!is_file($path)) return 'Лог пока пуст';
     $data = file($path, FILE_IGNORE_NEW_LINES);
-    $slice = array_slice($data, -$lines);
-    return implode("\n", $slice);
+    return implode("\n", array_slice($data, -$lines));
 }
 
-// Выход из системы.
-if (isset($_GET['logout'])) {
-    session_destroy();
-    header('Location: index.php');
-    exit;
+function extractApiErrors(string $body): string {
+    $data = json_decode($body, true);
+    if (!is_array($data) || empty($data['errors'])) return '';
+    $msgs = [];
+    foreach ($data['errors'] as $e) {
+        $parts = [];
+        if (isset($e['code'])) $parts[] = 'код ' . $e['code'];
+        if (!empty($e['error'])) $parts[] = $e['error'];
+        if (!empty($e['error_message'])) $parts[] = $e['error_message'];
+        if (!empty($e['parameter'])) $parts[] = 'поле: ' . $e['parameter'];
+        $msgs[] = implode(' — ', $parts);
+    }
+    return implode('; ', $msgs);
 }
 
-$error = null;
-
-// Обработка формы авторизации.
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // На всякий случай сбрасываем старые креды,
+    // чтобы «залипшая» сессия не мешала новой попытке
+    unset($_SESSION['user'], $_SESSION['password']);
+
     $username = $_POST['username'] ?? '';
     $password = $_POST['password'] ?? '';
 
-    $ch = curl_init(MY_SKLAD_URL);
+    // РЕКОМЕНДОВАННЫЙ эндпоинт для проверки логина
+    // (обратите внимание на завершающий слэш)
+    $ch = curl_init('https://api.moysklad.ru/api/remap/1.2/context/employee/');
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_USERPWD        => $username . ':' . $password, // Basic
+        CURLOPT_USERPWD        => $username . ':' . $password,
         CURLOPT_HTTPAUTH       => CURLAUTH_BASIC,
         CURLOPT_TIMEOUT        => 15,
         CURLOPT_CONNECTTIMEOUT => 5,
-        CURLOPT_ENCODING       => 'gzip', // ВАЖНО: включает Accept-Encoding: gzip и автоматическую распаковку
+        CURLOPT_ENCODING       => 'gzip', // включает Accept-Encoding: gzip и распаковку
+        CURLOPT_HEADER         => true,   // вернём и заголовки, и тело
         CURLOPT_HTTPHEADER     => [
-            'Accept: application/json',
+            'Accept: application/json;charset=utf-8',
             'Accept-Encoding: gzip',
-            'User-Agent: AssortmentDemo/1.0 (+Ваш email/телефон)'
+            'User-Agent: AssortmentDemo/1.0'
         ],
-        CURLOPT_HEADER         => true, // хотим получить и заголовки
     ]);
 
     $raw = curl_exec($ch);
     $curlError = curl_error($ch);
     $status = curl_getinfo($ch, CURLINFO_HTTP_CODE) ?: 0;
     $headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE) ?: 0;
-
-    $respHeadersRaw = substr($raw, 0, $headerSize) ?: '';
-    $respBody       = substr($raw, $headerSize) ?: '';
+    $headersRaw = substr((string)$raw, 0, $headerSize) ?: '';
+    $body       = substr((string)$raw, $headerSize) ?: '';
     curl_close($ch);
 
-    // Выцепим X-Lognex-Auth и X-Lognex-Auth-Message
-    $xAuth = null;
-    $xAuthMsg = null;
-    foreach (preg_split('/\r\n|\r|\n/', $respHeadersRaw) as $h) {
-        if (stripos($h, 'X-Lognex-Auth:') === 0)        $xAuth    = trim(substr($h, strlen('X-Lognex-Auth:')));
-        if (stripos($h, 'X-Lognex-Auth-Message:') === 0) $xAuthMsg = trim(substr($h, strlen('X-Lognex-Auth-Message:')));
+    // Достанем диагностические заголовки X-Lognex-*
+    $xAuth = $xAuthMsg = '-';
+    foreach (preg_split('/\r\n|\r|\n/', $headersRaw) as $h) {
+        if (stripos($h, 'X-Lognex-Auth:') === 0)        $xAuth    = trim(substr($h, 16));
+        if (stripos($h, 'X-Lognex-Auth-Message:') === 0) $xAuthMsg = trim(substr($h, 23));
     }
 
-    // Аккуратно логируем (без пароля)
-    log_line(sprintf(
-        'LOGIN TRY user="%s" STATUS:%s CURL_ERR:%s X-Lognex-Auth:%s X-Lognex-Auth-Message:%s',
-        $username,
-        $status,
-        $curlError ?: '-',
-        $xAuth ?: '-',
-        $xAuthMsg ?: '-'
-    ));
-    // Логируем первые килобайты тела ответа (на случай JSON-ошибки)
-    $preview = mb_substr($respBody, 0, 2000);
-    log_line('RESPONSE BODY: ' . $preview);
+    // Логируем попытку (пароль не пишем)
+    log_line(sprintf('LOGIN TRY user="%s" STATUS:%s CURL_ERR:%s X-Auth:%s X-Auth-Message:%s',
+        $username, $status, $curlError ?: '-', $xAuth, $xAuthMsg));
+    log_line('RESPONSE BODY: ' . mb_substr($body, 0, 2000));
 
     if ($raw === false) {
         $error = 'Ошибка соединения с сервисом "МойСклад"';
@@ -86,13 +87,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: index.php');
         exit;
     } else {
-        // Пояснение для частых случаев
+        // Вытянем расшифровку из JSON "errors"
+        $apiErr = extractApiErrors($body);
         if ($status === 415) {
-            $error = 'HTTP 415 от API — проверьте, что передаётся Accept-Encoding: gzip.';
+            $error = 'HTTP 415 — проверьте, что передаётся Accept-Encoding: gzip.';
+        } elseif ($status === 400 && str_contains(mb_strtolower($apiErr), 'accept')) {
+            $error = 'HTTP 400 — неверный заголовок Accept. Должно быть application/json;charset=utf-8.';
         } elseif ($status === 401) {
-            $error = 'HTTP 401 — проверьте логин/пароль или права доступа.';
+            $error = 'HTTP 401 — неверные логин/пароль или нет доступа к API.';
         } else {
-            $error = 'Ошибка авторизации в "Моём Складе" (HTTP ' . $status . ')';
+            $error = 'Ошибка авторизации в "Моём Складе" (HTTP ' . $status . ')' . ($apiErr ? ' — ' . $apiErr : '');
         }
     }
 }
@@ -126,12 +130,12 @@ if (isset($_SESSION['user'], $_SESSION['password'])) {
 <?php if (!isset($_SESSION['user'])): ?>
     <h1>Вход</h1>
     <?php if (!empty($error)): ?>
-        <p style="color:#b00; font-weight:600;"><?= htmlspecialchars($error) ?></p>
-        <details open>
-            <summary>Диагностика (последние строки лога)</summary>
-            <pre><?= htmlspecialchars(tail_log($logPath, 120)) ?></pre>
-        </details>
-    <?php endif; ?>
+  <p style="color:#b00;font-weight:600;"><?= htmlspecialchars($error) ?></p>
+  <details open>
+      <summary>Диагностика (последние строки лога)</summary>
+      <pre><?= htmlspecialchars(tail_log($logPath, 120)) ?></pre>
+  </details>
+<?php endif; ?>
     <form method="post">
         <label>Логин: <input type="text" name="username" autocomplete="username"></label><br>
         <label>Пароль: <input type="password" name="password" autocomplete="current-password"></label><br><br>

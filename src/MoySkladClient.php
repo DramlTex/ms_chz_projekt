@@ -38,19 +38,13 @@ class MoySkladClient
         $this->log('REQ ' . $method . ' ' . $url . ' login=' . $this->login);
 
         $ch = curl_init($url);
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_USERPWD        => $this->login . ':' . $this->password,
-            CURLOPT_HTTPAUTH       => CURLAUTH_BASIC,
-            CURLOPT_ENCODING       => 'gzip',
-            CURLOPT_HTTPHEADER     => [
-                'Accept: application/json',
-                'Accept-Encoding: gzip',
-                'Content-Type: application/json; charset=utf-8',
-                'User-Agent: ' . $this->userAgent,
-            ],
-            CURLOPT_TIMEOUT        => 20,
-        ]);
+        curl_setopt($ch, CURLOPT_ENCODING, 'gzip');
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Accept: application/json;charset=utf-8',
+            'Accept-Encoding: gzip',
+            'Content-Type: application/json; charset=utf-8',
+            'User-Agent: AssortmentDemo/1.0'
+    ]);
 
         $response = curl_exec($ch);
         if ($response === false) {
