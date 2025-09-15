@@ -36,7 +36,6 @@ def test_successful_login(client, monkeypatch):
     mock_resp = Mock()
     mock_resp.status_code = 200
     monkeypatch.setattr('requests.get', lambda *a, **k: mock_resp)
-    monkeypatch.setattr(autorization_app, 'billing_allows', lambda u: True)
 
     resp = client.post(
         '/login',
