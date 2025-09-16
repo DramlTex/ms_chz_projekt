@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Вход в НКМТ через УКЭП</title>
+<script src="cadesplugin_api.js"></script>
+<style>
+body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+     max-width:720px;margin:2rem auto}
+select,button{width:100%;padding:.6rem;margin-top:1rem}
+#log{white-space:pre-wrap;border:1px solid #ccc;padding:1rem;margin-top:1rem;
+     background:#fafafa}
+</style>
+</head>
+<body>
+<h2>Авторизация в НКМТ</h2>
+
+<select id="certs"><option>Загрузка сертификатов…</option></select>
+<button id="go">Войти с ЭЦП</button>
+
+<div id="log">Инициализация CryptoPro…</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let certs = [];
+
+cadesplugin.then(init).catch(e=>log('❌ CryptoPro: '+e));
+
+async function init(){
+  const store = await cadesplugin.CreateObjectAsync("CAdESCOM.Store");
+  await store.Open(2,"My",2);
+  const col = await store.Certificates;
+  const cnt = await col.Count;
+  $('certs').innerHTML='';
+  for(let i=1;i<=cnt;i++){
+    const c = await col.Item(i);
+    if(new Date(await c.ValidToDate) < new Date()) continue;     // просрочен
+    $('certs').add(new Option(await c.SubjectName, certs.length));
+    certs.push(c);
+  }
+  log('✅ Сертификаты загружены');
+}
+
+$('go').onclick = async ()=>{
+  log('\n=== Новый сеанс ===');
+  try{
+    log('Получение XML-челленджа…');
+    const xml = await (await fetch('get_challenge.php')).text();
+
+    log('Подпись…');
+    const sign = await makeSign(xml, certs[$('certs').value]);
+
+    log('Отправка подписи…');
+    const res  = await fetch('send_signature.php',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({signature:sign})
+    });
+    const j = await res.json();
+    if(j.session_token){
+      log('✅ Успех!\nTOKEN: '+j.session_token);
+    }else{
+      log('❌ Ошибка ответа: '+JSON.stringify(j));
+    }
+  }catch(e){ log('❌ JS-ошибка: '+e.message); }
+};
+
+async function makeSign(data, cert){
+  const signer = await cadesplugin.CreateObjectAsync("CAdESCOM.CPSigner");
+  await signer.propset_Certificate(cert);
+  const sd = await cadesplugin.CreateObjectAsync("CAdESCOM.CadesSignedData");
+  await sd.propset_Content(data);
+  return await sd.SignCades(signer, cadesplugin.CADESCOM_CADES_BES, true);
+}
+
+function log(t){ $('log').textContent += '\n'+t; }
+</script>
+</body>
+</html>
