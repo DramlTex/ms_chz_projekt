@@ -8,7 +8,6 @@ import { initOrderModal } from './ui/orderModal.js';
 import { initFilters } from './ui/filters.js';
 import { createNotifier } from './ui/notifications.js';
 import { initAuthPanel } from './ui/authPanel.js';
-import { initSigningPanel } from './ui/signingPanel.js';
 
 const DEFAULT_YEARS = 3;
 
@@ -42,16 +41,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const statusElement = document.getElementById('catalog-request-status');
   const filterForm = document.getElementById('catalog-filter-form');
   const resetButton = document.getElementById('reset-filters');
-
-  const signingTableBody = document.getElementById('signing-table-body');
-  const signingEmptyState = document.getElementById('signing-empty-state');
-  const signingSelectAll = document.getElementById('signing-select-all');
-  const signingSelectedCounter = document.getElementById('signing-selected-counter');
-  const signingReloadButton = document.getElementById('signing-reload');
-  const signingSignButton = document.getElementById('signing-sign');
-  const signingStatus = document.getElementById('signing-status');
-  const signingResult = document.getElementById('signing-result');
-  const signingTableWrapper = document.getElementById('signing-table-wrapper');
 
   const notifier = createNotifier(document.getElementById('notification-stack'));
 
@@ -93,19 +82,6 @@ document.addEventListener('DOMContentLoaded', () => {
     notifier,
   });
 
-  const signingController = initSigningPanel({
-    tableBody: signingTableBody,
-    tableWrapper: signingTableWrapper,
-    emptyState: signingEmptyState,
-    selectAllCheckbox: signingSelectAll,
-    selectedCounter: signingSelectedCounter,
-    reloadButton: signingReloadButton,
-    signButton: signingSignButton,
-    statusElement: signingStatus,
-    resultContainer: signingResult,
-    notifier,
-  });
-
   const defaultFilters = getDefaultFilters();
   let filterController;
 
@@ -142,7 +118,6 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     loadCards(orderStore.getFilters(), { silentFallback: true });
-    signingController.reload({ silent: true });
   });
 
   async function loadCards(filters, { silentFallback = false } = {}) {
