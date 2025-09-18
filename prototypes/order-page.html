@@ -153,6 +153,56 @@
         </button>
       </div>
     </section>
+
+    <section class="card" id="sign-card" aria-labelledby="sign-card-title">
+      <header class="card__header">
+        <div>
+          <h2 id="sign-card-title">4. Подписание карточек Национального каталога</h2>
+          <p class="muted-text">
+            Подписывайте черновики со статусами <code>waitsign</code> или <code>notsigned</code> через CryptoPro Browser Plug-in и
+            отправляйте откреплённые подписи в метод <code>/v3/feed-product-sign-pkcs</code> промышленного контура НК.
+          </p>
+        </div>
+        <div class="card__meta">
+          <span class="muted-text">Доступно для подписи: <strong id="sign-total-counter">0</strong></span>
+          <span class="muted-text">Выбрано: <strong id="sign-selected-counter">0</strong></span>
+        </div>
+      </header>
+      <div class="sign-panel">
+        <div class="sign-panel__actions">
+          <button type="button" class="button button--ghost" id="sign-refresh">Обновить список черновиков</button>
+          <button type="button" class="button button--ghost" id="sign-clear-selection" disabled>Очистить выбор</button>
+        </div>
+        <p class="status" id="sign-status" role="status" aria-live="polite"></p>
+        <div class="table-wrapper" id="sign-table-wrapper">
+          <table id="sign-table" aria-describedby="sign-status">
+            <thead>
+              <tr>
+                <th scope="col" class="cell-checkbox">
+                  <label class="sr-only" for="sign-select-all">Выбрать все черновики</label>
+                  <input type="checkbox" id="sign-select-all" />
+                </th>
+                <th scope="col">ID карточки</th>
+                <th scope="col">GTIN</th>
+                <th scope="col">Наименование</th>
+                <th scope="col">Статусы</th>
+                <th scope="col">Обновлена</th>
+              </tr>
+            </thead>
+            <tbody id="sign-table-body"></tbody>
+          </table>
+          <div id="sign-empty-state" class="empty-state" role="note">
+            Укажите доступ к НК и запросите черновики для подписи.
+          </div>
+        </div>
+        <div class="sign-panel__footer">
+          <button type="button" class="button button--primary" id="sign-submit" disabled>
+            Подписать выбранные карточки
+          </button>
+        </div>
+        <div class="sign-panel__log" id="sign-log" role="log" aria-live="polite"></div>
+      </div>
+    </section>
   </main>
 
   <div id="order-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="order-modal-title">

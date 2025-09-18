@@ -6,9 +6,10 @@
   действующий `apikey` или bearer-токен; fallback на демо-данные отключён.
 - `services/authService.js` и `services/cryptoProClient.js` — получение challenge `/auth/key`, присоединённая подпись через CryptoPro и обмен
   подписи на bearer-токен True API.
+- `services/signatureService.js` — выборка черновиков, подготовка XML и отправка откреплённых подписей в `/v3/feed-product-sign-pkcs`.
 - `state/orderStore.js` / `state/sessionStore.js` — хранилища для карточек, фильтров, выбранных позиций и авторизационных
   данных (сертификаты, токены, доступ к НК).
-- `ui/authPanel.js`, `ui/catalogTable.js`, `ui/selectionSummary.js`, `ui/orderModal.js`, `ui/filters.js` — визуальные компоненты
+- `ui/authPanel.js`, `ui/catalogTable.js`, `ui/selectionSummary.js`, `ui/orderModal.js`, `ui/filters.js`, `ui/signPanel.js` — визуальные компоненты
   страницы и модальных окон.
 - `services/orderService.js` — имитация отправки заказа КМ, проверяет наличие bearer-токена и отображает метаданные подписи.
 
