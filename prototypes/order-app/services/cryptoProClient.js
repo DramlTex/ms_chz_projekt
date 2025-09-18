@@ -27,6 +27,32 @@ const pluginScriptCandidates = (() => {
 
 let pluginPromise = null;
 
+function supportsAsyncApi(plugin) {
+  return Boolean(plugin && typeof plugin.CreateObjectAsync === 'function');
+}
+
+function supportsSyncApi(plugin) {
+  return Boolean(plugin && typeof plugin.CreateObject === 'function');
+}
+
+function ensureCreateObjectSupport(plugin) {
+  const hasAsync = supportsAsyncApi(plugin);
+  const hasSync = supportsSyncApi(plugin);
+  if (!hasAsync && !hasSync) {
+    throw new Error('CryptoPro plug-in загружен, но не предоставляет API CreateObject.');
+  }
+}
+
+async function createPluginObject(plugin, progId) {
+  if (supportsAsyncApi(plugin)) {
+    return plugin.CreateObjectAsync(progId);
+  }
+  if (supportsSyncApi(plugin)) {
+    return plugin.CreateObject(progId);
+  }
+  throw new Error('CryptoPro plug-in не предоставляет API CreateObject.');
+}
+
 function buildUnavailablePluginError(originalError) {
   const baseMessage =
     'CryptoPro plug-in загружен, но браузерное расширение не установлено или недоступно. ' +
@@ -42,7 +68,7 @@ function buildUnavailablePluginError(originalError) {
 
 async function verifyPluginAvailability(plugin) {
   try {
-    await plugin.CreateObjectAsync('CAdESCOM.About');
+    await createPluginObject(plugin, 'CAdESCOM.About');
   } catch (error) {
     throw buildUnavailablePluginError(error);
   }
@@ -127,15 +153,11 @@ export function ensureCryptoProPlugin() {
       plugin = window.cadesplugin || plugin;
     }
 
-    const hasAsyncApi = typeof plugin.CreateObjectAsync === 'function';
-    const hasSyncApi = typeof plugin.CreateObject === 'function';
-
-    if (!hasAsyncApi && !hasSyncApi) {
-      throw new Error('CryptoPro plug-in загружен, но не предоставляет API CreateObject.');
-    }
-
-    if (!hasAsyncApi) {
-      throw new Error('CryptoPro plug-in не предоставляет асинхронный API. Обновите плагин до версии с CreateObjectAsync.');
+    ensureCreateObjectSupport(plugin);
+    if (!supportsAsyncApi(plugin) && supportsSyncApi(plugin)) {
+      console.warn(
+        'CryptoPro plug-in использует синхронный API. Рекомендуется обновить расширение до версии с CreateObjectAsync.',
+      );
     }
 
     await verifyPluginAvailability(plugin);
@@ -164,7 +186,7 @@ function isGostCertificate(friendlyName = '') {
 
 export async function listCertificates() {
   const plugin = await ensureCryptoProPlugin();
-  const store = await plugin.CreateObjectAsync('CAdESCOM.Store');
+  const store = await createPluginObject(plugin, 'CAdESCOM.Store');
   await store.Open(plugin.CAPICOM_CURRENT_USER_STORE, 'My', plugin.CAPICOM_STORE_OPEN_MAXIMUM_ALLOWED);
   const certificates = await store.Certificates;
   const count = await certificates.Count;
@@ -201,7 +223,7 @@ export async function listCertificates() {
 }
 
 async function getCertificateByThumbprint(plugin, thumbprint) {
-  const store = await plugin.CreateObjectAsync('CAdESCOM.Store');
+  const store = await createPluginObject(plugin, 'CAdESCOM.Store');
   await store.Open(plugin.CAPICOM_CURRENT_USER_STORE, 'My', plugin.CAPICOM_STORE_OPEN_MAXIMUM_ALLOWED);
   try {
     const certificates = await store.Certificates;
@@ -244,11 +266,11 @@ export async function signData({ data, thumbprint, detached = true, encoding = '
   const plugin = await ensureCryptoProPlugin();
   const { certificate, store } = await getCertificateByThumbprint(plugin, normalizedThumbprint);
   try {
-    const signer = await plugin.CreateObjectAsync('CAdESCOM.CPSigner');
+    const signer = await createPluginObject(plugin, 'CAdESCOM.CPSigner');
     await signer.propset_Certificate(certificate);
     await signer.propset_CheckCertificate(true);
 
-    const signedData = await plugin.CreateObjectAsync('CAdESCOM.CadesSignedData');
+    const signedData = await createPluginObject(plugin, 'CAdESCOM.CadesSignedData');
     await configureSignedContent(plugin, signedData, data, encoding);
 
     const signature = await signedData.SignCades(
