@@ -1,0 +1,1753 @@
+Источник: OMS_API_announcements.docx
+Дата выгрузки: 2025-09-16
+Инструмент: docx2txt 0.9
+
+5 
+
+ 
+
+4 
+
+ 
+
+
+
+
+
+2 
+
+ 
+
+2 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+OMS-CLOUD 4.0 
+
+ANNOUNCEMENT OF PLANNED CHANGES IN THE OMS  
+
+Main functions 
+
+Revision 1.18 
+
+Sheets 20 
+
+ 
+
+ 
+
+ 
+
+ 
+
+
+
+ 
+
+ 
+
+ 
+
+ABSTRACT 
+
+This document is intended to inform in advance the GCPs on the changes planned for implementation in the OMS API in the next 1-2 months. The changes described are for informational purposes only and are published in advance only to enable the GCP to plan the integration works with the OMS.  
+
+ 
+
+
+
+ 
+
+ 
+
+ 
+
+CONTENTS 
+
+1. ANNOUNCEMENT OF PLANNED CHANGES IN OMS API ............................................... 3 APPENDIX ......................................................................................................................................... 6 
+
+ 
+
+
+
+ANNOUNCEMENT OF PLANNED CHANGES IN OMS API 
+
+This section provides a list of planned modifications (which are at the stage of analysis) in the OMS API. 
+
+It is planned to disable support of the attached signature. Dates for disabling will be announced later.  
+
+For the aggregation report for all goods groups a limit is imposed on the number of identification codes or shipping packages specified in the array of the aggregated codes in the “sntins” array - no more than 30, 000 identification codes.    
+
+It is planned to make available marking of the remaining items for the “Engine oils” goods group from June 1, 2025 to October 31, 2025.  
+
+In an order structure in the “Method of goods release into circulation” parameter:  
+
+ a new allowed value (releaseMethodType = REMAINS (Remains marking)) will be added for the goods group;  
+
+ a new conditionally mandatory parameter - “producer” (“INN of the goods card owner”) will be added.  
+
+Marking of the remaining items will be available for the original gtin (local range - 046 or global – not belonging to ranges 046 and 029) if a goods circulation participant is not the goods card owner or does not have access through the sub-account. In this case, INN of the goods card owner should be specified in a request structure in the “producer” parameter for the global range. 
+
+Emission with a method of introduction into circulation releaseMethodType = REMAINS (Marking of remaining items) is unavailable for the sets. 
+
+Emission of the marking codes for cards with a short set of attributes (short remaining items - range 029) will be available to the “Clothing items, bed, table, bath and kitchen linens” goods group within the current marking of the remaining items.    
+
+It is planned to launch a new goods group - “Radio electronic products. Electronic nicotine delivery systems” (API V3):  
+
+a. An attributes set of the order will contain the “Order” basic object, including the “Order” object extension.  
+
+The “cisType” parameter (Marking code type) of the “OrderProduct” object supports UNIT, GROUP, SET allowed values; 
+
+The “releaseMethodType” parameter (Method of Goods Release into Circulation) which is transferred in the “attributes” attribute of the 
+
+“Order” object supports the PRODUCTION (Manufacture in the 
+
+Russian Federation) and IMPORT (Imported into the Russian 
+
+Federation) allowed values; 
+
+An attributes set of the application report will contain the basic “UtilisationReport”. The “productionDate” optional attribute (Production date – supported format is yyyy-MM-dd) can be specified in an object extension. 
+
+Two templates of the marking codes can be used for the MC emission:  
+
+GS1_AISTR_SHORT - AI01 14 AI21 6 <GS> AI93 4 
+
+GS1_AISTR_ASYM_SHORT - AI01 14 AI21 13 <GS> AI91 4 <GS> AI92 44. 
+
+It is planned to change the “Order” object in the “Create marking code emission order” method for the “Tobacco products” goods group in terms of changing mandatory of the “releaseMethodType” (“Method of Goods Release into Circulation”) parameter. From August 1, 2025, this parameter will become mandatory (OMS API V3). 
+
+The current version of the draft resolution provides for the temporary restriction on issuance and receipt of the marking codes of the “Games and toys for children” goods group in the OMS for the goods circulation participants — tentatively until September 1, 2025. 
+
+It is planned to change a format of the shipping package code (SSCC - length of 20 numeric symbols with GS1 AI 00 application identifier) in an aggregation report for all goods groups, except for the “Alternative tobacco products”, “Nicotine products” and “Tobacco products”. If you submit the SSCC of 18 numeric symbols without an identifier, the integrations must be finalized to reach the target version by December 
+
+1, 2025, with the AI application identifier (00) indicated at the beginning of the code. 
+
+As of March 1, 2025, marking of the remaining items has been unavailable for the “Medical products” goods group for the goods of the third and fifth fee implementation waves. Active orders containing goods of these fee implementation waves will be closed, and unused marking codes will be automatically annuled.  
+
+For the “Radio-electronic products” goods group the length of the second data group in the marking code (that contains an individual serial number of the unit of goods) is planned to be increased from 13 characters to 20 characters. The marking codes issued with 13-character serial numbers will be annulled and support for these codes will be discontinued in the application report. These changes are being implemented in accordance with the Draft Rules for Marking Specific Types of Radio-electronic Products and relate to the list of radio-electronic products pertaining to all three stages of the experiment. A date for implementing these structural changes and annuling the marking codes will be announced later. 
+
+For the “Radio-electronic products” goods group, it is planned to complete the experiment for the third fee implementation wave in accordance with the Decree of the Government of the Russian Federation of November 25, 2023, No. 1993, “On conducting an experiment on the territory of the Russian Federation on marking of individual types of radio-electronic products with identification means”, the experiment on marking of individual types of radio-electronic products with identification means in Stage III will be completed on August 31, 2025. Active orders that contain goods of the third fee implementation wave will be closed, unused marking codes will be automatically annuled.  
+
+  
+
+ 
+
+APPENDIX 
+
+APPLICATION PROGRAMMING INTERFACE REVISION 
+
+HISTORY 
+
+Version
+
+	 	Date 
+
+List of Changes 
+
+1.18 
+
+19.09.2025 
+
+The following modifications were introduced: 
+
+− Information about annulment of the marking codes issued to mark remaining items of the “Medical products” goods group of the third and fifth fee implementation waves, has been added; 
+
+− Information on change of the length of the serial number has been added for the “Radio-electronic products” goods group; 
+
+− Information about discontinuation of emission for the “Radioelectronic products” goods group in the OMS has been added.
+
+1.17 
+
+08.07.2025 
+
+The fo
+
+− 
+
+− 
+
+− 
+
+− 
+
+llowing modifications were introduced: 
+
+Information about the launch of paid services for the “Radioelectronic products” goods group was removed (the description was moved to Programmer’s guide to OMS); 
+
+Information about the launch of paid services for the “Perfumes and toilet preparations and household chemicals” goods group was removed (the description was moved to Programmer’s guide to OMS); 
+
+Information about adding the optional “alcoholVolume” attribute for the manufacturers of household chemicals was removed (the description was moved to Programmer’s guide to OMS);  
+
+Information about enabling releaseMethodType = REAPPLY for the “Beer, beer-based and low-alcohol beverages” goods group was removed (the description was moved to Programmer’s guide to OMS); 
+
+
+
+
+
+− 
+
+Information about enabling releaseMethodType = RESORT for the “Beer, beer-based and low-alcohol beverages” goods group was removed (the description was moved to Programmer’s guide to OMS); 
+
+
+
+
+
+− 
+
+Information about imposing restrictions on the emission of marking codes for participants (that have the “Wholesale trading” and “Retail and other” roles) of the “Beer, beer-based and low-alcohol beverages” goods group was removed (the description was moved to Programmer’s guide to OMS); 
+
+
+
+
+
+− 
+
+Information about enabling releaseMethodType = REAPPLY for the “Perfumes and toilet preparations and household chemicals” goods group was removed (the description was moved to Programmer’s guide to OMS); 
+
+
+
+Version
+
+	 	Date 
+
+
+
+List of Changes 
+
+
+
+
+
+− 
+
+Information describing the method of sending the notification of acceptance of the marking codes on account was removed for the “Beer, beer-based and low-alcohol beverages” goods group (the description was moved to Programmer’s guide to OMS);  
+
+
+
+
+
+− 
+
+Information about the need to improve the aggregation report for goods groups in terms of transfer of the code of the SSCC shipping package with GS1 AI 00 application identifier was added;   
+
+
+
+
+
+− 
+
+Information about the completion of the experiment for the second payment group and about the pilot period for the fourth payment group was removed for the “Radio-electronic products” goods group (the description was moved to Programmer’s guide to OMS); 
+
+
+
+
+
+− 
+
+Information about enabling releaseMethodType = REMARK for the “Perfumes and toilet preparations and household chemicals” goods group was removed (releaseMethodType = REAPPLY will be implemented instead).  
+
+1.16 
+
+24.06.2025 
+
+The following modifications were introduced: 
+
+− Information about the temporary suspension of functionality in the ОМS was added for the "Games and toys for children" goods group. 
+
+1.15 
+
+12.05.2025 
+
+The following modifications were introduced: 
+
+− Information on change of the “Order” object in the “Create marking code emission order” method was added for the “Tobacco products” goods group in terms of changing mandatory of the “releaseMethodType” parameter. 
+
+1.14 
+
+21.04.2025 
+
+The following modifications were introduced: 
+
+− Information about the date of opening of marking of the remaining items was changed for the “Engine oils” goods group. 
+
+1.13 
+
+08.04.2025 
+
+The following modifications were introduced: 
+
+− Information was deleted from the document upon completion of the support of the API document of version 2.0; 
+
+− Information about the change of the “Order” object in the “Create marking code emission order” method was deleted from the document for the “Tobacco products” goods group in terms of changing mandatory of the “releaseMethodType” parameter; 
+
+
+
+Version
+
+	 	Date 
+
+
+
+List of Changes 
+
+
+
+
+
+− 
+
+A limit on the number of codes in the “sntins” array was imposed in the aggregation report for all goods groups;  
+
+
+
+
+
+− 
+
+Information about the opening of marking of the remaining items was added for the “Engine oils” goods group; 
+
+
+
+
+
+− 
+
+Information about support of a new type of the application report for the remarking operation utilisationType = REMARK was added for the “Perfumes and toilet preparations and household chemicals” goods group; 
+
+
+
+
+
+− 
+
+Information about the launch of an experiment for the fourth payment group and end of the experiment for the second payment group was added for the “Radio-electronic products” goods group; 
+
+
+
+
+
+− 
+
+Information about a possibility to mark remaining items for goods cards with a short set of attributes was added for the “Clothing items, bed, table, bath and kitchen linens” goods group;   
+
+
+
+
+
+− 
+
+Information about the launch of the new goods group “Radio electronic products. Electronic nicotine delivery systems” was added. 
+
+1.12 
+
+27.03.2025 
+
+The fo
+
+− 
+
+− 
+
+− 
+
+− 
+
+llowing modifications were introduced: 
+
+Information about opening of remarking of goods for the “Nonalcoholic beer” goods group was deleted from the document;  Information about the completion of emission of marking of the remaining items for the “Bicycles and bicycle frames” goods group was deleted from the document;   
+
+Information about a possibility to issue MCs for a set was added for the “Printed goods”, “Confectionery products” and 
+
+“Radio-electronic products” goods groups; 
+
+Information on restriction of the order on methods of introduction into circulation for participants that have “Wholesale trading” and “Retail and another” roles was added for the “Beer, beer-based and low-alcohol beverages” goods group; 
+
+
+
+
+
+− 
+
+Information about launch of emission for a new method of introduction into circulation - “Marking outside production or import” was added for the “Perfumes and toilet preparations and household chemicals” and “Beer, beer-based and lowalcohol beverages” goods groups;  
+
+
+
+
+
+− 
+
+Information about availability of the new method - “Send a notification of acceptance of the MCs on account” was added. 
+
+1.11 
+
+28.01.2025 
+
+The following modifications were introduced: 
+
+− The wording was supplemented in a list of introduced modifications regarding the exclusion of information from the document based on deployment of the features to the production environment.   
+
+1.10 
+
+28.01.2025 
+
+The following modifications were introduced: 
+
+
+
+Version
+
+	 	Date 
+
+
+
+List of Changes 
+
+
+
+
+
+− 
+
+Information about improvement of the MC application report in terms of adding the “alcoholVolume”, “documentNumber”, 
+
+“documentDate” string optional parameters into the 
+
+“UtilisationReport” report structure was deleted for the “Beer, beer-based and low-alcohol beverages” goods group; 
+
+
+
+
+
+− 
+
+Information about adding the “kpp” and “fiasId” parameters into the “UtilisationReport” report for the “Building materials” goods group was deleted; 
+
+
+
+
+
+− 
+
+Information about support of a country code in serial numbers (when ordering MCs for the “Medicines for medical use” goods group) was deleted; 
+
+
+
+
+
+− 
+
+Information about discontinuation of support of the MCs that have been emitted by using template 34 and have 6-character serial number, in the application report, was deleted for the “Games and toys for children” goods group; 
+
+
+
+
+
+− 
+
+Information about change of length of the serial number was deleted for the “Engine oils” goods group; 
+
+
+
+
+
+− 
+
+Information about availability of cards of the technical range was deleted for the “Cabling and wiring products” and “Polymer pipes” goods groups; 
+
+
+
+
+
+− 
+
+Information about launch of new “Confectionery products” goods group was deleted; 
+
+
+
+
+
+− 
+
+Information about closing of marking of remaining items was added for the “Bicycles and bicycle frames” goods group; 
+
+
+
+
+
+− 
+
+Information about launch of payment was added for the “Radioelectronic products” and “Perfumes and toilet preparations and household chemicals” goods groups; 
+
+
+
+
+
+− 
+
+Information about adding a new attribute - “alcoholVolume” into attributes of the “UtilisationReport” object was added for manufacturers of household chemicals; 
+
+
+
+
+
+− 
+
+ 
+
+Information about launch of emission for a new method of introduction into circulation - “Marking outside of production or import” was added for the “Beer, beer-based and low-alcohol beverages” goods group. 
+
+1.9 
+
+06.11.2024 
+
+The fo
+
+− 
+
+− 
+
+llowing modifications were introduced: 
+
+Information on a new value - “GROUP” of the cisType parameter for the “Games and toys for children” goods group was deleted; 
+
+Information on a new value - “GROUP” of the cisType parameter for the “Non-alcoholic beer” goods group was deleted; 
+
+
+
+
+
+− 
+
+Information on a new value - “SET” of the cisType parameter for the “Groceries” goods group was deleted; 
+
+
+
+Version
+
+	 	Date 
+
+
+
+List of Changes 
+
+
+
+
+
+− 
+
+Information on a new value - “SET” of the cisType parameter for the “Perfumes and toilet preparations and household chemicals” goods group was deleted;  
+
+
+
+
+
+− 
+
+Information on a new value - “SET” of the cisType parameter for the “Engine oils” goods group was deleted; 
+
+
+
+
+
+− 
+
+Information about launch of the new “Polymer pipes” goods group was deleted;  
+
+
+
+
+
+− 
+
+Information about launch of payment for the farmers for the “Canned foods” goods group was deleted; 
+
+
+
+
+
+− 
+
+Information about opening of marking of the remaining items for the goods of the third fee implementation wave for the “Medical products” goods group was deleted;  
+
+
+
+
+
+− 
+
+Information about availability of sub-account mechanism for the “Beer, beer-based and low-alcohol beverages” goods group was deleted;  
+
+
+
+
+
+− 
+
+Information about adding the “kpp” and “fiasId” parameters into the “UtilisationReport” report for the “Non-alcoholic beer” goods group was deleted; 
+
+
+
+
+
+− 
+
+Information about launch of payment was deleted for the following goods groups: “Non-alcoholic beer”, “Veterinary medicines”, “Vegetable oils”, “Pet foods” and “Canned foods”; 
+
+
+
+
+
+− 
+
+Information about a possibility to indicate marking codes with an actual weight in the UtilisationReport response structure was deleted for the “Pet foods” goods group;  
+
+
+
+
+
+− 
+
+Information about launch of payment for the farmer category for the “Dairy products” goods group was deleted;  
+
+
+
+
+
+− 
+
+Information about opening of marking of the remaining items for the third fee implementation wave for the “Clothing items, bed, table, bath and kitchen linens” goods group was deleted; 
+
+
+
+
+
+− 
+
+Information about launch of remarking of goods was deleted for the “Veterinary medicines” goods group; 
+
+
+
+
+
+− 
+
+Information about adding the “kpp” and “fiasId” parameters into the “UtilisationReport” report was added for the “Building materials” goods group; 
+
+
+
+
+
+− 
+
+Information about support of a country code in serial numbers (when ordering MCs for the “Medicines for medical use” goods group) was added;  
+
+
+
+
+
+− 
+
+Information about launch of remarking was added for the “Non-alcoholic beer” goods group; 
+
+
+
+
+
+− 
+
+Information about discontinuation of support of the MCs that have been emitted by using template 34 with 6-character serial number in the application report, was added; 
+
+
+
+
+
+− 
+
+Information about change of length of the serial number was added for the “Engine oils” goods group; 
+
+
+
+Version
+
+	 	Date 
+
+List of Changes 
+
+
+
+
+
+− Information about availability of cards of the technical range was added for the “Cabling and wiring products” and “Polymer pipes” goods groups; 
+
+− Information about launch of new “Confectionery products” goods group was added 
+
+1.8 
+
+03.10.2024 
+
+The fo
+
+− 
+
+− 
+
+− 
+
+− 
+
+− 
+
+− 
+
+− 
+
+llowing modifications were introduced: 
+
+Information about the MRP check when ordering the MC for the “Tobacco products” goods group was deleted;  
+
+Information about closing of marking of remaining items was deleted for the “Medical products” goods group; 
+
+Information on opening of marking of the remaining items was added for the goods of the third fee implementation wave for the “Medical products” goods group; 
+
+An opening date of remarking of goods was added for the 
+
+“Veterinary medicines” goods group; 
+
+Information on a new value - “GROUP” of the cisType parameter was added for the “Games and toys for children” goods group; 
+
+Information on a new value - “GROUP” of the cisType parameter was added for the “Non-alcoholic beer” goods group; 
+
+Information about adding new optional parameters into the UtilisationReport object was added for the “Beer, beer-based and low-alcohol beverages” goods group; 
+
+
+
+
+
+− 
+
+Information on a new value - “SET” of the cisType parameter was added for the “Groceries” goods group; 
+
+
+
+
+
+− 
+
+Information on a new value - “SET” of the cisType parameter was added for the “Perfumes and toilet preparations and household chemicals” goods group; 
+
+
+
+
+
+− 
+
+Information on a new value - “SET” of the cisType parameter was added for the “Engine oils” goods group; 
+
+
+
+
+
+− 
+
+Information about the launch of new “Polymer pipes” goods group was added; 
+
+
+
+
+
+− 
+
+Information about launch of payment was added for the farmers for the “Canned foods” goods group; 
+
+
+
+
+
+− 
+
+Information on opening of marking of the remaining items was added for the third fee implementation wave for the “Clothing items, bed, table, bath and kitchen linens” goods group. 
+
+1.7 
+
+01.08.2024 
+
+The following modifications were introduced: 
+
+− Information about launch was deleted for the following goods groups: 
+
+− “Heaters” (API V3); 
+
+− “Pyrotechnic articles and fire safety and firefighting equipment” (API V3); 
+
+− “Building materials” (API V3); 
+
+− “Printed goods” (API V3); 
+
+
+
+Version
+
+	 	Date 
+
+
+
+List of Changes 
+
+
+
+
+
+
+
+− “Groceries” (API V3); 
+
+
+
+
+
+− 
+
+Information about check for availability and sufficiency of security to fulfill an application for MC ordering was deleted for the tobacco goods groups;   
+
+
+
+
+
+− 
+
+Information about launch of the new template was deleted for the “Games and toys for children” goods group; 
+
+
+
+
+
+− 
+
+Information about change of length of the serial number was deleted for the “Games and toys for children” goods group; 
+
+
+
+
+
+− 
+
+Information about support of group packages was deleted for the “Canned foods”, “Perfumes and toilet preparations and household chemicals” and “Vegetable oils” goods groups; 
+
+
+
+
+
+− 
+
+Information about adding the “expirationDate” and 
+
+“productionDate” parameters into the report on MC Utilization 
+
+(Application) was deleted for the “Perfumes and toilet preparations and household chemicals” goods group;  
+
+
+
+
+
+− 
+
+Information about adding the “productionDate” parameter into the report on MC Utilization (Application) was deleted for the “Alternative tobacco products” goods group;  
+
+
+
+
+
+− 
+
+Information about closing of marking of remaining items was added for the “Medical products” goods group; 
+
+
+
+
+
+− 
+
+Information about check of the order for correspondence between SMP and maximum retail sale price was added for the “Tobacco products” goods group;  
+
+
+
+
+
+− 
+
+Information about availability of sub-account mechanism for the “Beer, beer-based and low-alcohol beverages” goods group was added; 
+
+
+
+
+
+− 
+
+Information about adding the “kpp” and “fiasId” parameters into the “UtilisationReport” report was added for the “Nonalcoholic beer” goods group; 
+
+
+
+
+
+− 
+
+Information about launch of payment was added for the following goods groups: “Non-alcoholic beer”, “Veterinary medicines”, “Vegetable oils”, “Pet foods” and “Canned foods”; 
+
+
+
+
+
+− 
+
+Information about a possibility to indicate marking codes with an actual weight in a UtilisationReport response structure was added for the “Pet foods” goods group; 
+
+
+
+
+
+− 
+
+Information about launch of remarking of goods was added for the “Veterinary medicines” goods group; 
+
+
+
+
+
+− 
+
+Information about launch of payment for the farmer category was added for the “Dairy products” goods group  
+
+1.6 
+
+03.06.2024 
+
+The following modifications were introduced: 
+
+− Information about adding a new parameter - “batchNumber” into the “UtilisationReport” object in the “Send Report on MC Utilization (Application)” method was deleted for the “Dairy products” goods group; 
+
+− Information about opening of the application report was deleted for the “Bicycles and bicycle frames” goods group;  
+
+
+
+Version
+
+	 	Date 
+
+
+
+List of Changes 
+
+
+
+
+
+− 
+
+Information on change of the “UtilisationReport” object in the “Send Report on MC Utilization (Application)” method was deleted for the “Bicycles and bicycle frames” goods group. The changes were made in terms of adding a new optional parameter - “productionDate”; 
+
+
+
+
+
+− 
+
+Information about launch of payment for new FEACN codes was deleted for "Antiseptic/antibacterial skin cleansers and hand sanitizers” and "Biologically active food additives” goods groups; 
+
+
+
+
+
+− 
+
+Information about opening of marking of remaining items was deleted for the “Bicycles and bicycle frames” goods group; 
+
+
+
+
+
+− 
+
+Information on the prohibition of emission of goods for which there is an “Unmarked products” attribute 
+
+(isEmissionDisallowed) with the “true” value in a card was deleted; 
+
+
+
+
+
+− 
+
+Information about mandatory indication of the production date and expiration date of the units of goods in the application report was added for the “Perfumes and toilet preparations 
+
+and household chemicals” goods group; 
+
+
+
+
+
+− 
+
+Information on change of the “UtilisationReport” object in the “Send Report on MC Utilization (Application)” method was added for the “Alternative tobacco products” goods group. The changes were made in terms of adding a new optional parameter - “productionDate”; 
+
+
+
+
+
+− 
+
+Information about support of emission of the group packages was added for some goods groups; 
+
+
+
+
+
+− 
+
+Information on change of length of the serial number was added for template 34 of the “Games and toys for children” goods group; 
+
+
+
+
+
+− 
+
+Information about launch of the new template for the “Games and toys for children” goods group was added; 
+
+
+
+
+
+− 
+
+Information on change of the “Order” object in the “Create marking code emission order” method was added for the “Tobacco products” goods group in terms of changing mandatory of the “releaseMethodType” parameter.  
+
+1.5 
+
+27.04.2024 
+
+The fo
+
+− 
+
+− 
+
+− 
+
+llowing modifications were introduced: 
+
+Information about disabling of the old method to get receipt by identifier was deleted; 
+
+Information on change of the name of the “Vegetable oils” goods group was deleted; 
+
+Information on change of the “UtilisationReport” object in the “Send Report on MC Utilization (Application)” method (the changes were made in terms of adding a new optional parameter - “expDateConditions”) was deleted for the 
+
+“Vegetable oils” goods group; 
+
+
+
+
+
+− 
+
+Information about launch of payment for the “Bicycles and bicycle frames” goods group was deleted; 
+
+
+
+Version
+
+	 	Date 
+
+
+
+List of Changes 
+
+
+
+
+
+− 
+
+Information about optionality of the “vetisGuid” parameter for the “Biologically active food additives” goods group in case of marking was deleted; 
+
+
+
+
+
+− 
+
+Information about change of length of the serial number for the “Games and toys for children” goods group was deleted; 
+
+
+
+
+
+− 
+
+Information about launch of payment for new FEACN codes was added for "Antiseptic/antibacterial skin cleansers and hand sanitizers” and "Biologically active food additives” goods groups; 
+
+
+
+
+
+− 
+
+Information on change of the “UtilisationReport” object in the “Send Report on MC Utilization (Application)” method was added for the “Bicycles and bicycle frames” goods group. The changes were made in terms of adding a new optional parameter - “productionDate”; 
+
+
+
+
+
+− 
+
+Information on opening of marking of remaining items was added for the “Bicycles and bicycle frames” goods group; 
+
+
+
+
+
+− 
+
+Information about the launch of new “Heaters” goods group was added; 
+
+
+
+
+
+− 
+
+A misprint in a format of the “productionDate” and 
+
+“expirationDate” parameters was corrected for new goods groups. 
+
+1.4 
+
+01.04.2024 
+
+The fo
+
+− 
+
+− 
+
+− 
+
+− 
+
+llowing modifications were introduced: 
+
+Information about launch of payment was deleted for the 
+
+“Seafood” goods group; 
+
+Information on extension of the “UtilisationReport” object in the “Send Report on MC Utilization (Application)” method was deleted for the “Games and toys for children” goods group; 
+
+Information on a new MC template was deleted for the 
+
+“Vegetable oil” goods group; 
+
+Information on change of mandatory of the productionLineId parameter in the “Send Report on MC Utilization 
+
+(Application)” method was deleted for the “Tobacco products”, “Alternative tobacco products” and “Nicotine products” goods groups; 
+
+
+
+
+
+− 
+
+Information on change of the name of the goods group to the “Vegetable oils” was added; 
+
+
+
+
+
+− 
+
+Information on change of the “UtilisationReport” object in the “Send Report on MC Utilization (Application)” method was added for the “Vegetable oil” goods group. The changes were made in terms of adding a new optional parameter - 
+
+“expDateConditions”; 
+
+
+
+
+
+− 
+
+Information on a start date of checks for availability and sufficiency of security to fulfill an application for MC ordering was added for tobacco groups; 
+
+
+
+
+
+− Information on availability of the application report was added for the “Bicycles and bicycle frames” goods group; 
+
+
+
+Version
+
+	 	Date 
+
+
+
+List of Changes 
+
+
+
+
+
+− 
+
+Information about launch of payment was added for the “Bicycles and bicycle frames” goods group; 
+
+
+
+
+
+− 
+
+Information about optionality of the “vetisGuid” parameter for the “Biologically active food additives” goods group in case of marking was added; 
+
+
+
+
+
+− 
+
+Information about prohibition of emission for the unmarked products was added; 
+
+
+
+
+
+− 
+
+Information on change of length of the serial number was added for the “Games and toys for children” goods group; 
+
+
+
+
+
+− 
+
+Information on launch of new goods groups - “Pyrotechnic articles and fire safety and firefighting equipment”, “Building materials” and “Printed goods” was added; 
+
+
+
+
+
+− 
+
+Information about a date for deactivation of the method of receipt of the receipt was corrected; 
+
+
+
+
+
+− 
+
+Information about discontinuation of API version 2.0 was added. 
+
+1.3 
+
+07.03.2024 
+
+The fo
+
+− 
+
+− 
+
+− 
+
+− 
+
+− 
+
+llowing modifications were introduced: 
+
+Information on a new value - “GROUP” of the cisType parameter of the “Radio-electronic products” goods group was deleted; 
+
+Information on a new value - “GROUP” of the cisType parameter of the “Optical fiber and fiber optic products” goods group was deleted; 
+
+Information on availability of the aggregation report was deleted for the “Radio-electronic products” goods group; Information on availability of the aggregation report was deleted for the “Optical fiber and fiber optic products” goods group;  
+
+Information on change of mandatory of the “approvalNumber” parameter of the “Order” object in the “Create marking code emission order” method was deleted for the “Tobacco products”, “Alternative tobacco products” and “Nicotine products” goods groups; 
+
+
+
+
+
+− 
+
+Information that a license is checked for the MC order, has been deleted for the “Tobacco products”, “Alternative tobacco products” and “Nicotine products” goods groups; 
+
+
+
+
+
+− 
+
+Information on a new value - “SET” of the cisType parameter was deleted for the “Seafood” goods group; 
+
+
+
+
+
+− 
+
+Information on a new value - “GROUP” of the cisType parameter was deleted for the “Pet foods” goods group; 
+
+
+
+
+
+− 
+
+Information on a new value - “GROUP” of the cisType parameter was deleted for the “Veterinary medicines” goods group; 
+
+
+
+
+
+− Information on availability of the aggregation report was deleted for the “Veterinary medicines” goods group; 
+
+
+
+Version
+
+	 	Date 
+
+
+
+List of Changes 
+
+
+
+
+
+− 
+
+Information on closing of marking of remaining items was deleted for the “Biologically active food additives” goods group; 
+
+
+
+
+
+− 
+
+Information on change of the name of the “Pet foods 
+
+(excluding livestock feeds) packaged in consumer packaging” goods group was deleted; 
+
+
+
+
+
+− 
+
+Information on a new value - “SET” of the cisType parameter was deleted for the “Games and toys for children” goods group; 
+
+
+
+
+
+− 
+
+Information on change of a response of the “Get a status of MC array from the order” method (API V3) was deleted; 
+
+
+
+
+
+− 
+
+Information on change of a response of the “Obtain the list of marking code orders” method (API V3) was deleted; 
+
+
+
+
+
+− 
+
+Information on change of length of the serial number in the MC templates was deleted for the “Perfumes and toilet preparations and household chemicals” goods group; 
+
+
+
+
+
+− 
+
+Information about launch of payment was added for the “Seafood” goods group; 
+
+
+
+
+
+− 
+
+Information on extension of the “UtilisationReport” object in the “Send Report on MC Utilization (Application)” method was added for the “Games and toys for children” goods group; 
+
+
+
+
+
+− 
+
+Information on a new MC template was added for the “Vegetable oil” goods group; 
+
+
+
+
+
+− 
+
+Information on change of mandatory of the productionLineId parameter in the “Send Report on MC Utilization 
+
+(Application)” method was added for the “Tobacco products”, “Alternative tobacco products” and “Nicotine products” goods groups; 
+
+
+
+
+
+− 
+
+Information about a date for deactivation of the method of receipt of the receipt was corrected.  
+
+1.2 
+
+07.02.2024 
+
+The fo
+
+− 
+
+− 
+
+− 
+
+llowing modifications were introduced: 
+
+Information about the launch of new “Titanium metal 
+
+products” goods group was deleted;  
+
+Information about adding new parameters into an extension of the “UtilisationReport” object in the “Send Report on MC Utilization (Application)” method was deleted for the “Titanium metal products” goods group; 
+
+Information about the launch of new “Vegetable oil” goods group was deleted; 
+
+
+
+
+
+− 
+
+Information about the launch of new “Pet foods (excluding livestock feeds) packaged in consumer packaging” goods group was deleted; 
+
+
+
+
+
+− 
+
+Information about the launch of new “Radio-electronic products” goods group was deleted; 
+
+
+
+Version
+
+	 	Date 
+
+
+
+List of Changes 
+
+
+
+
+
+− 
+
+Information about the launch of new “Perfumes and toilet preparations and household chemicals” goods group was deleted; 
+
+
+
+
+
+− 
+
+Information about the launch of new “Games and toys for children” goods group was deleted; 
+
+
+
+
+
+− 
+
+Information about the launch of new “Optical fiber and fiber optic products” goods group was deleted; 
+
+
+
+
+
+− 
+
+Information on change of a structure of the “Order” object in the “Create marking code emission order” method was deleted for the “Tobacco products”, “Alternative tobacco products” and “Nicotine products” goods groups; 
+
+
+
+
+
+− 
+
+Information about the removal of validation of the 
+
+expirationDate parameter was deleted from the “Send Report on MC Utilization (Application)” method; 
+
+
+
+
+
+− 
+
+Information about the launch of payment was deleted for the “Juice products and non-alcoholic beverages” goods group; 
+
+
+
+
+
+− 
+
+A date of disabling the “Receive receipt by unique document identifier” method was changed; 
+
+
+
+
+
+− 
+
+Information on a new value - “GROUP” of the cisType parameter was added for the “Radio-electronic products” goods group; 
+
+
+
+
+
+− 
+
+Information on a new value - “GROUP” of the cisType parameter was added for the “Optical fiber and fiber optic products” goods group; 
+
+
+
+
+
+− 
+
+Information on availability of the aggregation report was added for the “Radio-electronic products” goods group; 
+
+
+
+
+
+− 
+
+Information on availability of the aggregation report was added for the “Optical fiber and fiber optic products” goods group; 
+
+
+
+
+
+− 
+
+Information on change of mandatory of the “approvalNumber” parameter of the “Order” object in the “Create marking code emission order” method was added for the “Tobacco products”, “Alternative tobacco products” and “Nicotine products” goods groups; 
+
+
+
+
+
+− 
+
+Information about adding a new parameter - “batchNumber” in the “UtilisationReport” object in the “Send Report on MC Utilization (Application)” method was added for the “Dairy products” goods group; 
+
+
+
+
+
+− 
+
+Information has been added for the “Tobacco products”, “Alternative tobacco products” and “Nicotine products” goods groups that availability and sufficiency of security to fulfill MC order will be checked; 
+
+
+
+
+
+− 
+
+Information has been added for the “Tobacco products”, “Alternative tobacco products” and “Nicotine products” goods groups that a license for MC order will be checked; 
+
+
+
+Version
+
+	 	Date 
+
+
+
+List of Changes 
+
+
+
+
+
+− 
+
+Information on a new value - “SET” of the cisType parameter was added for the “Seafood” goods group; 
+
+
+
+
+
+− 
+
+Information on a new value - “GROUP” of the cisType parameter was added for the “Pet foods” goods group; 
+
+
+
+
+
+− 
+
+Information on a new value - “GROUP” of the cisType parameter was added for the “Veterinary medicines” goods group; 
+
+
+
+
+
+− 
+
+Information on availability of the aggregation report was added for the “Veterinary medicines” goods group; 
+
+
+
+
+
+− 
+
+Information on the closing of marking of remaining items was added for the “Biologically active food additives” goods group; 
+
+
+
+
+
+− 
+
+Information on extension of the “UtilisationReport” object in the “Send Report on MC Utilization (Application)” method was added for the “Games and toys for children” goods group; 
+
+
+
+
+
+− 
+
+Information on change of the name of the “Pet foods 
+
+(excluding livestock feeds) packaged in consumer packaging” goods group was added; 
+
+
+
+
+
+− 
+
+Information on a new value - “SET” of the cisType parameter was added for the “Games and toys for children” goods group; 
+
+
+
+
+
+− 
+
+Information on change of a response of the “Get a status of MC array from the order” method (API V3) was added; 
+
+
+
+
+
+− 
+
+Information on change of a response of the “Obtain the list of marking code orders” method (API V3) was added; 
+
+
+
+
+
+− 
+
+Information on change of length of the serial number in the MC templates was added for the “Perfumes and toilet preparations and household chemicals” goods group 
+
+1.1 
+
+17.11.2023 
+
+ The f
+
+− 
+
+− 
+
+− 
+
+ollowing modifications were introduced: 
+
+Information on change of mandatory of the “expirationDate” parameter from optional to mandatory for manufacturers of packaged water was deleted; 
+
+Information on availability of the “GROUP” and “SET” values in the “Create marking code emission order” method was deleted for manufacturers of juice products and non-alcoholic beverages; 
+
+Information on availability of the “Send Report on MC Aggregation” method for the “Juice products and nonalcoholic beverages” goods group was excluded; 
+
+
+
+
+
+− 
+
+Information about the launch of marking of the remaining items for the “Clothing items, bed, table, bath and kitchen linens” goods group was deleted; 
+
+
+
+
+
+− 
+
+Information about the launch of payment was deleted for the 
+
+"Antiseptic/antibacterial skin cleansers and hand sanitizers", "Biologically active food additives", “Medical products” goods groups. 
+
+1.0 
+
+20/10/2023 
+
+First document version
