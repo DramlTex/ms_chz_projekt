@@ -1,0 +1,1236 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Заказ кодов маркировки — прототип страницы</title>
+  <meta name="description" content="Оформление заказа кодов маркировки: выбор карточки, проверка КИ, подпись и отправка." />
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f5f7fb;
+      --card-bg: #ffffff;
+      --text: #1f2933;
+      --muted: #52606d;
+      --accent: #2d72d9;
+      --accent-strong: #1a56db;
+      --border: #d9e2ec;
+      --success: #2ba84a;
+      --error: #d64545;
+      font-size: 16px;
+      font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #111827;
+        --card-bg: #1f2933;
+        --text: #f5f7fb;
+        --muted: #9aa5b1;
+        --border: #334155;
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+
+    a.skip-link {
+      position: absolute;
+      top: -40px;
+      left: 16px;
+      background: var(--accent);
+      color: white;
+      padding: 8px 16px;
+      border-radius: 4px;
+      z-index: 1000;
+    }
+
+    a.skip-link:focus {
+      top: 16px;
+    }
+
+    header.page-header {
+      padding: 24px clamp(16px, 4vw, 48px);
+      background: linear-gradient(120deg, rgba(45,114,217,0.85), rgba(26,86,219,0.92));
+      color: white;
+    }
+
+    header.page-header h1 {
+      margin: 0;
+      font-size: clamp(1.75rem, 3vw, 2.5rem);
+    }
+
+    header.page-header p {
+      margin: 8px 0 0;
+      max-width: 680px;
+      font-size: 1rem;
+    }
+
+    main.layout {
+      padding: 24px clamp(16px, 4vw, 48px) 96px;
+      display: grid;
+      gap: 24px;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      align-items: start;
+    }
+
+    section.card {
+      background: var(--card-bg);
+      border-radius: 16px;
+      padding: 24px;
+      border: 1px solid var(--border);
+      box-shadow: 0 18px 34px -24px rgba(26, 86, 219, 0.45);
+    }
+
+    section.card h2 {
+      margin-top: 0;
+      margin-bottom: 16px;
+      font-size: 1.25rem;
+    }
+
+    section.card p.description {
+      margin-top: -4px;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    form.inline-grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      align-items: end;
+    }
+
+    .field-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    label {
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+
+    input[type="text"],
+    textarea,
+    select {
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      padding: 10px 12px;
+      font-size: 1rem;
+      background: transparent;
+      color: inherit;
+    }
+
+    textarea {
+      min-height: 160px;
+      resize: vertical;
+    }
+
+    button {
+      cursor: pointer;
+      border: none;
+      border-radius: 12px;
+      padding: 12px 18px;
+      font-weight: 600;
+      font-size: 1rem;
+      transition: transform 120ms ease, box-shadow 120ms ease;
+    }
+
+    button.primary {
+      background: var(--accent);
+      color: white;
+      box-shadow: 0 10px 22px -16px rgba(26, 86, 219, 0.7);
+    }
+
+    button.primary:enabled:hover,
+    button.outline:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 20px -18px rgba(26, 86, 219, 0.65);
+    }
+
+    button.primary:disabled,
+    button.outline:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    button.outline {
+      background: transparent;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+    }
+
+    .muted-text {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    dl.product-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px 24px;
+      margin: 0;
+    }
+
+    dl.product-grid div {
+      padding: 12px;
+      border-radius: 10px;
+      background: rgba(45, 114, 217, 0.06);
+    }
+
+    dl.product-grid dt {
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    dl.product-grid dd {
+      margin: 4px 0 0;
+    }
+
+    .collapse-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.95rem;
+      background: transparent;
+      color: var(--accent);
+      border: none;
+      padding: 4px 0;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    fieldset.block-fieldset {
+      border: none;
+      padding: 0;
+      margin: 0;
+      display: grid;
+      gap: 16px;
+    }
+
+    fieldset.block-fieldset:disabled {
+      opacity: 0.6;
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .chip {
+      background: rgba(45, 114, 217, 0.12);
+      color: var(--accent-strong);
+      font-weight: 600;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+    }
+
+    .status-banner {
+      border-radius: 12px;
+      padding: 12px 16px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .status-banner.success {
+      background: rgba(43, 168, 74, 0.1);
+      color: var(--success);
+    }
+
+    .status-banner.error {
+      background: rgba(214, 69, 69, 0.1);
+      color: var(--error);
+    }
+
+    .status-banner.neutral {
+      background: rgba(45, 114, 217, 0.08);
+      color: var(--accent);
+    }
+
+    .validation-errors {
+      list-style: none;
+      padding: 0;
+      margin: 12px 0 0;
+      display: grid;
+      gap: 6px;
+      font-size: 0.9rem;
+    }
+
+    .upload-list {
+      display: grid;
+      gap: 10px;
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    .upload-item {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      display: grid;
+      gap: 6px;
+    }
+
+    .upload-item strong {
+      font-size: 0.95rem;
+    }
+
+    .upload-item progress {
+      width: 100%;
+      height: 10px;
+    }
+
+    .timeline {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      border-left: 3px solid var(--border);
+      padding-left: 18px;
+      display: grid;
+      gap: 16px;
+    }
+
+    .timeline li {
+      position: relative;
+      padding-left: 8px;
+    }
+
+    .timeline li::before {
+      content: "";
+      position: absolute;
+      left: -26px;
+      top: 4px;
+      width: 14px;
+      height: 14px;
+      border-radius: 999px;
+      background: var(--accent);
+      box-shadow: 0 0 0 4px rgba(45, 114, 217, 0.15);
+    }
+
+    .timeline li.success::before {
+      background: var(--success);
+    }
+
+    .timeline li.error::before {
+      background: var(--error);
+    }
+
+    .timeline .status-title {
+      font-weight: 600;
+    }
+
+    .timeline time {
+      display: block;
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .alerts-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: grid;
+      gap: 10px;
+    }
+
+    .alert-item {
+      border-radius: 10px;
+      padding: 10px 12px;
+      background: rgba(45, 114, 217, 0.12);
+      border: 1px solid rgba(45, 114, 217, 0.22);
+      font-size: 0.9rem;
+    }
+
+    .alert-item.error {
+      background: rgba(214, 69, 69, 0.12);
+      border-color: rgba(214, 69, 69, 0.32);
+      color: var(--error);
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.58);
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      z-index: 2000;
+    }
+
+    .modal {
+      background: var(--card-bg);
+      color: var(--text);
+      border-radius: 18px;
+      padding: 24px 28px;
+      width: min(480px, 90vw);
+      display: grid;
+      gap: 16px;
+      border: 1px solid var(--border);
+      box-shadow: 0 30px 60px -32px rgba(15, 23, 42, 0.45);
+    }
+
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      border: 4px solid rgba(45, 114, 217, 0.25);
+      border-top-color: var(--accent-strong);
+      animation: spin 1s linear infinite;
+      margin: 0 auto;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .modal-steps {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: grid;
+      gap: 8px;
+    }
+
+    .modal-steps li {
+      font-size: 0.95rem;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .modal-steps li::before {
+      content: "•";
+      color: var(--accent-strong);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 999px;
+      background: rgba(45, 114, 217, 0.12);
+      padding: 4px 10px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--accent-strong);
+    }
+
+    .actions-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 8px;
+    }
+
+    .card footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 12px;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      border: 0;
+    }
+
+    @media (max-width: 900px) {
+      main.layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    body.modal-open {
+      overflow: hidden;
+    }
+  </style>
+</head>
+<body>
+  <!-- Прототип страницы /orders/create согласно docs/processed/ui/order_page/spec.md -->
+  <a href="#main-content" class="skip-link">Пропустить к содержимому</a>
+  <header class="page-header">
+    <h1>Заказ кодов маркировки</h1>
+    <p>Выберите карточку из Национального каталога, подготовьте список кодов идентификации, подпишите документы УКЭП и отправьте заказ в True API и СУЗ. Страница демонстрирует пользовательский поток с визуализацией процессов.</p>
+  </header>
+  <main id="main-content" class="layout">
+    <section id="product-selector" class="card" aria-labelledby="product-selector-title">
+      <h2 id="product-selector-title">1. Выбор карточки из НК</h2>
+      <p class="description">Укажите GTIN или ID карточки и ИНН держателя. Доступно автоопределение через deeplink с параметрами `gtin` и `inn`.</p>
+      <form id="product-search-form" class="inline-grid" novalidate>
+        <div class="field-group">
+          <label for="gtin-input">GTIN</label>
+          <input id="gtin-input" name="gtin" type="text" inputmode="numeric" autocomplete="off" placeholder="0460…" aria-describedby="gtin-help" required />
+          <span id="gtin-help" class="muted-text">14 цифр, автоматически проверяется с карточкой.</span>
+        </div>
+        <div class="field-group">
+          <label for="card-id-input">ID карточки в НК</label>
+          <input id="card-id-input" name="cardId" type="text" autocomplete="off" placeholder="PRD-00123" />
+        </div>
+        <div class="field-group">
+          <label for="inn-input">ИНН держателя</label>
+          <input id="inn-input" name="inn" type="text" inputmode="numeric" autocomplete="off" placeholder="7701234567" required />
+        </div>
+        <div class="field-group">
+          <span class="sr-only" id="scenario-label">Сценарий заказа</span>
+          <div role="group" aria-labelledby="scenario-label" class="chips">
+            <label class="badge">
+              <input type="radio" name="scenario" value="print" checked /> Печать
+            </label>
+            <label class="badge">
+              <input type="radio" name="scenario" value="introduction" /> Ввод в оборот
+            </label>
+          </div>
+        </div>
+        <div class="actions-row">
+          <button type="submit" class="primary">Найти карточку</button>
+          <button type="button" id="fill-demo-data" class="outline">Подставить пример</button>
+        </div>
+      </form>
+      <p id="product-search-feedback" class="muted-text" role="status" aria-live="assertive"></p>
+      <footer>
+        <span class="badge">API `/v3/product`</span>
+        <span>Проверка выполняется в фоновом режиме, результат фиксируется в карточке ниже.</span>
+      </footer>
+    </section>
+
+    <section id="product-details" class="card hidden" aria-labelledby="product-details-title">
+      <div class="header-row" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+        <h2 id="product-details-title">2. Карточка товара</h2>
+        <button type="button" id="toggle-details" class="collapse-toggle" aria-expanded="true" aria-controls="product-details-content">Свернуть карточку</button>
+      </div>
+      <div id="product-details-content">
+        <p class="description" id="product-details-summary"></p>
+        <dl class="product-grid" id="product-attributes"></dl>
+        <div class="chips" id="product-tags"></div>
+      </div>
+      <footer>
+        <span class="badge">Автозаполнение полей заказа</span>
+        <span>Данные доступны для редактирования до отправки.</span>
+      </footer>
+    </section>
+
+    <section id="cis-validation" class="card" aria-labelledby="cis-validation-title">
+      <h2 id="cis-validation-title">3. Проверка кодов идентификации</h2>
+      <p class="description">Вставьте КИ построчно. Сервис НК допускает до 100 кодов за один запрос. Ошибки возвращаются с расшифровкой.</p>
+      <fieldset class="block-fieldset" id="cis-fieldset" disabled>
+        <div class="field-group">
+          <label for="cis-input">Коды идентификации</label>
+          <textarea id="cis-input" placeholder="010460123456789021ABCDEFGHJKLMNO
+010460123456789021PQRS123456TUVWX"></textarea>
+        </div>
+        <div class="actions-row">
+          <button type="button" id="validate-cis" class="primary">Проверить КИ</button>
+          <button type="button" id="clear-cis" class="outline">Очистить</button>
+        </div>
+      </fieldset>
+      <div id="cis-feedback" aria-live="assertive"></div>
+      <footer>
+        <span class="badge">API `/v3/mark-check`</span>
+        <span>Проверка обязательна до подписания заказа.</span>
+      </footer>
+    </section>
+
+    <section id="document-upload" class="card" aria-labelledby="document-upload-title">
+      <h2 id="document-upload-title">4. Дополнительные документы</h2>
+      <p class="description">Добавьте файл загрузочного фида или сопроводительные документы. Блок активируется после выбора товара.</p>
+      <fieldset class="block-fieldset" id="upload-fieldset" disabled>
+        <div class="field-group">
+          <label for="feed-input">Загрузочный фид (CSV/Excel)</label>
+          <input id="feed-input" type="file" accept=".csv,.xlsx,.xls" />
+        </div>
+        <div class="field-group">
+          <label for="supporting-input">Сопроводительные документы (PDF)</label>
+          <input id="supporting-input" type="file" accept="application/pdf" multiple />
+        </div>
+      </fieldset>
+      <ul id="upload-preview" class="upload-list" aria-live="polite"></ul>
+      <footer>
+        <span class="badge">Необязательный шаг</span>
+        <span>Файлы хранятся локально до подтверждения заказа.</span>
+      </footer>
+    </section>
+
+    <section id="signature-panel" class="card" aria-labelledby="signature-panel-title">
+      <h2 id="signature-panel-title">5. Подписание документов УКЭП</h2>
+      <p class="description">Выберите сертификат CryptoPro и подпишите пакет документов перед отправкой заказа.</p>
+      <fieldset class="block-fieldset" id="signature-fieldset" disabled>
+        <div class="field-group">
+          <label for="certificate-select">Сертификат</label>
+          <select id="certificate-select" aria-describedby="certificate-help">
+            <option value="">— выберите сертификат —</option>
+            <option value="cn=ООО «Лёгкая текстиль», inn=7722334455">ООО «Лёгкая текстиль» — ИНН 7722334455</option>
+            <option value="cn=АО «Пример», inn=7701122334">АО «Пример» — ИНН 7701122334</option>
+          </select>
+          <span id="certificate-help" class="muted-text">CryptoPro Browser Plug-in выполняет подпись ГОСТ 34.10-2012.</span>
+        </div>
+        <div class="actions-row">
+          <button type="button" id="sign-documents" class="primary">Подписать данные</button>
+          <button type="button" id="toggle-plugin" class="outline">Переустановить плагин</button>
+        </div>
+      </fieldset>
+      <div id="signature-feedback" aria-live="assertive"></div>
+      <footer>
+        <span class="badge">API `/auth/key` · CryptoPro</span>
+        <span>Подписанный hash сохраняется в памяти до отправки.</span>
+      </footer>
+    </section>
+
+    <section id="order-submit" class="card" aria-labelledby="submit-order-title">
+      <h2 id="submit-order-title">6. Отправка заказа</h2>
+      <p class="description">После проверки КИ и подписи запрос автоматически отправится в True API и СУЗ.</p>
+      <button id="submit-order" class="primary" type="button" disabled>Отправить заказ</button>
+      <p class="muted-text">Отправка фиксируется в аналитике (`order.create_attempt`).</p>
+    </section>
+
+    <section id="status-timeline" class="card hidden" aria-labelledby="status-timeline-title">
+      <h2 id="status-timeline-title">7. Таймлайн статусов</h2>
+      <p class="description">Прогресс документов отражает ответы True API и СУЗ. Обновляется по WebSocket `/ws/orders/:id`.</p>
+      <ol id="timeline-list" class="timeline" aria-live="polite"></ol>
+      <footer>
+        <span class="badge" id="order-id-badge"></span>
+        <span>Время синхронизации обновляется по мере получения событий.</span>
+      </footer>
+    </section>
+
+    <section id="websocket-alerts" class="card hidden" aria-labelledby="websocket-alerts-title">
+      <h2 id="websocket-alerts-title">8. Уведомления</h2>
+      <p class="description">Сообщения воркера отображаются в реальном времени: ошибки подписи, статус закрытия заказа, предложения по выбытиям.</p>
+      <ul id="alerts-list" class="alerts-list" aria-live="assertive"></ul>
+      <footer>
+        <span class="badge">WS `/ws/orders/:id`</span>
+        <span>События `ORDER_CLOSED`, `ORDER_FAILED` сопровождаются рекомендациями.</span>
+      </footer>
+    </section>
+  </main>
+
+  <div id="modal-backdrop" class="modal-backdrop hidden" role="presentation">
+    <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="modal-title" aria-live="assertive">
+      <div class="spinner" aria-hidden="true"></div>
+      <div>
+        <h2 id="modal-title">Выполнение операции…</h2>
+        <p id="modal-message" class="muted-text"></p>
+      </div>
+      <ul id="modal-steps" class="modal-steps"></ul>
+      <button type="button" id="modal-close" class="outline hidden">Закрыть</button>
+    </div>
+  </div>
+
+  <template id="timeline-item-template">
+    <li>
+      <div class="status-title"></div>
+      <p class="muted-text"></p>
+      <time></time>
+    </li>
+  </template>
+
+  <template id="alert-item-template">
+    <li class="alert-item">
+      <strong></strong>
+      <p class="muted-text"></p>
+    </li>
+  </template>
+
+  <script>
+    const MOCK_PRODUCTS = [
+      {
+        gtin: "04601234567890",
+        cardId: "PRD-00123",
+        inn: "7701234567",
+        title: "Куртка мужская утеплённая",
+        brand: "Aurora",
+        okpd2: "14.13.12.110",
+        tnved: "6101201000",
+        composition: "Полиэстер 100%",
+        color: "Чёрный",
+        sizes: "48-56",
+        variants: 6,
+        lastUpdate: "12.04.2024",
+        status: "Актуальна",
+        description: "Арт. 4510 · Коллекция осень/зима. Подходит для заказа КМ под печать и ввод в оборот.",
+        tags: ["Лёгкая промышленность", "Одежда", "Мужская"],
+      },
+      {
+        gtin: "04609876543219",
+        cardId: "PRD-00987",
+        inn: "7722994411",
+        title: "Платье женское шёлковое",
+        brand: "Linea",
+        okpd2: "14.13.22.000",
+        tnved: "6204430000",
+        composition: "Шёлк 95%, Эластан 5%",
+        color: "Изумрудный",
+        sizes: "42-50",
+        variants: 4,
+        lastUpdate: "25.03.2024",
+        status: "Актуальна",
+        description: "Лимитированная капсула. Требуется сопроводительный фид с размерами.",
+        tags: ["Женская одежда", "Премиум"],
+      },
+    ];
+
+    const state = {
+      product: null,
+      scenario: "print",
+      cisValidated: false,
+      cisErrors: [],
+      signature: {
+        signed: false,
+        certificate: null,
+      },
+      pluginAvailable: true,
+      orderId: null,
+    };
+
+    const productSearchForm = document.getElementById("product-search-form");
+    const productSearchFeedback = document.getElementById("product-search-feedback");
+    const productDetailsSection = document.getElementById("product-details");
+    const productDetailsSummary = document.getElementById("product-details-summary");
+    const productAttributes = document.getElementById("product-attributes");
+    const productTags = document.getElementById("product-tags");
+    const toggleDetailsButton = document.getElementById("toggle-details");
+
+    const cisFieldset = document.getElementById("cis-fieldset");
+    const cisInput = document.getElementById("cis-input");
+    const cisFeedback = document.getElementById("cis-feedback");
+    const validateCisButton = document.getElementById("validate-cis");
+    const clearCisButton = document.getElementById("clear-cis");
+
+    const uploadFieldset = document.getElementById("upload-fieldset");
+    const feedInput = document.getElementById("feed-input");
+    const supportingInput = document.getElementById("supporting-input");
+    const uploadPreview = document.getElementById("upload-preview");
+
+    const signatureFieldset = document.getElementById("signature-fieldset");
+    const certificateSelect = document.getElementById("certificate-select");
+    const signatureFeedback = document.getElementById("signature-feedback");
+    const signDocumentsButton = document.getElementById("sign-documents");
+    const togglePluginButton = document.getElementById("toggle-plugin");
+
+    const submitOrderButton = document.getElementById("submit-order");
+    const statusTimeline = document.getElementById("status-timeline");
+    const timelineList = document.getElementById("timeline-list");
+    const orderIdBadge = document.getElementById("order-id-badge");
+    const websocketAlertsSection = document.getElementById("websocket-alerts");
+    const alertsList = document.getElementById("alerts-list");
+
+    const modalBackdrop = document.getElementById("modal-backdrop");
+    const modalTitle = document.getElementById("modal-title");
+    const modalMessage = document.getElementById("modal-message");
+    const modalSteps = document.getElementById("modal-steps");
+    const modalCloseButton = document.getElementById("modal-close");
+
+    const timelineTemplate = document.getElementById("timeline-item-template");
+    const alertTemplate = document.getElementById("alert-item-template");
+
+    const scenarioRadios = productSearchForm.elements["scenario"];
+
+    function openModal(title, message, steps = []) {
+      modalTitle.textContent = title;
+      modalMessage.textContent = message;
+      modalSteps.innerHTML = "";
+      steps.forEach((step) => {
+        const li = document.createElement("li");
+        li.textContent = step;
+        modalSteps.appendChild(li);
+      });
+      modalBackdrop.classList.remove("hidden");
+      document.body.classList.add("modal-open");
+    }
+
+    function appendModalStep(step) {
+      const li = document.createElement("li");
+      li.textContent = step;
+      modalSteps.appendChild(li);
+    }
+
+    function closeModal(delay = 0) {
+      setTimeout(() => {
+        modalBackdrop.classList.add("hidden");
+        document.body.classList.remove("modal-open");
+        modalCloseButton.classList.add("hidden");
+      }, delay);
+    }
+
+    modalCloseButton.addEventListener("click", () => closeModal());
+
+    function findProduct({ gtin, cardId }) {
+      return MOCK_PRODUCTS.find((product) => {
+        const matchByGtin = gtin && product.gtin === gtin;
+        const matchByCardId = cardId && product.cardId.toLowerCase() === cardId.toLowerCase();
+        return matchByGtin || matchByCardId;
+      });
+    }
+
+    function renderProduct(product) {
+      productDetailsSection.classList.remove("hidden");
+      productDetailsSummary.textContent = `${product.title} — бренд ${product.brand}. Обновлена ${product.lastUpdate}. Статус: ${product.status}.`;
+      productAttributes.innerHTML = "";
+
+      const attributes = [
+        ["GTIN", product.gtin],
+        ["ID карточки", product.cardId],
+        ["ИНН держателя", product.inn],
+        ["ОКПД2", product.okpd2],
+        ["ТН ВЭД", product.tnved],
+        ["Состав", product.composition],
+        ["Цвет", product.color],
+        ["Размерный ряд", product.sizes],
+        ["Количество вариантов", `${product.variants}`],
+      ];
+
+      attributes.forEach(([label, value]) => {
+        const container = document.createElement("div");
+        const dt = document.createElement("dt");
+        dt.textContent = label;
+        const dd = document.createElement("dd");
+        dd.textContent = value || "—";
+        container.append(dt, dd);
+        productAttributes.appendChild(container);
+      });
+
+      productTags.innerHTML = "";
+      product.tags.forEach((tag) => {
+        const span = document.createElement("span");
+        span.className = "chip";
+        span.textContent = tag;
+        productTags.appendChild(span);
+      });
+    }
+
+    function resetValidationState() {
+      state.cisValidated = false;
+      state.cisErrors = [];
+      cisFeedback.innerHTML = "";
+      updateSubmitButtonState();
+    }
+
+    function resetSignatureState() {
+      state.signature = { signed: false, certificate: null };
+      signatureFeedback.innerHTML = "";
+      certificateSelect.value = "";
+      updateSubmitButtonState();
+    }
+
+    function updateSubmitButtonState() {
+      const ready = Boolean(state.product) && state.cisValidated && state.signature.signed;
+      submitOrderButton.disabled = !ready;
+      submitOrderButton.setAttribute("aria-disabled", String(!ready));
+    }
+
+    function setFieldsetsAvailability(enabled) {
+      cisFieldset.disabled = !enabled;
+      uploadFieldset.disabled = !enabled;
+      signatureFieldset.disabled = !enabled;
+    }
+
+    function formatTimestamp(date = new Date()) {
+      return date.toLocaleString("ru-RU", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
+    }
+
+    function addTimelineEntry({ status, description, tone = "neutral" }) {
+      const entry = timelineTemplate.content.firstElementChild.cloneNode(true);
+      entry.querySelector(".status-title").textContent = status;
+      entry.querySelector("p").textContent = description;
+      entry.querySelector("time").textContent = formatTimestamp();
+      if (tone !== "neutral") {
+        entry.classList.add(tone);
+      }
+      timelineList.appendChild(entry);
+    }
+
+    function addAlert({ title, message, tone = "info" }) {
+      const alert = alertTemplate.content.firstElementChild.cloneNode(true);
+      alert.querySelector("strong").textContent = title;
+      alert.querySelector("p").textContent = message;
+      if (tone === "error") {
+        alert.classList.add("error");
+      }
+      alertsList.prepend(alert);
+    }
+
+    function simulateUpload(file, container) {
+      const item = document.createElement("li");
+      item.className = "upload-item";
+      const name = document.createElement("strong");
+      name.textContent = `${file.name} (${Math.round(file.size / 1024)} КБ)`;
+      const progress = document.createElement("progress");
+      progress.max = 100;
+      progress.value = 0;
+      const status = document.createElement("span");
+      status.className = "muted-text";
+      status.textContent = "Подготовка…";
+      item.append(name, progress, status);
+      container.appendChild(item);
+
+      let current = 0;
+      const interval = setInterval(() => {
+        current += Math.random() * 25;
+        progress.value = Math.min(100, current);
+        if (progress.value >= 100) {
+          clearInterval(interval);
+          status.textContent = "Готово к отправке";
+        } else {
+          status.textContent = "Загрузка…";
+        }
+      }, 350);
+    }
+
+    function showValidationResult({ validCount, invalidCodes }) {
+      cisFeedback.innerHTML = "";
+      const banner = document.createElement("div");
+      const feedbackList = document.createElement("ul");
+      feedbackList.className = "validation-errors";
+
+      if (invalidCodes.length === 0) {
+        banner.className = "status-banner success";
+        banner.textContent = `Проверено ${validCount} КИ. Ошибок не найдено.`;
+        cisFeedback.appendChild(banner);
+      } else {
+        banner.className = "status-banner error";
+        banner.textContent = "Найдены проблемы. Исправьте КИ перед отправкой.";
+        cisFeedback.appendChild(banner);
+        invalidCodes.forEach((code) => {
+          const li = document.createElement("li");
+          li.textContent = code.message;
+          feedbackList.appendChild(li);
+        });
+        cisFeedback.appendChild(feedbackList);
+      }
+    }
+
+    function markSignatureSuccess(certificate) {
+      signatureFeedback.innerHTML = "";
+      const banner = document.createElement("div");
+      banner.className = "status-banner success";
+      banner.textContent = `Документы подписаны сертификатом ${certificate}.`;
+      signatureFeedback.appendChild(banner);
+    }
+
+    function markSignatureError(message) {
+      signatureFeedback.innerHTML = "";
+      const banner = document.createElement("div");
+      banner.className = "status-banner error";
+      banner.textContent = message;
+      signatureFeedback.appendChild(banner);
+    }
+
+    function togglePluginAvailability() {
+      state.pluginAvailable = !state.pluginAvailable;
+      const tone = state.pluginAvailable ? "neutral" : "error";
+      const banner = document.createElement("div");
+      banner.className = `status-banner ${tone}`;
+      banner.textContent = state.pluginAvailable
+        ? "Плагин CryptoPro подключён. Список сертификатов обновлён."
+        : "Установите CryptoPro Browser Plug-in и перезапустите браузер.";
+      signatureFeedback.innerHTML = "";
+      signatureFeedback.appendChild(banner);
+      if (!state.pluginAvailable) {
+        signatureFieldset.disabled = true;
+        setTimeout(() => {
+          signatureFieldset.disabled = false;
+        }, 1000);
+      }
+    }
+
+    function simulateOrderLifecycle(orderId) {
+      statusTimeline.classList.remove("hidden");
+      websocketAlertsSection.classList.remove("hidden");
+      timelineList.innerHTML = "";
+      alertsList.innerHTML = "";
+
+      const steps = [
+        {
+          delay: 600,
+          status: "Заявка сформирована",
+          description: "Формирование пакета данных и hash подписи.",
+        },
+        {
+          delay: 1400,
+          status: "Отправлено в True API",
+          description: "Документ успешно принят. Ожидаем подтверждение.",
+        },
+        {
+          delay: 2200,
+          status: "Принято СУЗ",
+          description: "Сформирован заказ КМ и передан в очередь печати.",
+        },
+        {
+          delay: 3500,
+          status: "Готово к закрытию",
+          description: "Получено событие ORDER_CLOSED. Можно оформить выбытие.",
+          tone: "success",
+        },
+      ];
+
+      let accumulatedDelay = 0;
+      steps.forEach((step) => {
+        accumulatedDelay += step.delay;
+        setTimeout(() => {
+          addTimelineEntry({
+            status: step.status,
+            description: step.description,
+            tone: step.tone ?? "neutral",
+          });
+          if (step.status === "Готово к закрытию") {
+            addAlert({
+              title: "ORDER_CLOSED",
+              message: `Заказ ${orderId} закрыт. Оформите выбытие в течение 3 рабочих дней.`,
+            });
+          }
+        }, accumulatedDelay);
+      });
+    }
+
+    productSearchForm.addEventListener("change", (event) => {
+      if (event.target.name === "scenario") {
+        state.scenario = event.target.value;
+      }
+    });
+
+    document.getElementById("fill-demo-data").addEventListener("click", () => {
+      const demo = MOCK_PRODUCTS[0];
+      productSearchForm.elements["gtin"].value = demo.gtin;
+      productSearchForm.elements["cardId"].value = demo.cardId;
+      productSearchForm.elements["inn"].value = demo.inn;
+      productSearchFeedback.textContent = "Подставлены демонстрационные значения.";
+    });
+
+    productSearchForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const formData = new FormData(productSearchForm);
+      const gtin = formData.get("gtin").toString().trim();
+      const cardId = formData.get("cardId").toString().trim();
+      const inn = formData.get("inn").toString().trim();
+
+      if (!gtin && !cardId) {
+        productSearchFeedback.textContent = "Укажите GTIN или ID карточки.";
+        return;
+      }
+
+      openModal("Поиск карточки", "Запрашиваем данные из Национального каталога…", [
+        "Подготовка параметров запроса",
+        "Выполнение API вызова",
+      ]);
+
+      setTimeout(() => {
+        appendModalStep("Обработка ответа сервиса НК");
+        const product = findProduct({ gtin, cardId });
+        if (!product) {
+          productSearchFeedback.textContent = "Карточка не найдена. Проверьте GTIN или ID.";
+          closeModal(500);
+          return;
+        }
+
+        if (inn && product.inn !== inn) {
+          productSearchFeedback.textContent = "ИНН держателя не совпадает с карточкой.";
+          closeModal(500);
+          return;
+        }
+
+        state.product = product;
+        renderProduct(product);
+        productSearchFeedback.textContent = "Карточка найдена и добавлена в заказ.";
+        setFieldsetsAvailability(true);
+        resetValidationState();
+        resetSignatureState();
+        closeModal(300);
+      }, 1300);
+    });
+
+    toggleDetailsButton.addEventListener("click", () => {
+      const expanded = toggleDetailsButton.getAttribute("aria-expanded") === "true";
+      toggleDetailsButton.setAttribute("aria-expanded", String(!expanded));
+      toggleDetailsButton.textContent = expanded ? "Развернуть карточку" : "Свернуть карточку";
+      document.getElementById("product-details-content").classList.toggle("hidden", expanded);
+    });
+
+    validateCisButton.addEventListener("click", () => {
+      const codes = cisInput.value
+        .split(/[\s,;]+/)
+        .map((code) => code.trim())
+        .filter(Boolean);
+
+      if (codes.length === 0) {
+        showValidationResult({ validCount: 0, invalidCodes: [{ message: "Добавьте хотя бы один КИ." }] });
+        state.cisValidated = false;
+        updateSubmitButtonState();
+        return;
+      }
+
+      if (codes.length > 100) {
+        showValidationResult({
+          validCount: codes.length,
+          invalidCodes: [{ message: `В одном запросе допускается не более 100 кодов. Сейчас: ${codes.length}.` }],
+        });
+        state.cisValidated = false;
+        updateSubmitButtonState();
+        return;
+      }
+
+      openModal("Проверка кодов", "Отправляем КИ на проверку…", [
+        "Сериализация списка кодов",
+        "Вызов `/v3/mark-check`",
+      ]);
+
+      setTimeout(() => appendModalStep("Получаем результат проверки"), 650);
+
+      setTimeout(() => {
+        const invalidCodes = codes
+          .map((code, index) => {
+            const normalized = code.toUpperCase();
+            if (!/^[0-9A-Z]{31}$/.test(normalized)) {
+              return { message: `Строка ${index + 1}: некорректный формат КИ (${code}).` };
+            }
+            let hasRepeats = false;
+            for (let i = 0; i < normalized.length - 5; i += 1) {
+              if (
+                normalized[i] === normalized[i + 1] &&
+                normalized[i] === normalized[i + 2] &&
+                normalized[i] === normalized[i + 3] &&
+                normalized[i] === normalized[i + 4] &&
+                normalized[i] === normalized[i + 5]
+              ) {
+                hasRepeats = true;
+                break;
+              }
+            }
+            if (hasRepeats) {
+              return { message: `Строка ${index + 1}: подозрение на повторяющиеся символы (${code}).` };
+            }
+            return null;
+          })
+          .filter(Boolean);
+
+        showValidationResult({ validCount: codes.length, invalidCodes });
+        state.cisValidated = invalidCodes.length === 0;
+        closeModal(400);
+        updateSubmitButtonState();
+      }, 1300);
+    });
+
+    clearCisButton.addEventListener("click", () => {
+      cisInput.value = "";
+      cisFeedback.innerHTML = "";
+      state.cisValidated = false;
+      updateSubmitButtonState();
+    });
+
+    feedInput.addEventListener("change", () => {
+      uploadPreview.innerHTML = "";
+      if (feedInput.files.length > 0) {
+        simulateUpload(feedInput.files[0], uploadPreview);
+      }
+    });
+
+    supportingInput.addEventListener("change", () => {
+      Array.from(supportingInput.files).forEach((file) => simulateUpload(file, uploadPreview));
+    });
+
+    togglePluginButton.addEventListener("click", () => togglePluginAvailability());
+
+    signDocumentsButton.addEventListener("click", () => {
+      if (!state.pluginAvailable) {
+        markSignatureError("Подпись недоступна: установите CryptoPro и повторите.");
+        return;
+      }
+
+      const certificate = certificateSelect.value;
+      if (!certificate) {
+        markSignatureError("Выберите сертификат для подписи.");
+        return;
+      }
+
+      openModal("Подписание", "Готовим данные к подписи…", [
+        "Получение ключа через `/auth/key`",
+        "Формирование XML и hash",
+      ]);
+
+      setTimeout(() => appendModalStep("Выполняем ГОСТ-подпись"), 700);
+
+      setTimeout(() => {
+        state.signature = { signed: true, certificate };
+        markSignatureSuccess(certificate);
+        closeModal(500);
+        updateSubmitButtonState();
+      }, 1400);
+    });
+
+    submitOrderButton.addEventListener("click", () => {
+      if (submitOrderButton.disabled) return;
+
+      const orderId = `ORD-${Math.floor(100000 + Math.random() * 900000)}`;
+      state.orderId = orderId;
+      orderIdBadge.textContent = `Order ID: ${orderId}`;
+
+      openModal("Отправка заказа", "Пакет передаётся в True API и СУЗ…", [
+        "Подготовка документа для True API",
+        "Проверка статуса подписи",
+      ]);
+
+      setTimeout(() => appendModalStep("Передача в СУЗ"), 600);
+
+      setTimeout(() => {
+        closeModal(400);
+        addAlert({
+          title: "order.create_attempt",
+          message: `Сценарий: ${state.scenario}. Сертификат: ${state.signature.certificate}.`,
+        });
+        simulateOrderLifecycle(orderId);
+      }, 1200);
+    });
+
+    if (window.location.search) {
+      const params = new URLSearchParams(window.location.search);
+      const gtinParam = params.get("gtin");
+      const innParam = params.get("inn");
+      if (gtinParam) {
+        productSearchForm.elements["gtin"].value = gtinParam;
+      }
+      if (innParam) {
+        productSearchForm.elements["inn"].value = innParam;
+      }
+    }
+  </script>
+</body>
+</html>
