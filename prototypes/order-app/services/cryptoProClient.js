@@ -91,18 +91,24 @@ export function ensureCryptoProPlugin() {
     if (!window.cadesplugin) {
       await loadScript();
     }
-    if (!window.cadesplugin) {
+    const plugin = window.cadesplugin;
+    if (!plugin) {
       throw new Error('CryptoPro plug-in не обнаружен. Установите плагин и перезапустите браузер.');
     }
-    if (typeof window.cadesplugin.then === 'function') {
-      return window.cadesplugin.then(
-        (plugin) => plugin,
-        (error) => {
-          throw error instanceof Error ? error : new Error(String(error));
-        },
-      );
+    if (typeof plugin.then === 'function') {
+      try {
+        await plugin;
+      } catch (error) {
+        throw error instanceof Error ? error : new Error(String(error));
+      }
     }
-    return window.cadesplugin;
+    if (
+      typeof plugin.CreateObjectAsync !== 'function' &&
+      typeof plugin.CreateObject !== 'function'
+    ) {
+      throw new Error('CryptoPro plug-in загружен, но не предоставляет API CreateObject.');
+    }
+    return plugin;
   })().catch((error) => {
     pluginPromise = null;
     throw error;
