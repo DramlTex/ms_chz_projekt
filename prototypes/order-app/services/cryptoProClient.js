@@ -1,21 +1,83 @@
-const PLUGIN_SCRIPT_URL = new URL('../../crypto_pro/cadesplugin_api.js', import.meta.url);
+const pluginScriptCandidates = (() => {
+  const candidates = [];
+  try {
+    candidates.push(new URL('../../crypto_pro/cadesplugin_api.js', import.meta.url).href);
+  } catch (error) {
+    // игнорируем: модуль может быть переупакован бандлером
+  }
+  try {
+    candidates.push(new URL('../crypto_pro/cadesplugin_api.js', import.meta.url).href);
+  } catch (error) {
+    // игнорируем: fallback для иной структуры каталогов
+  }
+  if (typeof document !== 'undefined' && document.baseURI) {
+    try {
+      candidates.push(new URL('./crypto_pro/cadesplugin_api.js', document.baseURI).href);
+    } catch (error) {
+      // нет baseURI — продолжаем подбор путей ниже
+    }
+    try {
+      candidates.push(new URL('./cadesplugin_api.js', document.baseURI).href);
+    } catch (error) {
+      // локальная страница может не содержать файл рядом — не критично
+    }
+  }
+  return [...new Set(candidates)];
+})();
 
 let pluginPromise = null;
 
-function loadScript() {
+function hasScriptWithSrc(src) {
+  if (typeof document === 'undefined') {
+    return false;
+  }
+  const scripts = document.getElementsByTagName('script');
+  return Array.prototype.some.call(scripts, (node) => node.src === src);
+}
+
+function attachScript(src) {
   return new Promise((resolve, reject) => {
-    const existing = document.querySelector(`script[src="${PLUGIN_SCRIPT_URL}"]`);
-    if (existing) {
+    if (hasScriptWithSrc(src)) {
       resolve();
       return;
     }
+    const target = document.head || document.body;
+    if (!target) {
+      reject(new Error('DOM ещё не готов для загрузки CryptoPro.'));
+      return;
+    }
     const script = document.createElement('script');
-    script.src = PLUGIN_SCRIPT_URL;
+    script.src = src;
     script.async = true;
     script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Не удалось загрузить скрипт CryptoPro. Убедитесь, что файл cadesplugin_api.js доступен.'));
-    document.head.appendChild(script);
+    script.onerror = () => {
+      script.remove();
+      reject(new Error(`Не удалось загрузить скрипт CryptoPro по адресу ${src}`));
+    };
+    target.appendChild(script);
   });
+}
+
+async function loadScript() {
+  const errors = [];
+  for (const candidate of pluginScriptCandidates) {
+    if (!candidate) {
+      continue;
+    }
+    try {
+      await attachScript(candidate);
+      return;
+    } catch (error) {
+      errors.push(error?.message ?? String(error));
+    }
+  }
+  let details = '';
+  if (errors.length > 0) {
+    details = ` (${errors.join('; ')})`;
+  } else if (pluginScriptCandidates.length > 0) {
+    details = ` (пробовали пути: ${pluginScriptCandidates.join(', ')})`;
+  }
+  throw new Error(`Не удалось загрузить скрипт CryptoPro. Убедитесь, что файл cadesplugin_api.js доступен.${details}`);
 }
 
 export function ensureCryptoProPlugin() {
@@ -41,7 +103,10 @@ export function ensureCryptoProPlugin() {
       );
     }
     return window.cadesplugin;
-  })();
+  })().catch((error) => {
+    pluginPromise = null;
+    throw error;
+  });
   return pluginPromise;
 }
 
