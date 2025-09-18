@@ -23,6 +23,48 @@
   </header>
 
   <main class="layout">
+    <section class="card" id="auth-card" aria-labelledby="auth-card-title">
+      <header class="card__header">
+        <h2 id="auth-card-title">0. Авторизация и подпись</h2>
+        <p class="muted-text">
+          Подключите CryptoPro Browser Plug-in, выберите сертификат УКЭП и получите bearer-токен True API. Для загрузки карточек
+          Национального каталога укажите рабочий API-ключ или bearer-токен производственного контура.
+        </p>
+      </header>
+      <div class="auth-panel">
+        <div class="auth-panel__actions">
+          <button type="button" class="button button--primary" id="auth-init-plugin">Подключить CryptoPro</button>
+          <button type="button" class="button button--ghost" id="auth-refresh-certificates" disabled>Обновить сертификаты</button>
+          <button type="button" class="button button--primary" id="auth-request-token" disabled>Получить токен True API</button>
+        </div>
+        <p class="status" id="auth-plugin-status" aria-live="polite"></p>
+        <div class="auth-panel__grid">
+          <div class="field">
+            <label for="auth-certificates">Сертификат УКЭП</label>
+            <select id="auth-certificates" disabled>
+              <option value="">Подключите CryptoPro</option>
+            </select>
+            <p class="muted-text">Плагин запросит доступ к хранилищу сертификатов ГОСТ Р 34.10-2012.</p>
+          </div>
+          <div class="field">
+            <label for="auth-nk-apikey">API-ключ Национального каталога</label>
+            <input type="password" id="auth-nk-apikey" autocomplete="off" placeholder="Например, abcd1234..." />
+            <p class="muted-text">Используется как параметр <code>apikey</code> в промышленном контуре.</p>
+          </div>
+          <div class="field">
+            <label for="auth-nk-bearer">Bearer-токен НК (опционально)</label>
+            <input type="password" id="auth-nk-bearer" autocomplete="off" placeholder="JWT или UUID" />
+            <p class="muted-text">Если указан, отправляется в заголовке Authorization. Не используйте тестовые токены.</p>
+          </div>
+        </div>
+        <div class="auth-panel__actions auth-panel__actions--secondary">
+          <button type="button" class="button button--ghost" id="auth-save-nk">Сохранить доступ к НК</button>
+        </div>
+        <p class="status" id="auth-token-status" aria-live="polite"></p>
+        <p class="status" id="auth-nk-status" aria-live="polite"></p>
+      </div>
+    </section>
+
     <section class="card" id="filters-card" aria-labelledby="filters-card-title">
       <header class="card__header">
         <h2 id="filters-card-title">1. Запрос карточек</h2>

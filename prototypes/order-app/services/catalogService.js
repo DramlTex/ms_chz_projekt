@@ -1,18 +1,18 @@
 import { toApiDateTime } from '../utils/datetime.js';
+import { getNationalCatalogBaseUrl } from '../config.js';
 
-const NK_SANDBOX_BASE = 'https://api.nk.sandbox.crptech.ru';
 const PRODUCT_LIST_ENDPOINT = '/v4/product-list';
-const DEMO_DATA_URL = new URL('../data/demo-cards.json', import.meta.url);
 
 /**
  * Ошибка запросов Национального каталога.
  */
 export class CatalogServiceError extends Error {
-  constructor(message, { type = 'generic', cause } = {}) {
+  constructor(message, { type = 'generic', cause, status } = {}) {
     super(message);
     this.name = 'CatalogServiceError';
     this.type = type;
     this.cause = cause;
+    this.status = status;
   }
 }
 
@@ -59,21 +59,9 @@ function normalizeResponse(raw) {
   };
 }
 
-async function loadDemoCards() {
-  const response = await fetch(DEMO_DATA_URL);
-  if (!response.ok) {
-    throw new CatalogServiceError('Не удалось загрузить демонстрационные карточки', {
-      type: 'demo-unavailable',
-      cause: response,
-    });
-  }
-  const payload = await response.json();
-  return normalizeResponse(payload);
-}
-
 /**
- * Запрашивает список карточек в НК. При отсутствии ключа возвращает демо-данные.
- * @param {{ fromDate?: Date | null; toDate?: Date | null; search?: string; limit?: number; offset?: number; apiKey?: string }} params
+ * Запрашивает список карточек в НК (промышленный контур).
+ * @param {{ fromDate?: Date | null; toDate?: Date | null; search?: string; limit?: number; offset?: number; auth?: { apiKey?: string; bearerToken?: string } }} params
  */
 export async function fetchProductCards(params = {}) {
   const {
@@ -82,49 +70,73 @@ export async function fetchProductCards(params = {}) {
     search = '',
     limit = 50,
     offset = 0,
-    apiKey,
+    auth = {},
   } = params;
+
+  const baseUrl = getNationalCatalogBaseUrl();
+  if (!baseUrl) {
+    throw new CatalogServiceError('Не указан базовый URL Национального каталога', {
+      type: 'configuration',
+    });
+  }
+
+  const apiKey = auth.apiKey?.trim() ?? '';
+  const bearerToken = auth.bearerToken?.trim() ?? '';
+  if (!apiKey && !bearerToken) {
+    throw new CatalogServiceError('Требуется API-ключ или bearer-токен Национального каталога.', {
+      type: 'auth-required',
+    });
+  }
 
   const query = new URLSearchParams();
   if (limit) query.set('limit', String(limit));
   if (offset) query.set('offset', String(offset));
   if (fromDate) query.set('from_date', toApiDateTime(fromDate));
   if (toDate) query.set('to_date', toApiDateTime(toDate));
-
-  const headers = new Headers({ Accept: 'application/json' });
-  if (apiKey) {
-    headers.set('apikey', apiKey);
+  if (apiKey) query.set('apikey', apiKey);
+  if (!apiKey && bearerToken) {
+    query.set('token', bearerToken);
   }
 
-  const url = `${NK_SANDBOX_BASE}${PRODUCT_LIST_ENDPOINT}?${query.toString()}`;
+  const headers = new Headers({ Accept: 'application/json' });
+  if (bearerToken) {
+    const value = bearerToken.startsWith('Bearer ') ? bearerToken : `Bearer ${bearerToken}`;
+    headers.set('Authorization', value);
+  }
+
+  const url = `${baseUrl}${PRODUCT_LIST_ENDPOINT}?${query.toString()}`;
   try {
     const response = await fetch(url, { headers });
     if (response.ok) {
       const raw = await response.json();
       const normalized = normalizeResponse(raw);
-      return finalizeResult(normalized, { search, fallback: false, source: 'nk-sandbox' });
+      return finalizeResult(normalized, { search, source: 'nk-prod' });
     }
-
-    if (response.status === 401 || response.status === 403) {
-      const demo = await loadDemoCards();
-      return finalizeResult(demo, { search, fallback: true, source: 'demo' });
-    }
-
     const text = await response.text();
+    if (response.status === 401 || response.status === 403) {
+      throw new CatalogServiceError('Национальный каталог отклонил запрос: проверьте ключ или bearer-токен.', {
+        type: 'auth-required',
+        status: response.status,
+        cause: text,
+      });
+    }
     throw new CatalogServiceError(`Ошибка НК: ${response.status}`, {
       type: 'http',
       cause: text,
+      status: response.status,
     });
   } catch (error) {
     if (error instanceof CatalogServiceError) {
       throw error;
     }
-    const demo = await loadDemoCards();
-    return finalizeResult(demo, { search, fallback: true, source: 'demo' });
+    throw new CatalogServiceError('Не удалось выполнить запрос к Национальному каталогу', {
+      type: 'network',
+      cause: error,
+    });
   }
 }
 
-function finalizeResult(normalized, { search, fallback, source }) {
+function finalizeResult(normalized, { search, source }) {
   const trimmed = search?.trim()?.toLowerCase() ?? '';
   let cards = normalized.cards;
   if (trimmed) {
@@ -146,7 +158,6 @@ function finalizeResult(normalized, { search, fallback, source }) {
     },
     meta: {
       source,
-      fallback,
       rawTotal: normalized.total,
       filteredBy: trimmed || null,
       fetchedAt: new Date(),
