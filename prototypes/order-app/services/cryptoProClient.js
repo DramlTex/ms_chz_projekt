@@ -95,14 +95,17 @@ export function ensureCryptoProPlugin() {
       throw new Error('CryptoPro plug-in не обнаружен. Установите плагин и перезапустите браузер.');
     }
     if (typeof window.cadesplugin.then === 'function') {
-      return window.cadesplugin.then(
-        (plugin) => plugin,
-        (error) => {
-          throw error instanceof Error ? error : new Error(String(error));
-        },
-      );
+      try {
+        await window.cadesplugin;
+      } catch (error) {
+        throw error instanceof Error ? error : new Error(String(error));
+      }
     }
-    return window.cadesplugin;
+    const plugin = window.cadesplugin;
+    if (typeof plugin.CreateObjectAsync !== 'function') {
+      throw new Error('CryptoPro plug-in не предоставляет асинхронный API. Обновите плагин до версии с CreateObjectAsync.');
+    }
+    return plugin;
   })().catch((error) => {
     pluginPromise = null;
     throw error;
