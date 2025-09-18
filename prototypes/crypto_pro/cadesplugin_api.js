@@ -479,6 +479,16 @@
         }
     }
 
+    function ensurePluginObject(methodName) {
+        if (!pluginObject || (methodName && typeof pluginObject[methodName] !== "function")) {
+            var message = "CryptoPro plug-in не инициализирован: метод " + methodName + " недоступен. " +
+                "Убедитесь, что браузерное расширение установлено и активно.";
+            cpcsp_console_log(cadesplugin.LOG_LEVEL_ERROR, "cadesplugin_api.js: " + message);
+            throw new Error(message);
+        }
+        return pluginObject;
+    }
+
     // Функция активации объектов КриптоПро ЭЦП Browser plug-in
     function CreateObject(name) {
         if (isIOS()) {
@@ -516,7 +526,7 @@
             }
         }
         // создаются объекты NPAPI
-        return pluginObject.CreateObject(name);
+        return ensurePluginObject("CreateObject").CreateObject(name);
     }
 
     function decimalToHexString(number) {
@@ -557,7 +567,7 @@
 
     // Функция активации асинхронных объектов КриптоПро ЭЦП Browser plug-in
     function CreateObjectAsync(name) {
-        return pluginObject.CreateObjectAsync(name);
+        return ensurePluginObject("CreateObjectAsync").CreateObjectAsync(name);
     }
 
     // Функции для IOS
