@@ -1,0 +1,10 @@
+Источник: True_API_GIS_MT-v553.0-11.09.2025-at-13-41-25.docx
+Разделы: URL + Метод
+Дата выгрузки: 2025-09-16
+Инструмент: python 3.12 + docx2txt
+
+◦ «Метод получения списка загруженных документов в ГИС МТ» (GET /api/v3/trueapi/doc/listV2);
+◦ «Метод получения списка загруженных чеков ККТ в ГИС МТ» (GET /api/v3/trueapi/receipt/listV2);
+◦ «Метод получения содержимого документа по идентификатору» (GET /api/v3/trueapi/documents/{document_id}/info);
+◦ «Метод создания заявки на регистрацию участника оборота товаров» (POST /api/v3/trueapi/elk/registration);
+◦ «Метод проверки статуса заявки УОТ на регистрацию по ID заявки» (GET /api/v3/trueapi/elk/documents/status/{documentId}).
