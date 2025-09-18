@@ -95,6 +95,19 @@ export function ensureCryptoProPlugin() {
     if (!plugin) {
       throw new Error('CryptoPro plug-in не обнаружен. Установите плагин и перезапустите браузер.');
     }
+
+    if (typeof window.cadesplugin.then === 'function') {
+      try {
+        await window.cadesplugin;
+      } catch (error) {
+        throw error instanceof Error ? error : new Error(String(error));
+      }
+    }
+    const plugin = window.cadesplugin;
+    if (typeof plugin.CreateObjectAsync !== 'function') {
+      throw new Error('CryptoPro plug-in не предоставляет асинхронный API. Обновите плагин до версии с CreateObjectAsync.');
+    }
+
     if (typeof plugin.then === 'function') {
       try {
         await plugin;
@@ -108,6 +121,7 @@ export function ensureCryptoProPlugin() {
     ) {
       throw new Error('CryptoPro plug-in загружен, но не предоставляет API CreateObject.');
     }
+
     return plugin;
   })().catch((error) => {
     pluginPromise = null;
