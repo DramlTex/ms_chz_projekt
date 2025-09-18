@@ -1,5 +1,5 @@
 import { sessionStore } from '../state/sessionStore.js';
-import { ensureCryptoProPlugin, listCertificates } from '../services/cryptoProClient.js';
+import { ensureCryptoProPlugin, listCertificates, signData } from '../services/cryptoProClient.js';
 import { obtainTrueApiToken, AuthServiceError } from '../services/authService.js';
 import { formatDisplayDateTime } from '../utils/datetime.js';
 import { getConfigSnapshot } from '../config.js';
@@ -25,6 +25,20 @@ function disable(element, value) {
   }
 }
 
+function normalizePluginError(error) {
+  if (typeof window !== 'undefined' && window.cadesplugin && typeof window.cadesplugin.getLastError === 'function') {
+    try {
+      return window.cadesplugin.getLastError(error);
+    } catch (inner) {
+      console.warn('Не удалось получить подробности ошибки CryptoPro', inner);
+    }
+  }
+  if (error?.message) {
+    return error.message;
+  }
+  return String(error);
+}
+
 export function initAuthPanel(elements) {
   const {
     initButton,
@@ -37,10 +51,29 @@ export function initAuthPanel(elements) {
     nkBearerInput,
     nkSaveButton,
     nkStatusElement,
+    signaturePayloadInput,
+    signatureOutput,
+    signatureButton,
+    signatureStatusElement,
     notifier,
   } = elements;
 
-  if (!initButton || !pluginStatusElement || !certificateSelect || !refreshButton || !requestTokenButton || !tokenStatusElement || !nkApiKeyInput || !nkBearerInput || !nkSaveButton || !nkStatusElement) {
+  if (
+    !initButton ||
+    !pluginStatusElement ||
+    !certificateSelect ||
+    !refreshButton ||
+    !requestTokenButton ||
+    !tokenStatusElement ||
+    !nkApiKeyInput ||
+    !nkBearerInput ||
+    !nkSaveButton ||
+    !nkStatusElement ||
+    !signaturePayloadInput ||
+    !signatureOutput ||
+    !signatureButton ||
+    !signatureStatusElement
+  ) {
     throw new Error('Auth panel elements are required');
   }
 
@@ -49,6 +82,7 @@ export function initAuthPanel(elements) {
 
   let certificatesLoading = false;
   let requestingToken = false;
+  let signingTest = false;
 
   async function ensurePlugin() {
     sessionStore.setPluginStatus('loading');
@@ -185,6 +219,54 @@ export function initAuthPanel(elements) {
     }
   }
 
+  function updateSignatureControls() {
+    const pluginReady = sessionStore.getPluginStatus().status === 'ready';
+    const certificate = sessionStore.getSelectedCertificate();
+    const hasPayload = signaturePayloadInput.value.trim().length > 0;
+    disable(signatureButton, !pluginReady || !certificate || !hasPayload || signingTest);
+  }
+
+  async function handleSignTest() {
+    if (signingTest) {
+      return;
+    }
+    const pluginState = sessionStore.getPluginStatus();
+    if (pluginState.status !== 'ready') {
+      setStatus(signatureStatusElement, 'Подключите CryptoPro перед формированием подписи.');
+      notifier?.warning('Подключите CryptoPro перед формированием подписи.');
+      return;
+    }
+    const certificate = sessionStore.getSelectedCertificate();
+    if (!certificate) {
+      setStatus(signatureStatusElement, 'Выберите сертификат УКЭП.');
+      notifier?.warning('Выберите сертификат УКЭП для подписи.');
+      return;
+    }
+    const payload = signaturePayloadInput.value.trim();
+    if (!payload) {
+      setStatus(signatureStatusElement, 'Введите строку для подписи.');
+      return;
+    }
+    signingTest = true;
+    updateSignatureControls();
+    setStatus(signatureStatusElement, 'Формируем подпись…');
+    signatureOutput.value = '';
+    try {
+      const pkcs7 = await signData({ data: payload, thumbprint: certificate.thumbprint, detached: false, encoding: 'string' });
+      signatureOutput.value = pkcs7;
+      setStatus(signatureStatusElement, 'Подпись сформирована.');
+      notifier?.success('Подпись сформирована.');
+    } catch (error) {
+      const message = normalizePluginError(error);
+      setStatus(signatureStatusElement, message);
+      notifier?.error(message);
+      console.error('Ошибка формирования подписи', error);
+    } finally {
+      signingTest = false;
+      updateSignatureControls();
+    }
+  }
+
   function updatePluginUi(status) {
     switch (status.status) {
       case 'loading':
@@ -234,14 +316,27 @@ export function initAuthPanel(elements) {
       sessionStore.selectCertificate(target.value);
     }
     disable(requestTokenButton, requestingToken || !sessionStore.getSelectedCertificate());
+    signatureOutput.value = '';
+    setStatus(signatureStatusElement, '');
+    updateSignatureControls();
+  });
+  signatureButton.addEventListener('click', () => {
+    handleSignTest().catch((error) => {
+      console.error('Не удалось сформировать тестовую подпись', error);
+    });
+  });
+  signaturePayloadInput.addEventListener('input', () => {
+    updateSignatureControls();
   });
 
   sessionStore.addEventListener('plugin-status-changed', (event) => {
     updatePluginUi(event.detail);
+    updateSignatureControls();
   });
   sessionStore.addEventListener('certificates-changed', (event) => {
     updateCertificatesSelect(event.detail.certificates);
     disable(requestTokenButton, requestingToken || !sessionStore.getSelectedCertificate());
+    updateSignatureControls();
   });
   sessionStore.addEventListener('certificate-selected', (event) => {
     const certificate = event.detail.certificate;
@@ -249,6 +344,9 @@ export function initAuthPanel(elements) {
       certificateSelect.value = certificate.thumbprint;
     }
     disable(requestTokenButton, requestingToken || !certificate);
+    signatureOutput.value = '';
+    setStatus(signatureStatusElement, '');
+    updateSignatureControls();
   });
   sessionStore.addEventListener('true-api-token-changed', (event) => {
     updateTokenStatus(event.detail);
@@ -262,4 +360,7 @@ export function initAuthPanel(elements) {
   updateCertificatesSelect(sessionStore.getCertificates());
   updateTokenStatus(sessionStore.getTrueApiToken());
   updateNkStatus(sessionStore.getNationalCatalogCredentials());
+  updateSignatureControls();
+  signatureOutput.value = '';
+  setStatus(signatureStatusElement, 'Подключите CryptoPro и выберите сертификат, чтобы подписать текст.');
 }

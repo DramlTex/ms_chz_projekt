@@ -228,6 +228,33 @@ textarea {
   font-size: 0.9em;
 }
 
+.auth-signature {
+  border-top: 1px solid var(--border);
+  padding-top: 18px;
+  display: grid;
+  gap: 12px;
+}
+
+.auth-signature__header {
+  display: grid;
+  gap: 6px;
+}
+
+.auth-signature__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.auth-signature__output {
+  font-family: 'JetBrains Mono', 'Fira Code', 'SFMono-Regular', Consolas, monospace;
+  font-size: 0.85rem;
+  min-height: 160px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .button {
   cursor: pointer;
   border: none;

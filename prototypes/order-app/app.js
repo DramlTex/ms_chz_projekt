@@ -29,6 +29,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const authBearerInput = document.getElementById('auth-nk-bearer');
   const authSaveButton = document.getElementById('auth-save-nk');
   const authNkStatus = document.getElementById('auth-nk-status');
+  const authSignaturePayload = document.getElementById('auth-signature-payload');
+  const authSignatureOutput = document.getElementById('auth-signature-output');
+  const authSignatureButton = document.getElementById('auth-signature-sign');
+  const authSignatureStatus = document.getElementById('auth-signature-status');
 
   const counter = document.getElementById('selected-count');
   const selectionList = document.getElementById('selection-list');
@@ -55,6 +59,10 @@ document.addEventListener('DOMContentLoaded', () => {
     nkBearerInput: authBearerInput,
     nkSaveButton: authSaveButton,
     nkStatusElement: authNkStatus,
+    signaturePayloadInput: authSignaturePayload,
+    signatureOutput: authSignatureOutput,
+    signatureButton: authSignatureButton,
+    signatureStatusElement: authSignatureStatus,
     notifier,
   });
 

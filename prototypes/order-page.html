@@ -62,6 +62,30 @@
         </div>
         <p class="status" id="auth-token-status" aria-live="polite"></p>
         <p class="status" id="auth-nk-status" aria-live="polite"></p>
+        <section class="auth-signature" aria-labelledby="auth-signature-title">
+          <div class="auth-signature__header">
+            <h3 id="auth-signature-title">Проверка подписи CAdES</h3>
+            <p class="muted-text">
+              Используйте выбранный сертификат УКЭП, чтобы сформировать присоединённую подпись произвольного текста. Блок
+              повторяет функциональность примера <code>cades-sign-example.html</code> и помогает проверить доступность
+              CryptoPro на основной странице.
+            </p>
+          </div>
+          <label for="auth-signature-payload">Данные для подписи</label>
+          <textarea
+            id="auth-signature-payload"
+            placeholder="Введите строку, которую нужно подписать"
+            autocomplete="off"
+          >Это тестовая строка для подписи CAdES-BES.</textarea>
+          <div class="auth-signature__actions">
+            <button type="button" class="button button--ghost" id="auth-signature-sign" disabled>
+              Подписать текст
+            </button>
+            <p class="status" id="auth-signature-status" aria-live="polite"></p>
+          </div>
+          <label for="auth-signature-output">PKCS#7 (Base64)</label>
+          <textarea id="auth-signature-output" class="auth-signature__output" readonly></textarea>
+        </section>
       </div>
     </section>
 
