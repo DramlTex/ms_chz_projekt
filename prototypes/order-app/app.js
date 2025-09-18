@@ -8,7 +8,6 @@ import { initOrderModal } from './ui/orderModal.js';
 import { initFilters } from './ui/filters.js';
 import { createNotifier } from './ui/notifications.js';
 import { initAuthPanel } from './ui/authPanel.js';
-import { initSignPanel } from './ui/signPanel.js';
 
 const DEFAULT_YEARS = 3;
 
@@ -42,19 +41,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const statusElement = document.getElementById('catalog-request-status');
   const filterForm = document.getElementById('catalog-filter-form');
   const resetButton = document.getElementById('reset-filters');
-
-  const signTable = document.getElementById('sign-table');
-  const signTableBody = document.getElementById('sign-table-body');
-  const signTableWrapper = document.getElementById('sign-table-wrapper');
-  const signEmptyState = document.getElementById('sign-empty-state');
-  const signSelectAllCheckbox = document.getElementById('sign-select-all');
-  const signRefreshButton = document.getElementById('sign-refresh');
-  const signClearButton = document.getElementById('sign-clear-selection');
-  const signSubmitButton = document.getElementById('sign-submit');
-  const signStatusElement = document.getElementById('sign-status');
-  const signLogElement = document.getElementById('sign-log');
-  const signTotalCounter = document.getElementById('sign-total-counter');
-  const signSelectedCounter = document.getElementById('sign-selected-counter');
 
   const notifier = createNotifier(document.getElementById('notification-stack'));
 
@@ -93,22 +79,6 @@ document.addEventListener('DOMContentLoaded', () => {
     form: orderForm,
     closeButton: closeModalButton,
     openButton: openModalButton,
-    notifier,
-  });
-
-  initSignPanel({
-    table: signTable,
-    tbody: signTableBody,
-    wrapper: signTableWrapper,
-    emptyState: signEmptyState,
-    selectAllCheckbox: signSelectAllCheckbox,
-    refreshButton: signRefreshButton,
-    clearButton: signClearButton,
-    submitButton: signSubmitButton,
-    statusElement: signStatusElement,
-    logElement: signLogElement,
-    totalCounter: signTotalCounter,
-    selectedCounter: signSelectedCounter,
     notifier,
   });
 
