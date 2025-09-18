@@ -357,6 +357,37 @@ thead th {
   border-radius: 999px;
 }
 
+.sign-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.sign-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.sign-panel__footer {
+  display: flex;
+  gap: 12px;
+}
+
+.sign-panel__log {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  font-family: 'SFMono-Regular', 'Consolas', 'Menlo', monospace;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  max-height: 220px;
+  overflow-y: auto;
+  background: rgba(15, 23, 42, 0.05);
+  color: inherit;
+  white-space: pre-wrap;
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;
