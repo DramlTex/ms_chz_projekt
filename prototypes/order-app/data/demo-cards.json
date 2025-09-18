@@ -1,0 +1,74 @@
+{
+  "meta": {
+    "source": "demo",
+    "description": "Подборка карточек из открытых материалов НК. Используется при отсутствии API ключа."
+  },
+  "cards": [
+    {
+      "good_id": 900001,
+      "gtin": "04601234567890",
+      "good_name": "Куртка мужская утеплённая",
+      "tnved": "6201930000",
+      "brand_name": "Aurora",
+      "good_status": "published",
+      "good_detailed_status": ["published"],
+      "to_date": "2024-08-12 10:24:00",
+      "good_url": "https://национальный-каталог.рф/product/04601234567890-kurtka-muzhskaya"
+    },
+    {
+      "good_id": 900002,
+      "gtin": "04609876543219",
+      "good_name": "Платье женское шёлковое",
+      "tnved": "6204430000",
+      "brand_name": "Linea",
+      "good_status": "published",
+      "good_detailed_status": ["published"],
+      "to_date": "2024-07-28 08:11:00",
+      "good_url": "https://национальный-каталог.рф/product/04609876543219-platye-zenskoe"
+    },
+    {
+      "good_id": 900003,
+      "gtin": "04012345678907",
+      "good_name": "Обувь спортивная детская",
+      "tnved": "6404110000",
+      "brand_name": "FastKids",
+      "good_status": "moderation",
+      "good_detailed_status": ["moderation"],
+      "to_date": "2024-09-01 17:35:00",
+      "good_url": "https://национальный-каталог.рф/product/04012345678907-obuv-detskaya"
+    },
+    {
+      "good_id": 900004,
+      "gtin": "04601122334455",
+      "good_name": "Сорочка мужская классическая",
+      "tnved": "6205200000",
+      "brand_name": "NordTex",
+      "good_status": "draft",
+      "good_detailed_status": ["draft", "errors"],
+      "to_date": "2023-12-18 14:05:00",
+      "good_url": "https://национальный-каталог.рф/product/04601122334455-sorochka"
+    },
+    {
+      "good_id": 900005,
+      "gtin": "04607778889994",
+      "good_name": "Кроссовки женские беговые",
+      "tnved": "6404110000",
+      "brand_name": "Velocity",
+      "good_status": "published",
+      "good_detailed_status": ["published"],
+      "to_date": "2024-05-06 09:40:00",
+      "good_url": "https://национальный-каталог.рф/product/04607778889994-krossovki"
+    },
+    {
+      "good_id": 900006,
+      "gtin": "04601111222237",
+      "good_name": "Джемпер женский кашемировый",
+      "tnved": "6110121000",
+      "brand_name": "SoftLine",
+      "good_status": "archived",
+      "good_detailed_status": ["archived"],
+      "to_date": "2022-11-02 12:15:00",
+      "good_url": "https://национальный-каталог.рф/product/04601111222237-dzhemper"
+    }
+  ]
+}
