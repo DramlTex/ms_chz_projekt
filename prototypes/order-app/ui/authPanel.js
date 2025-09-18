@@ -54,27 +54,40 @@ export function initAuthPanel(elements) {
     sessionStore.setPluginStatus('loading');
     try {
       await ensureCryptoProPlugin();
+      const certificates = await loadCertificates({ propagateError: true, silent: true });
       sessionStore.setPluginStatus('ready');
-      await loadCertificates();
-      notifier?.success('CryptoPro подключен. Сертификаты обновлены.');
+      if (!certificates || certificates.length === 0) {
+        notifier?.warning('CryptoPro подключен, но сертификаты УКЭП не найдены или все просрочены.');
+      } else {
+        notifier?.success('CryptoPro подключен. Сертификаты обновлены.');
+      }
     } catch (error) {
       sessionStore.setPluginStatus('error', error);
       notifier?.error(error.message ?? 'Не удалось подключить CryptoPro.');
     }
   }
 
-  async function loadCertificates() {
-    if (certificatesLoading) return;
+  async function loadCertificates(options = {}) {
+    const { propagateError = false, silent = false } = options ?? {};
+    if (certificatesLoading) return null;
     certificatesLoading = true;
     disable(refreshButton, true);
     try {
       const list = await listCertificates();
       sessionStore.setCertificates(list);
-      if (list.length === 0) {
+      if (!silent && list.length === 0) {
         notifier?.warning('Сертификаты УКЭП не найдены или все просрочены.');
       }
+      return list;
     } catch (error) {
-      notifier?.error(error.message ?? 'Не удалось получить список сертификатов.');
+      sessionStore.setCertificates([]);
+      if (!silent) {
+        notifier?.error(error.message ?? 'Не удалось получить список сертификатов.');
+      }
+      if (propagateError) {
+        throw error;
+      }
+      return null;
     } finally {
       certificatesLoading = false;
       disable(refreshButton, false);
@@ -208,7 +221,11 @@ export function initAuthPanel(elements) {
   }
 
   initButton.addEventListener('click', ensurePlugin);
-  refreshButton.addEventListener('click', loadCertificates);
+  refreshButton.addEventListener('click', () => {
+    loadCertificates().catch((error) => {
+      console.error('Ошибка обновления сертификатов', error);
+    });
+  });
   requestTokenButton.addEventListener('click', handleRequestToken);
   nkSaveButton.addEventListener('click', handleSaveNkCredentials);
   certificateSelect.addEventListener('change', (event) => {

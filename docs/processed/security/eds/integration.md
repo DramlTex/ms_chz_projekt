@@ -1,6 +1,7 @@
 # Документация модуля: docs/processed/security/eds/integration.md
 
 ## История изменений
+- 2025-09-19 — добавлена проверка доступности расширения CryptoPro и обновлены уведомления UI при отсутствии сертификатов (agent).【F:prototypes/order-app/services/cryptoProClient.js†L15-L45】【F:prototypes/order-app/ui/authPanel.js†L52-L109】
 - 2025-09-18 — исправлена инициализация CryptoPro: промис плагина дожидается загрузки без повторного объявления переменных (agent).【F:prototypes/order-app/services/cryptoProClient.js†L83-L125】
 - 2025-09-17 — добавлено ожидание промиса CryptoPro перед вызовом API (agent).
 - 2025-09-16 — описана архитектура работы с УКЭП и CryptoPro (agent).
@@ -10,9 +11,9 @@
 
 ## Последовательность действий в коде
 
-1) Фронтенд подключает `cadesplugin_api.js`, вызывает `ensureCryptoProPlugin`, дожидается разрешения промиса и проверяет наличие методов `CreateObjectAsync`/`CreateObject`, чтобы браузер показал системный запрос доступа к сертификатам и исключить устаревшие версии плагина.【F:docs/reference/true_api/extracted/true_api_quickstart.md†L52-L86】【F:prototypes/order-app/services/cryptoProClient.js†L61-L125】
+1) Фронтенд подключает `cadesplugin_api.js`, вызывает `ensureCryptoProPlugin`, дожидается разрешения промиса и проверяет наличие методов `CreateObjectAsync`/`CreateObject`, дополнительно создавая `CAdESCOM.About`, чтобы убедиться в установке браузерного расширения CryptoPro и получить системный запрос доступа к сертификатам.【F:docs/reference/true_api/extracted/true_api_quickstart.md†L52-L86】【F:prototypes/order-app/services/cryptoProClient.js†L61-L131】
 2) После успешной инициализации `listCertificates` открывает хранилище `CAPICOM_CURRENT_USER_STORE` "My", фильтрует действующие сертификаты ГОСТ Р 34.10-2012, сортирует их по сроку действия и сохраняет в `sessionStore` для UI.【F:prototypes/order-app/services/cryptoProClient.js†L142-L178】【F:prototypes/order-app/state/sessionStore.js†L45-L104】
-3) `sessionStore` рассылает события `plugin-status-changed`, `certificates-changed` и `certificate-selected`, а `authPanel` обновляет кнопку «Подключить CryptoPro» и выпадающий список сертификатов, включая возможность повторной загрузки и запрос токена True API.【F:prototypes/order-app/state/sessionStore.js†L64-L104】【F:prototypes/order-app/ui/authPanel.js†L28-L208】
+3) `sessionStore` рассылает события `plugin-status-changed`, `certificates-changed` и `certificate-selected`, а `authPanel` обновляет кнопку «Подключить CryptoPro» и выпадающий список сертификатов, включая повторную загрузку и подсказки, если действующие сертификаты отсутствуют перед запросом токена True API.【F:prototypes/order-app/state/sessionStore.js†L64-L104】【F:prototypes/order-app/ui/authPanel.js†L28-L213】
 4) При запросе токена True API вызывается `signTrueApiChallenge`/`signData`, выполняется CAdES-BES подпись XML-челленджа и результат отправляется на `/auth/simpleSignIn` для выдачи bearer-токена.【F:prototypes/order-app/services/cryptoProClient.js†L197-L240】【F:prototypes/order-app/ui/authPanel.js†L84-L112】【F:docs/reference/true_api/extracted/true_api.txt†L1118-L1234】
 5) Для СУЗ и Национального каталога повторно используется подпись: формируется `X-Signature` для REST-запросов и PKCS#7-файлы `feed-product-sign(-pkcs)`; бекенд валидирует цепочку сертификатов и сроки действия перед принятием документов.【F:docs/reference/suz/extracted/suz_pdf.txt†L529-L560】【F:docs/reference/national_catalog/extracted/nk_api.txt†L16270-L17024】
 

@@ -27,6 +27,27 @@ const pluginScriptCandidates = (() => {
 
 let pluginPromise = null;
 
+function buildUnavailablePluginError(originalError) {
+  const baseMessage =
+    'CryptoPro plug-in загружен, но браузерное расширение не установлено или недоступно. ' +
+    'Проверьте, что расширение CryptoPro Browser Plug-in установлено, активно и получило доступ к сертификатам.';
+  const details =
+    originalError && originalError.message && !/CreateObjectAsync/.test(originalError.message)
+      ? ` Детали: ${originalError.message}`
+      : '';
+  const error = new Error(`${baseMessage}${details}`);
+  error.cause = originalError;
+  return error;
+}
+
+async function verifyPluginAvailability(plugin) {
+  try {
+    await plugin.CreateObjectAsync('CAdESCOM.About');
+  } catch (error) {
+    throw buildUnavailablePluginError(error);
+  }
+}
+
 function hasScriptWithSrc(src) {
   if (typeof document === 'undefined') {
     return false;
@@ -116,6 +137,8 @@ export function ensureCryptoProPlugin() {
     if (!hasAsyncApi) {
       throw new Error('CryptoPro plug-in не предоставляет асинхронный API. Обновите плагин до версии с CreateObjectAsync.');
     }
+
+    await verifyPluginAvailability(plugin);
 
     return plugin;
   })().catch((error) => {
