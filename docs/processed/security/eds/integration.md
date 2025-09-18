@@ -1,6 +1,7 @@
 # Документация модуля: docs/processed/security/eds/integration.md
 
 ## История изменений
+- 2025-09-18 — исправлена инициализация CryptoPro: промис плагина дожидается загрузки без повторного объявления переменных (agent).【F:prototypes/order-app/services/cryptoProClient.js†L83-L125】
 - 2025-09-17 — добавлено ожидание промиса CryptoPro перед вызовом API (agent).
 - 2025-09-16 — описана архитектура работы с УКЭП и CryptoPro (agent).
 
@@ -9,14 +10,11 @@
 
 ## Последовательность действий в коде
 
-1) Фронтенд загружает плагин `cadesplugin`, дожидается завершения промиса (он резолвится без возвращаемого значения) и возвращает сам объект `cadesplugin` с асинхронным API. Загрузчик пробует несколько относительных путей (`../../crypto_pro/…`, `./crypto_pro/…`, `./cadesplugin_api.js`), что устраняет ошибки 404, когда прототип развёрнут вне каталога `prototypes/crypto_pro`. Дополнительно проверяется наличие `CreateObjectAsync`, чтобы сообщить о слишком старой версии плагина. 【F:docs/reference/true_api/extracted/true_api_quickstart.md†L52-L86】【F:prototypes/order-app/services/cryptoProClient.js†L1-L108】
-
-1) Фронтенд загружает плагин `cadesplugin`, ожидает выполнение его промиса и запрашивает список сертификатов через `cadesplugin_api.js`, после чего отображает выбор пользователю. Загрузчик пробует несколько относительных путей (`../../crypto_pro/…`, `./crypto_pro/…`, `./cadesplugin_api.js`) — это устраняет ошибки 404, когда прототип развёрнут вне каталога `prototypes/crypto_pro`. 【F:docs/reference/true_api/extracted/true_api_quickstart.md†L52-L86】【F:prototypes/order-app/services/cryptoProClient.js†L1-L125】
-
-2) При запросе `/auth/key` пользователь подписывает строку `data` (PKCS#7 detached), результат отправляется в бекенд для `POST /auth/simpleSignIn`.【F:docs/reference/true_api/extracted/true_api.txt†L1118-L1128】【F:docs/reference/true_api/extracted/true_api.txt†L1202-L1234】
-3) Для СУЗ формируется подпись тела/параметров и передаётся в `X-Signature` (Base64). В случае GET подписывается путь+query, для POST — тело запроса. 【F:docs/reference/suz/extracted/suz_pdf.txt†L529-L538】
-4) Для НК `feed` отправляется документ (`feed-product-document`), затем подпись `feed-product-sign`/`-pkcs`. Подпись должна быть CAdES-BES или PKCS#7. 【F:docs/reference/national_catalog/extracted/nk_api.txt†L16270-L17024】
-5) Бекенд валидирует подписи: проверяет цепочку сертификатов, срок действия и соответствие ГОСТу; при ошибке генерирует `SignatureError` и инициирует повторное подписание.
+1) Фронтенд подключает `cadesplugin_api.js`, вызывает `ensureCryptoProPlugin`, дожидается разрешения промиса и проверяет наличие методов `CreateObjectAsync`/`CreateObject`, чтобы браузер показал системный запрос доступа к сертификатам и исключить устаревшие версии плагина.【F:docs/reference/true_api/extracted/true_api_quickstart.md†L52-L86】【F:prototypes/order-app/services/cryptoProClient.js†L61-L125】
+2) После успешной инициализации `listCertificates` открывает хранилище `CAPICOM_CURRENT_USER_STORE` "My", фильтрует действующие сертификаты ГОСТ Р 34.10-2012, сортирует их по сроку действия и сохраняет в `sessionStore` для UI.【F:prototypes/order-app/services/cryptoProClient.js†L142-L178】【F:prototypes/order-app/state/sessionStore.js†L45-L104】
+3) `sessionStore` рассылает события `plugin-status-changed`, `certificates-changed` и `certificate-selected`, а `authPanel` обновляет кнопку «Подключить CryptoPro» и выпадающий список сертификатов, включая возможность повторной загрузки и запрос токена True API.【F:prototypes/order-app/state/sessionStore.js†L64-L104】【F:prototypes/order-app/ui/authPanel.js†L28-L208】
+4) При запросе токена True API вызывается `signTrueApiChallenge`/`signData`, выполняется CAdES-BES подпись XML-челленджа и результат отправляется на `/auth/simpleSignIn` для выдачи bearer-токена.【F:prototypes/order-app/services/cryptoProClient.js†L197-L240】【F:prototypes/order-app/ui/authPanel.js†L84-L112】【F:docs/reference/true_api/extracted/true_api.txt†L1118-L1234】
+5) Для СУЗ и Национального каталога повторно используется подпись: формируется `X-Signature` для REST-запросов и PKCS#7-файлы `feed-product-sign(-pkcs)`; бекенд валидирует цепочку сертификатов и сроки действия перед принятием документов.【F:docs/reference/suz/extracted/suz_pdf.txt†L529-L560】【F:docs/reference/national_catalog/extracted/nk_api.txt†L16270-L17024】
 
 ## Карта глобальных переменных
 | Имя | Тип | Значение по умолчанию | Экспортируется | Назначение | Используется в |
@@ -39,7 +37,7 @@
 
 ## Описание функций
 ### `list_certificates`
-**Назначение.** Через JS-API плагина (`cadesplugin.CreateObject`) получить список сертификатов, отфильтровать по действию и пригодности для ГОСТ 2012. Перед обращением `ensureCryptoProPlugin` дожидается готовности промиса `cadesplugin`, чтобы исключить ошибки `CreateObjectAsync` для неподготовленного плагина.【F:docs/reference/true_api/extracted/true_api_quickstart.md†L64-L110】【F:prototypes/order-app/services/cryptoProClient.js†L80-L132】
+**Назначение.** Через JS-API плагина (`cadesplugin.CreateObject`) получить список сертификатов, отфильтровать по действию и пригодности для ГОСТ 2012. Перед обращением `ensureCryptoProPlugin` дожидается готовности промиса `cadesplugin`, чтобы исключить ошибки `CreateObjectAsync` для неподготовленного плагина.【F:docs/reference/true_api/extracted/true_api_quickstart.md†L64-L110】【F:prototypes/order-app/services/cryptoProClient.js†L142-L178】
 **Параметры.** Нет (использует API браузера).
 **Возвращает.** Список `{thumbprint, subject, valid_to}`.
 **Исключения.** `PluginError` при недоступности плагина.
