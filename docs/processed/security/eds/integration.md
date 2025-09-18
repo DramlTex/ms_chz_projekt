@@ -1,6 +1,7 @@
 # Документация модуля: docs/processed/security/eds/integration.md
 
 ## История изменений
+- 2025-09-20 — `cadesplugin_api.js` теперь ожидает появления DOM-элементов `<head>`/`<body>` перед подключением расширений и логирует ошибку, если контейнер недоступен (agent).【F:prototypes/crypto_pro/cadesplugin_api.js†L660-L746】
 - 2025-09-19 — добавлена проверка доступности расширения CryptoPro и обновлены уведомления UI при отсутствии сертификатов (agent).【F:prototypes/order-app/services/cryptoProClient.js†L15-L45】【F:prototypes/order-app/ui/authPanel.js†L52-L109】
 - 2025-09-18 — исправлена инициализация CryptoPro: промис плагина дожидается загрузки без повторного объявления переменных (agent).【F:prototypes/order-app/services/cryptoProClient.js†L83-L125】
 - 2025-09-17 — добавлено ожидание промиса CryptoPro перед вызовом API (agent).

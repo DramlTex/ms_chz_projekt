@@ -661,9 +661,89 @@
         var script = document.createElement("script");
         script.setAttribute("type", "text/javascript");
         script.setAttribute("src", url);
-        script.onerror = errorFunc;
-        script.onload = successFunc;
-        document.getElementsByTagName("head")[0].appendChild(script);
+        if (typeof errorFunc === "function") {
+            script.onerror = errorFunc;
+        }
+        if (typeof successFunc === "function") {
+            script.onload = successFunc;
+        }
+
+        function getAppendTarget() {
+            return document.head ||
+                document.getElementsByTagName("head")[0] ||
+                document.body ||
+                document.getElementsByTagName("body")[0] ||
+                document.documentElement;
+        }
+
+        function reportAppendError() {
+            cpcsp_console_log(cadesplugin.LOG_LEVEL_ERROR,
+                "cadesplugin_api.js: cannot append script \"" + url + "\" — document has no container element");
+            if (typeof errorFunc === "function") {
+                errorFunc();
+            }
+        }
+
+        function detachListeners() {
+            if (document.removeEventListener) {
+                document.removeEventListener("DOMContentLoaded", appendScript, false);
+            }
+            if (window.removeEventListener) {
+                window.removeEventListener("load", appendScript, false);
+            }
+            if (document.detachEvent) {
+                document.detachEvent("onreadystatechange", onReadyStateChange);
+            }
+            if (window.detachEvent) {
+                window.detachEvent("onload", appendScript);
+            }
+        }
+
+        function appendScript() {
+            if (script.parentNode) {
+                detachListeners();
+                return;
+            }
+            var target = getAppendTarget();
+            if (!target) {
+                if (document.readyState === "complete" || document.readyState === "interactive") {
+                    reportAppendError();
+                    detachListeners();
+                }
+                return;
+            }
+            target.appendChild(script);
+            detachListeners();
+        }
+
+        function onReadyStateChange() {
+            if (document.readyState === "complete") {
+                appendScript();
+            }
+        }
+
+        var target = getAppendTarget();
+        if (target) {
+            target.appendChild(script);
+            return;
+        }
+
+        if (document.addEventListener) {
+            document.addEventListener("DOMContentLoaded", appendScript, false);
+            window.addEventListener("load", appendScript, false);
+        } else if (document.attachEvent) {
+            document.attachEvent("onreadystatechange", onReadyStateChange);
+            window.attachEvent("onload", appendScript);
+        } else {
+            window.setTimeout(function () {
+                appendScript();
+                if (!script.parentNode) {
+                    reportAppendError();
+                }
+            }, 0);
+        }
+
+        appendScript();
     }
 
     function nmcades_api_onload() {
