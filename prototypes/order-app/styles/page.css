@@ -167,6 +167,7 @@ input[type="date"],
 input[type="search"],
 input[type="text"],
 input[type="number"],
+input[type="password"],
 select,
 textarea {
   border: 1px solid var(--border);
@@ -195,6 +196,36 @@ textarea {
   display: flex;
   gap: 12px;
   align-items: center;
+}
+
+.auth-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.auth-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.auth-panel__actions--secondary {
+  justify-content: flex-start;
+}
+
+.auth-panel__grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.auth-panel .muted-text code {
+  background: rgba(37, 99, 235, 0.12);
+  color: var(--accent-strong);
+  padding: 0 6px;
+  border-radius: 6px;
+  font-size: 0.9em;
 }
 
 .button {

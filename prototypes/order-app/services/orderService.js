@@ -3,10 +3,14 @@ import { formatDisplayDateTime } from '../utils/datetime.js';
 
 /**
  * Имитация отправки заказа КМ. Возвращает идентификатор заказа и таймлайн.
- * @param {{ selectedCards: Array<object>; payload: { scenario: string; packaging: string; deadline?: Date | null; comment?: string; quantities: Record<string, number>; } }} params
+ * @param {{ selectedCards: Array<object>; payload: { scenario: string; packaging: string; deadline?: Date | null; comment?: string; quantities: Record<string, number>; }; auth?: { bearerToken?: string; tokenExpiresAt?: Date | null; certificate?: { subject?: string; thumbprint?: string } } }} params
  */
 export async function submitOrder(params) {
-  const { selectedCards, payload } = params;
+  const { selectedCards, payload, auth = {} } = params;
+  const bearerToken = auth.bearerToken?.replace(/^Bearer\s+/i, '').trim();
+  if (!bearerToken) {
+    throw new Error('Отсутствует bearer-токен True API. Выполните подпись перед отправкой заказа.');
+  }
   await wait(900);
 
   const orderId = generateOrderId();
@@ -28,12 +32,29 @@ export async function submitOrder(params) {
     totalCards: selectedCards.length,
     totalQuantity,
     workflow,
+    authorization: {
+      tokenPreview: maskSecret(bearerToken),
+      tokenExpiresAt: auth.tokenExpiresAt ?? null,
+      certificateSubject: auth.certificate?.subject ?? null,
+      certificateThumbprint: auth.certificate?.thumbprint ?? null,
+    },
   };
 }
 
 function generateOrderId() {
   const random = Math.floor(100000 + Math.random() * 900000);
   return `ORD-${random}`;
+}
+
+function maskSecret(value) {
+  if (typeof value !== 'string' || value.length === 0) {
+    return '';
+  }
+  const trimmed = value.trim();
+  if (trimmed.length <= 6) {
+    return '••••••';
+  }
+  return `••••${trimmed.slice(-6)}`;
 }
 
 function buildWorkflow(startDate, scenario) {

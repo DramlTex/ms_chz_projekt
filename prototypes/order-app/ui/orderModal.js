@@ -1,6 +1,8 @@
 import { orderStore } from '../state/orderStore.js';
+import { sessionStore } from '../state/sessionStore.js';
 import { submitOrder } from '../services/orderService.js';
 import { parseDateInput, formatDisplayDateTime } from '../utils/datetime.js';
+import { obtainTrueApiToken, AuthServiceError } from '../services/authService.js';
 
 /**
  * Модальное окно оформления заказа КМ.
@@ -84,6 +86,19 @@ export function initOrderModal({ modal, form, closeButton, openButton, notifier 
       return;
     }
 
+    const pluginStatus = sessionStore.getPluginStatus();
+    if (pluginStatus.status !== 'ready') {
+      statusElement.textContent = 'Подключите CryptoPro и выберите сертификат для подписи.';
+      notifier?.warning('CryptoPro не подключен. Нельзя сформировать заказ без подписи.');
+      return;
+    }
+    const certificate = sessionStore.getSelectedCertificate();
+    if (!certificate) {
+      statusElement.textContent = 'Выберите сертификат УКЭП в блоке авторизации.';
+      notifier?.warning('Не выбран сертификат УКЭП.');
+      return;
+    }
+
     const payload = collectPayload(form, quantities);
     const invalidEntries = Object.entries(payload.quantities).filter(([, qty]) => !Number.isFinite(qty) || qty <= 0);
     if (invalidEntries.length > 0) {
@@ -93,10 +108,16 @@ export function initOrderModal({ modal, form, closeButton, openButton, notifier 
 
     try {
       setSubmitting(true);
+      const tokenInfo = await ensureTrueApiBearerToken({ certificate, statusElement, notifier });
       statusElement.textContent = 'Отправляем заказ в True API и СУЗ…';
       const result = await submitOrder({
         selectedCards: orderStore.getSelectedCards(),
         payload,
+        auth: {
+          bearerToken: tokenInfo.token,
+          tokenExpiresAt: tokenInfo.expiresAt,
+          certificate,
+        },
       });
       statusElement.textContent = `Заказ ${result.orderId} сформирован.`;
       renderResult(resultSection, result);
@@ -105,13 +126,39 @@ export function initOrderModal({ modal, form, closeButton, openButton, notifier 
       orderStore.clearSelection();
       quantities.clear();
     } catch (error) {
-      statusElement.textContent = 'Не удалось оформить заказ. Попробуйте повторить позже.';
-      notifier?.error('Ошибка при создании заказа.');
+      if (error instanceof AuthServiceError) {
+        statusElement.textContent = error.message;
+        notifier?.error('Не удалось получить bearer-токен True API.');
+      } else {
+        statusElement.textContent = 'Не удалось оформить заказ. Попробуйте повторить позже.';
+        notifier?.error('Ошибка при создании заказа.');
+      }
       console.error(error);
     } finally {
       setSubmitting(false);
     }
   });
+
+  async function ensureTrueApiBearerToken({ certificate, statusElement: statusNode, notifier: notify }) {
+    const current = sessionStore.getTrueApiToken();
+    if (current?.token && !sessionStore.needsTrueApiTokenRefresh()) {
+      return current;
+    }
+    statusNode.textContent = 'Получаем bearer-токен True API…';
+    try {
+      const result = await obtainTrueApiToken({ thumbprint: certificate.thumbprint });
+      sessionStore.setTrueApiToken(result.token, {
+        challengeUuid: result.challenge.uuid,
+        rawResponse: result.raw,
+      });
+      const next = sessionStore.getTrueApiToken();
+      notify?.success('Bearer-токен True API обновлён.');
+      return next;
+    } catch (error) {
+      sessionStore.clearTrueApiToken();
+      throw error;
+    }
+  }
 
   function setSubmitting(value) {
     isSubmitting = value;
@@ -220,6 +267,15 @@ function renderResult(container, result) {
   }
   if (result.comment) {
     items.push(`Комментарий: ${result.comment}`);
+  }
+  if (result.authorization?.certificateSubject) {
+    items.push(`Сертификат: ${result.authorization.certificateSubject}`);
+  }
+  if (result.authorization?.tokenExpiresAt) {
+    items.push(`Bearer-токен действует до ${formatDisplayDateTime(result.authorization.tokenExpiresAt)}`);
+  }
+  if (result.authorization?.tokenPreview) {
+    items.push(`Bearer-токен: ${result.authorization.tokenPreview}`);
   }
 
   items.forEach((text) => {

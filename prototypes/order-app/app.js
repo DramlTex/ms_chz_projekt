@@ -1,11 +1,13 @@
 import { defaultDateRange, formatDisplayDate, formatDisplayDateTime } from './utils/datetime.js';
 import { fetchProductCards, CatalogServiceError } from './services/catalogService.js';
 import { orderStore } from './state/orderStore.js';
+import { sessionStore } from './state/sessionStore.js';
 import { initCatalogTable } from './ui/catalogTable.js';
 import { initSelectionSummary } from './ui/selectionSummary.js';
 import { initOrderModal } from './ui/orderModal.js';
 import { initFilters } from './ui/filters.js';
 import { createNotifier } from './ui/notifications.js';
+import { initAuthPanel } from './ui/authPanel.js';
 
 const DEFAULT_YEARS = 3;
 
@@ -16,6 +18,17 @@ document.addEventListener('DOMContentLoaded', () => {
   const sourceBadge = document.getElementById('catalog-source-badge');
   const totalCounter = document.getElementById('catalog-total-counter');
   const tableWrapper = document.querySelector('[data-role="table-wrapper"]');
+
+  const authInitButton = document.getElementById('auth-init-plugin');
+  const authPluginStatus = document.getElementById('auth-plugin-status');
+  const authCertificateSelect = document.getElementById('auth-certificates');
+  const authRefreshButton = document.getElementById('auth-refresh-certificates');
+  const authRequestTokenButton = document.getElementById('auth-request-token');
+  const authTokenStatus = document.getElementById('auth-token-status');
+  const authApiKeyInput = document.getElementById('auth-nk-apikey');
+  const authBearerInput = document.getElementById('auth-nk-bearer');
+  const authSaveButton = document.getElementById('auth-save-nk');
+  const authNkStatus = document.getElementById('auth-nk-status');
 
   const counter = document.getElementById('selected-count');
   const selectionList = document.getElementById('selection-list');
@@ -30,6 +43,20 @@ document.addEventListener('DOMContentLoaded', () => {
   const resetButton = document.getElementById('reset-filters');
 
   const notifier = createNotifier(document.getElementById('notification-stack'));
+
+  initAuthPanel({
+    initButton: authInitButton,
+    pluginStatusElement: authPluginStatus,
+    certificateSelect: authCertificateSelect,
+    refreshButton: authRefreshButton,
+    requestTokenButton: authRequestTokenButton,
+    tokenStatusElement: authTokenStatus,
+    nkApiKeyInput: authApiKeyInput,
+    nkBearerInput: authBearerInput,
+    nkSaveButton: authSaveButton,
+    nkStatusElement: authNkStatus,
+    notifier,
+  });
 
   initCatalogTable({
     table,
@@ -79,9 +106,33 @@ document.addEventListener('DOMContentLoaded', () => {
   orderStore.setFilters(defaultFilters);
   loadCards(defaultFilters, { silentFallback: true });
 
+  sessionStore.addEventListener('national-catalog-credentials-changed', () => {
+    const credentials = sessionStore.getNationalCatalogCredentials();
+    if (!credentials.apiKey && !credentials.bearerToken) {
+      orderStore.setCards([], {
+        total: 0,
+        source: '—',
+        fallback: false,
+      });
+      statusElement.textContent = 'Укажите API-ключ или токен Национального каталога для загрузки карточек.';
+      return;
+    }
+    loadCards(orderStore.getFilters(), { silentFallback: true });
+  });
+
   async function loadCards(filters, { silentFallback = false } = {}) {
     const normalized = normalizeFilters(filters);
     const periodDescription = describeFilters(normalized);
+    const credentials = sessionStore.getNationalCatalogCredentials();
+    if (!credentials.apiKey && !credentials.bearerToken) {
+      statusElement.textContent = 'Укажите API-ключ или токен Национального каталога в блоке авторизации.';
+      orderStore.setCards([], {
+        total: 0,
+        source: '—',
+        fallback: false,
+      });
+      return;
+    }
     statusElement.textContent = `Запрашиваем карточки ${periodDescription}…`;
     orderStore.setLoading(true);
     try {
@@ -89,12 +140,12 @@ document.addEventListener('DOMContentLoaded', () => {
         fromDate: normalized.fromDate,
         toDate: normalized.toDate,
         search: normalized.search,
+        auth: credentials,
       });
       orderStore.setCards(result.cards, {
         total: result.pagination.total,
         rawTotal: result.meta.rawTotal,
         source: result.meta.source,
-        fallback: result.meta.fallback,
         fetchedAt: result.meta.fetchedAt,
       });
       const summary = [`Получено ${result.pagination.total} карточек`];
@@ -102,15 +153,7 @@ document.addEventListener('DOMContentLoaded', () => {
         summary.push(`по фильтру "${result.meta.filteredBy}"`);
       }
       summary.push(`обновлено: ${formatDisplayDateTime(result.meta.fetchedAt)}`);
-      if (result.meta.fallback) {
-        summary.push('(используются демонстрационные данные)');
-        if (!silentFallback) {
-          notifier.warning(
-            'Доступ к API НК недоступен. Показаны демонстрационные карточки, чтобы не блокировать сценарий заказа.',
-            { timeout: 9000 },
-          );
-        }
-      } else if (!silentFallback) {
+      if (!silentFallback) {
         notifier.success(`Карточки обновлены. Найдено ${result.pagination.total} позиций.`);
       }
       statusElement.textContent = summary.join('. ');
@@ -119,11 +162,15 @@ document.addEventListener('DOMContentLoaded', () => {
         total: 0,
         rawTotal: 0,
         source: '—',
-        fallback: true,
+        fallback: false,
       });
       if (error instanceof CatalogServiceError) {
         statusElement.textContent = error.message;
-        notifier.error('Сервис Национального каталога вернул ошибку. Проверьте параметры или повторите позже.');
+        if (error.type === 'auth-required') {
+          notifier.warning('Нужен API-ключ или bearer-токен Национального каталога.');
+        } else {
+          notifier.error('Сервис Национального каталога вернул ошибку. Проверьте параметры или повторите позже.');
+        }
       } else {
         statusElement.textContent = 'Не удалось получить карточки. Проверьте соединение или попробуйте снова.';
         notifier.error('Карточки не загружены: ошибка сети.');
