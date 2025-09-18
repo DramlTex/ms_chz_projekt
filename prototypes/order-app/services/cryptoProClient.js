@@ -91,21 +91,10 @@ export function ensureCryptoProPlugin() {
     if (!window.cadesplugin) {
       await loadScript();
     }
-    const plugin = window.cadesplugin;
+
+    let plugin = window.cadesplugin;
     if (!plugin) {
       throw new Error('CryptoPro plug-in не обнаружен. Установите плагин и перезапустите браузер.');
-    }
-
-    if (typeof window.cadesplugin.then === 'function') {
-      try {
-        await window.cadesplugin;
-      } catch (error) {
-        throw error instanceof Error ? error : new Error(String(error));
-      }
-    }
-    const plugin = window.cadesplugin;
-    if (typeof plugin.CreateObjectAsync !== 'function') {
-      throw new Error('CryptoPro plug-in не предоставляет асинхронный API. Обновите плагин до версии с CreateObjectAsync.');
     }
 
     if (typeof plugin.then === 'function') {
@@ -114,12 +103,18 @@ export function ensureCryptoProPlugin() {
       } catch (error) {
         throw error instanceof Error ? error : new Error(String(error));
       }
+      plugin = window.cadesplugin || plugin;
     }
-    if (
-      typeof plugin.CreateObjectAsync !== 'function' &&
-      typeof plugin.CreateObject !== 'function'
-    ) {
+
+    const hasAsyncApi = typeof plugin.CreateObjectAsync === 'function';
+    const hasSyncApi = typeof plugin.CreateObject === 'function';
+
+    if (!hasAsyncApi && !hasSyncApi) {
       throw new Error('CryptoPro plug-in загружен, но не предоставляет API CreateObject.');
+    }
+
+    if (!hasAsyncApi) {
+      throw new Error('CryptoPro plug-in не предоставляет асинхронный API. Обновите плагин до версии с CreateObjectAsync.');
     }
 
     return plugin;
