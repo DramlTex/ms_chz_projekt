@@ -153,6 +153,47 @@
         </button>
       </div>
     </section>
+
+    <section class="card" id="signing-card" aria-labelledby="signing-card-title">
+      <header class="card__header">
+        <div>
+          <h2 id="signing-card-title">4. Подпись черновиков Национального каталога</h2>
+          <p class="muted-text">
+            После обновления карточек запросите список черновиков со статусами <code>NotSigned</code>/<code>WaitSign</code>, выберите до 25 позиций и подпишите XML через CryptoPro. Подпись отправляется методом <code>/v3/feed-product-sign-pkcs</code>.
+          </p>
+        </div>
+        <div class="card__meta">
+          <button type="button" class="button button--ghost" id="signing-reload">Обновить список</button>
+          <span class="muted-text">Выбрано: <strong id="signing-selected-counter">0</strong></span>
+        </div>
+      </header>
+      <div class="signing-panel">
+        <div class="signing-panel__actions">
+          <label class="sr-only" for="signing-select-all">Выбрать все карточки для подписи</label>
+          <input type="checkbox" id="signing-select-all" />
+          <button type="button" class="button button--primary" id="signing-sign" disabled>Подписать выбранные</button>
+        </div>
+        <div class="table-wrapper" id="signing-table-wrapper">
+          <table aria-describedby="signing-status">
+            <thead>
+              <tr>
+                <th scope="col" class="cell-checkbox">
+                  <span class="sr-only">Выбор карточки</span>
+                </th>
+                <th scope="col">ID карточки</th>
+                <th scope="col">Наименование</th>
+                <th scope="col">Подстатусы</th>
+                <th scope="col">Обновлена</th>
+              </tr>
+            </thead>
+            <tbody id="signing-table-body"></tbody>
+          </table>
+          <p id="signing-empty-state" class="empty-state" role="note">Нет карточек, ожидающих подписи.</p>
+        </div>
+        <p class="status" id="signing-status" role="status" aria-live="polite"></p>
+        <section id="signing-result" class="signing-result hidden" aria-live="polite"></section>
+      </div>
+    </section>
   </main>
 
   <div id="order-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="order-modal-title">
