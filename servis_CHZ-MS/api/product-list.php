@@ -138,6 +138,40 @@ function filterByGroup(array $items, string $group): array
     }));
 }
 
+function getAuthorizationHeader(): string
+{
+    if (!empty($_SERVER['HTTP_AUTHORIZATION'])) {
+        return trim((string) $_SERVER['HTTP_AUTHORIZATION']);
+    }
+    if (!empty($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])) {
+        return trim((string) $_SERVER['REDIRECT_HTTP_AUTHORIZATION']);
+    }
+    if (function_exists('getallheaders')) {
+        foreach (getallheaders() as $name => $value) {
+            if (strcasecmp($name, 'Authorization') === 0) {
+                return trim((string) $value);
+            }
+        }
+    }
+    return '';
+}
+
+function resolveBearerToken(): ?string
+{
+    $header = getAuthorizationHeader();
+    if ($header !== '' && preg_match('/^Bearer\s+(.+)$/i', $header, $matches)) {
+        return trim($matches[1]);
+    }
+    if (!empty($_SERVER['HTTP_X_TRUE_API_TOKEN'])) {
+        return trim((string) $_SERVER['HTTP_X_TRUE_API_TOKEN']);
+    }
+    $queryToken = trim((string) ($_GET['token'] ?? ''));
+    if ($queryToken !== '') {
+        return $queryToken;
+    }
+    return null;
+}
+
 try {
     $limit = max(1, min((int) ($_GET['limit'] ?? 200), 500));
     $offset = max(0, (int) ($_GET['offset'] ?? 0));
@@ -145,6 +179,8 @@ try {
     $toParam = trim((string) ($_GET['to'] ?? ''));
     $search = trim((string) ($_GET['search'] ?? ''));
     $group = trim((string) ($_GET['group'] ?? ''));
+    $bearerToken = resolveBearerToken();
+    $auth = $bearerToken ? ['bearerToken' => $bearerToken] : [];
 
     $query = [];
     if ($fromParam !== '') {
@@ -154,7 +190,7 @@ try {
         $query['to_date'] = normalizeDate($toParam, false);
     }
 
-    $goods = NkApi::list($query, $limit, $offset);
+    $goods = NkApi::list($query, $limit, $offset, $auth);
     $totalFetched = count($goods);
 
     $goods = filterBySearch($goods, $search);
@@ -165,7 +201,7 @@ try {
         if (!$chunk) {
             continue;
         }
-        foreach (NkApi::feedProduct($chunk) as $detail) {
+        foreach (NkApi::feedProduct($chunk, $auth) as $detail) {
             $details[$detail['good_id']] = $detail;
         }
     }
