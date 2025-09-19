@@ -363,4 +363,20 @@ export function initAuthPanel(elements) {
   updateSignatureControls();
   signatureOutput.value = '';
   setStatus(signatureStatusElement, 'Подключите CryptoPro и выберите сертификат, чтобы подписать текст.');
+
+  const pluginState = sessionStore.getPluginStatus();
+  if (pluginState.status === 'idle') {
+    const schedule = () => {
+      ensurePlugin().catch((error) => {
+        console.error('Не удалось автоматически инициализировать CryptoPro', error);
+      });
+    };
+    if (typeof queueMicrotask === 'function') {
+      queueMicrotask(schedule);
+    } else if (typeof window !== 'undefined' && typeof window.setTimeout === 'function') {
+      window.setTimeout(schedule, 0);
+    } else {
+      setTimeout(schedule, 0);
+    }
+  }
 }
