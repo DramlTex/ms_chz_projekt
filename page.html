@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Система заказа кодов маркировки - Честный ЗНАК</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1e40af;
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --dark: #1f2937;
+            --gray: #6b7280;
+            --light: #f3f4f6;
+            --white: #ffffff;
+            --shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+            --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.1);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: var(--dark);
+        }
+
+        .app-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Header */
+        .header {
+            background: var(--white);
+            border-radius: 12px;
+            padding: 20px 30px;
+            margin-bottom: 20px;
+            box-shadow: var(--shadow-lg);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 20px;
+        }
+
+        .logo-text {
+            font-size: 24px;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .user-status {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .status-authorized {
+            background: #10b98120;
+            color: var(--success);
+        }
+
+        .status-unauthorized {
+            background: #ef444420;
+            color: var(--danger);
+        }
+
+        /* Main Layout */
+        .main-content {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 20px;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            background: var(--white);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: var(--shadow-lg);
+            height: fit-content;
+        }
+
+        .auth-section {
+            margin-bottom: 25px;
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: var(--dark);
+        }
+
+        .cert-select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 14px;
+            margin-bottom: 12px;
+            transition: all 0.3s;
+        }
+
+        .cert-select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(37, 99, 235, 0.3);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, var(--success), #059669);
+            color: white;
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, var(--danger), #dc2626);
+            color: white;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        /* Filters */
+        .filters-section {
+            margin-bottom: 25px;
+        }
+
+        .filter-group {
+            margin-bottom: 12px;
+        }
+
+        .filter-label {
+            font-size: 13px;
+            color: var(--gray);
+            margin-bottom: 5px;
+            display: block;
+        }
+
+        .filter-input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 2px solid #e5e7eb;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .filter-input:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        /* Stats */
+        .stats-section {
+            padding: 15px;
+            background: linear-gradient(135deg, #f3f4f6, #e5e7eb);
+            border-radius: 8px;
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .stat-value {
+            font-weight: 600;
+            color: var(--primary);
+        }
+
+        /* Content Area */
+        .content-area {
+            background: var(--white);
+            border-radius: 12px;
+            box-shadow: var(--shadow-lg);
+            overflow: hidden;
+        }
+
+        .content-header {
+            padding: 20px 25px;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .search-box {
+            display: flex;
+            gap: 10px;
+            flex: 1;
+            max-width: 400px;
+        }
+
+        .search-input {
+            flex: 1;
+            padding: 10px 15px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        /* Table */
+        .table-container {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            background: #f9fafb;
+            padding: 12px;
+            text-align: left;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--gray);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 2px solid #e5e7eb;
+        }
+
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #f3f4f6;
+            font-size: 14px;
+        }
+
+        tr:hover {
+            background: #f9fafb;
+        }
+
+        .checkbox-cell {
+            width: 40px;
+        }
+
+        .product-info {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .product-name {
+            font-weight: 600;
+            color: var(--dark);
+        }
+
+        .product-gtin {
+            font-size: 12px;
+            color: var(--gray);
+        }
+
+        .quantity-input {
+            width: 80px;
+            padding: 6px 10px;
+            border: 2px solid #e5e7eb;
+            border-radius: 6px;
+            font-size: 14px;
+            text-align: center;
+        }
+
+        .quantity-input:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        /* Loading State */
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 60px;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid #f3f4f6;
+            border-top: 4px solid var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 60px;
+            color: var(--gray);
+        }
+
+        .empty-icon {
+            font-size: 48px;
+            margin-bottom: 20px;
+            opacity: 0.3;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            animation: fadeIn 0.3s;
+        }
+
+        .modal.active {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            animation: slideUp 0.3s;
+        }
+
+        @keyframes slideUp {
+            from {
+                transform: translateY(50px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .modal-header {
+            margin-bottom: 25px;
+        }
+
+        .modal-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--dark);
+        }
+
+        .order-summary {
+            background: #f9fafb;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 25px;
+        }
+
+        .summary-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .summary-item:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .summary-label {
+            color: var(--gray);
+            font-size: 14px;
+        }
+
+        .summary-value {
+            font-weight: 600;
+            color: var(--dark);
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 12px;
+        }
+
+        .modal-actions .btn {
+            flex: 1;
+        }
+
+        /* Toast Notifications */
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 16px 20px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 500;
+            box-shadow: var(--shadow-lg);
+            animation: slideInRight 0.3s;
+            z-index: 2000;
+        }
+
+        @keyframes slideInRight {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .toast-success {
+            background: linear-gradient(135deg, var(--success), #059669);
+        }
+
+        .toast-error {
+            background: linear-gradient(135deg, var(--danger), #dc2626);
+        }
+
+        .toast-warning {
+            background: linear-gradient(135deg, var(--warning), #d97706);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                order: 2;
+            }
+
+            .content-area {
+                order: 1;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <div class="header">
+            <div class="logo">
+                <div class="logo-icon">ЧЗ</div>
+                <div class="logo-text">Честный ЗНАК</div>
+            </div>
+            <div class="user-info">
+                <span id="userOrg"></span>
+                <span id="authStatus" class="user-status status-unauthorized">Не авторизован</span>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Sidebar -->
+            <div class="sidebar">
+                <!-- Authorization Section -->
+                <div class="auth-section">
+                    <h3 class="section-title">🔐 Авторизация</h3>
+                    <select id="certSelect" class="cert-select">
+                        <option value="">Выберите сертификат...</option>
+                    </select>
+                    <button id="authBtn" class="btn btn-primary">
+                        <span>🔑</span>
+                        <span>Войти по УКЭП</span>
+                    </button>
+                    <button id="logoutBtn" class="btn btn-danger" style="display: none; margin-top: 10px;">
+                        <span>🚪</span>
+                        <span>Выйти</span>
+                    </button>
+                </div>
+
+                <!-- Filters Section -->
+                <div class="filters-section">
+                    <h3 class="section-title">🔍 Фильтры</h3>
+                    <div class="filter-group">
+                        <label class="filter-label">Группа товаров</label>
+                        <select id="productGroupFilter" class="filter-input">
+                            <option value="">Все группы</option>
+                            <option value="clothes">Одежда</option>
+                            <option value="shoes">Обувь</option>
+                            <option value="textile">Текстиль</option>
+                            <option value="perfume">Парфюмерия</option>
+                            <option value="photo">Фототовары</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label class="filter-label">Период</label>
+                        <input type="date" id="dateFrom" class="filter-input" style="margin-bottom: 5px;">
+                        <input type="date" id="dateTo" class="filter-input">
+                    </div>
+                    <button id="applyFilters" class="btn btn-primary" style="margin-top: 10px;">
+                        Применить фильтры
+                    </button>
+                </div>
+
+                <!-- Statistics -->
+                <div class="stats-section">
+                    <h3 class="section-title" style="margin-bottom: 10px;">📊 Статистика</h3>
+                    <div class="stat-item">
+                        <span>Всего товаров:</span>
+                        <span id="totalProducts" class="stat-value">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span>Выбрано:</span>
+                        <span id="selectedCount" class="stat-value">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span>Сумма КМ:</span>
+                        <span id="totalCodes" class="stat-value">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Content Area -->
+            <div class="content-area">
+                <div class="content-header">
+                    <div class="search-box">
+                        <input type="text" id="searchInput" class="search-input" placeholder="Поиск по наименованию или GTIN...">
+                        <button id="searchBtn" class="btn btn-primary">Поиск</button>
+                    </div>
+                    <button id="createOrderBtn" class="btn btn-success" disabled>
+                        <span>📦</span>
+                        <span>Создать заказ КМ</span>
+                    </button>
+                </div>
+
+                <div class="table-container">
+                    <div id="catalogContent">
+                        <div class="loading">
+                            <div class="spinner"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Order Modal -->
+    <div id="orderModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">📦 Подтверждение заказа КМ</h2>
+            </div>
+            
+            <div class="order-summary">
+                <div class="summary-item">
+                    <span class="summary-label">Количество позиций:</span>
+                    <span id="modalPositions" class="summary-value">0</span>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">Общее количество КМ:</span>
+                    <span id="modalTotalCodes" class="summary-value">0</span>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">Тип кода:</span>
+                    <span class="summary-value">UNIT (поштучный)</span>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">Способ выпуска:</span>
+                    <span class="summary-value">SELF_MADE (самостоятельно)</span>
+                </div>
+            </div>
+
+            <div id="modalProductList" style="margin-bottom: 25px;">
+                <!-- Products will be inserted here -->
+            </div>
+
+            <div class="modal-actions">
+                <button id="cancelOrder" class="btn" style="background: #e5e7eb; color: var(--dark);">
+                    Отмена
+                </button>
+                <button id="confirmOrder" class="btn btn-success">
+                    <span>✅</span>
+                    <span>Подтвердить заказ</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Demo data for products
+        const demoProducts = [
+            {
+                gtin: '4600123456789',
+                name: 'Платье женское летнее',
+                brand: 'Fashion Style',
+                category: 'Одежда',
+                model: 'DS-2024-001',
+                size: 'M',
+                color: 'Синий'
+            },
+            {
+                gtin: '4600987654321',
+                name: 'Рубашка мужская классическая',
+                brand: 'Business Line',
+                category: 'Одежда',
+                model: 'BL-SHIRT-05',
+                size: 'L',
+                color: 'Белый'
+            },
+            {
+                gtin: '4601234567890',
+                name: 'Кроссовки спортивные',
+                brand: 'SportMax',
+                category: 'Обувь',
+                model: 'SM-RUN-2024',
+                size: '42',
+                color: 'Черный/Красный'
+            },
+            {
+                gtin: '4602345678901',
+                name: 'Джинсы женские',
+                brand: 'Denim Pro',
+                category: 'Одежда',
+                model: 'DP-JNS-W-03',
+                size: 'S',
+                color: 'Голубой'
+            },
+            {
+                gtin: '4603456789012',
+                name: 'Футболка детская',
+                brand: 'Kids World',
+                category: 'Одежда',
+                model: 'KW-TEE-CH-12',
+                size: '128',
+                color: 'Зеленый'
+            },
+            {
+                gtin: '4604567890123',
+                name: 'Туфли женские',
+                brand: 'Elegance',
+                category: 'Обувь',
+                model: 'EL-HEEL-07',
+                size: '38',
+                color: 'Черный'
+            },
+            {
+                gtin: '4605678901234',
+                name: 'Куртка мужская зимняя',
+                brand: 'Winter Tech',
+                category: 'Одежда',
+                model: 'WT-JKT-M-24',
+                size: 'XL',
+                color: 'Темно-синий'
+            },
+            {
+                gtin: '4606789012345',
+                name: 'Шарф шерстяной',
+                brand: 'Warm & Cozy',
+                category: 'Текстиль',
+                model: 'WC-SCRF-02',
+                size: 'Универсальный',
+                color: 'Серый'
+            },
+            {
+                gtin: '4607890123456',
+                name: 'Парфюмерная вода',
+                brand: 'Luxe Parfum',
+                category: 'Парфюмерия',
+                model: 'LP-EDT-50',
+                size: '50ml',
+                color: '-'
+            },
+            {
+                gtin: '4608901234567',
+                name: 'Постельное белье',
+                brand: 'Sleep Well',
+                category: 'Текстиль',
+                model: 'SW-BED-2SP',
+                size: '2-спальный',
+                color: 'Бежевый'
+            }
+        ];
+
+        // App State
+        const state = {
+            isAuthorized: false,
+            certificates: [],
+            selectedCert: null,
+            products: [],
+            selectedProducts: new Map(),
+            filters: {
+                search: '',
+                group: '',
+                dateFrom: null,
+                dateTo: null
+            }
+        };
+
+        // Initialize app
+        async function initApp() {
+            loadCertificates();
+            loadProducts();
+            setupEventListeners();
+            updateStats();
+        }
+
+        // Load certificates (demo)
+        function loadCertificates() {
+            // Demo certificates
+            const demoCerts = [
+                { thumbprint: 'cert1', name: 'ООО "Модный дом" (Директор Иванов И.И.)', validTo: '2025-12-31' },
+                { thumbprint: 'cert2', name: 'ИП Петров П.П.', validTo: '2025-06-30' },
+                { thumbprint: 'cert3', name: 'АО "ТекстильПром" (Директор Сидоров С.С.)', validTo: '2026-01-15' }
+            ];
+            
+            state.certificates = demoCerts;
+            
+            const certSelect = document.getElementById('certSelect');
+            certSelect.innerHTML = '<option value="">Выберите сертификат...</option>';
+            
+            demoCerts.forEach(cert => {
+                const option = document.createElement('option');
+                option.value = cert.thumbprint;
+                option.textContent = cert.name;
+                certSelect.appendChild(option);
+            });
+        }
+
+        // Load products
+        function loadProducts() {
+            state.products = demoProducts.map((p, index) => ({
+                ...p,
+                id: index + 1,
+                selected: false,
+                quantity: 100
+            }));
+            renderCatalog();
+        }
+
+        // Render catalog table
+        function renderCatalog() {
+            const container = document.getElementById('catalogContent');
+            
+            if (state.products.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">📦</div>
+                        <h3>Товары не найдены</h3>
+                        <p>Попробуйте изменить параметры поиска</p>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="checkbox-cell">
+                                <input type="checkbox" id="selectAll">
+                            </th>
+                            <th>Товар</th>
+                            <th>Бренд</th>
+                            <th>Категория</th>
+                            <th>Размер</th>
+                            <th>Цвет</th>
+                            <th>Кол-во КМ</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            const filteredProducts = filterProducts();
+            
+            filteredProducts.forEach(product => {
+                const isSelected = state.selectedProducts.has(product.id);
+                html += `
+                    <tr>
+                        <td class="checkbox-cell">
+                            <input type="checkbox" 
+                                   class="product-checkbox" 
+                                   data-id="${product.id}"
+                                   ${isSelected ? 'checked' : ''}>
+                        </td>
+                        <td>
+                            <div class="product-info">
+                                <span class="product-name">${product.name}</span>
+                                <span class="product-gtin">GTIN: ${product.gtin}</span>
+                            </div>
+                        </td>
+                        <td>${product.brand}</td>
+                        <td>${product.category}</td>
+                        <td>${product.size}</td>
+                        <td>${product.color}</td>
+                        <td>
+                            <input type="number" 
+                                   class="quantity-input" 
+                                   data-id="${product.id}"
+                                   value="${state.selectedProducts.get(product.id)?.quantity || 100}"
+                                   min="1"
+                                   max="150000">
+                        </td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table>';
+            container.innerHTML = html;
+
+            // Add table event listeners
+            setupTableListeners();
+        }
+
+        // Filter products
+        function filterProducts() {
+            return state.products.filter(product => {
+                // Search filter
+                if (state.filters.search) {
+                    const search = state.filters.search.toLowerCase();
+                    if (!product.name.toLowerCase().includes(search) && 
+                        !product.gtin.includes(search) &&
+                        !product.brand.toLowerCase().includes(search)) {
+                        return false;
+                    }
+                }
+
+                // Group filter
+                if (state.filters.group) {
+                    const groupMap = {
+                        'clothes': 'Одежда',
+                        'shoes': 'Обувь',
+                        'textile': 'Текстиль',
+                        'perfume': 'Парфюмерия'
+                    };
+                    if (product.category !== groupMap[state.filters.group]) {
+                        return false;
+                    }
+                }
+
+                return true;
+            });
+        }
+
+        // Setup event listeners
+        function setupEventListeners() {
+            // Auth button
+            document.getElementById('authBtn').addEventListener('click', handleAuth);
+            document.getElementById('logoutBtn').addEventListener('click', handleLogout);
+
+            // Search
+            document.getElementById('searchBtn').addEventListener('click', handleSearch);
+            document.getElementById('searchInput').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') handleSearch();
+            });
+
+            // Filters
+            document.getElementById('applyFilters').addEventListener('click', applyFilters);
+
+            // Create order
+            document.getElementById('createOrderBtn').addEventListener('click', showOrderModal);
+
+            // Modal
+            document.getElementById('cancelOrder').addEventListener('click', hideOrderModal);
+            document.getElementById('confirmOrder').addEventListener('click', confirmOrder);
+            document.getElementById('orderModal').addEventListener('click', (e) => {
+                if (e.target.id === 'orderModal') hideOrderModal();
+            });
+        }
+
+        // Setup table listeners
+        function setupTableListeners() {
+            // Select all checkbox
+            const selectAll = document.getElementById('selectAll');
+            if (selectAll) {
+                selectAll.addEventListener('change', (e) => {
+                    const checkboxes = document.querySelectorAll('.product-checkbox');
+                    check
