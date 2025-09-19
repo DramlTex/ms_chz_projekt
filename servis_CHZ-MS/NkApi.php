@@ -26,12 +26,14 @@ class NkApi
      * @param int   $offset  смещение
      * @return array         массив goods
      */
-    public static function list(array $extra = [], int $limit = 1000, int $offset = 0): array
+    public static function list(array $extra = [], int $limit = 1000, int $offset = 0, array $auth = []): array
     {
         $resp = curlRequest(
             'GET',
             '/v4/product-list',
-            array_merge(['limit' => $limit, 'offset' => $offset], $extra)
+            array_merge(['limit' => $limit, 'offset' => $offset], $extra),
+            null,
+            $auth,
         );
         return $resp['result']['goods'] ?? [];
     }
@@ -43,21 +45,29 @@ class NkApi
      * @param int[] $ids  массив goodId (≤ 100)
      * @return array      массив goods, каждая содержит все поля + attributes
      */
-public static function feedProduct(array $ids): array
-{
-    if (!$ids) return [];
+    public static function feedProduct(array $ids, array $auth = []): array
+    {
+        if (!$ids) {
+            return [];
+        }
 
-    $resp = curlRequest(
-        'GET',
-        '/v3/feed-product',
-        ['good_ids' => implode(';', $ids)]
-    );
+        $resp = curlRequest(
+            'GET',
+            '/v3/feed-product',
+            ['good_ids' => implode(';', $ids)],
+            null,
+            $auth,
+        );
 
-    /* сервер может вернуть result = [...] либо result = ['goods'=>[]] */
-    if (isset($resp['result'][0]))            return $resp['result'];          // ваш случай
-    if (isset($resp['result']['goods']))      return $resp['result']['goods'];
-    return [];
-}
+        /* сервер может вернуть result = [...] либо result = ['goods'=>[]] */
+        if (isset($resp['result'][0])) {
+            return $resp['result'];
+        }
+        if (isset($resp['result']['goods'])) {
+            return $resp['result']['goods'];
+        }
+        return [];
+    }
 
     /**
      * Получить подробную карточку по GTIN.
@@ -66,13 +76,15 @@ public static function feedProduct(array $ids): array
      * @param string $gtin  идентификатор товара
      * @return array        карточка товара целиком
      */
-    public static function cardByGtin(string $gtin): array
+    public static function cardByGtin(string $gtin, array $auth = []): array
     {
         if ($gtin === '') return [];
         $resp = curlRequest(
             'GET',
             '/v3/product',
-            ['gtin' => $gtin]
+            ['gtin' => $gtin],
+            null,
+            $auth,
         );
         return $resp['result']['good'] ?? [];
     }
@@ -88,13 +100,14 @@ public static function feedProduct(array $ids): array
      * @param int[] $goodIds
      * @return array  массив [{goodId, xml}]
      */
-    public static function docsForSign(array $goodIds): array
+    public static function docsForSign(array $goodIds, array $auth = []): array
     {
         $resp = curlRequest(
             'POST',
             '/v3/feed-product-document',
             [],
-            ['goodIds' => $goodIds, 'publicationAgreement' => true]
+            ['goodIds' => $goodIds, 'publicationAgreement' => true],
+            $auth,
         );
         return $resp['result']['xmls'] ?? [];
     }
@@ -106,9 +119,9 @@ public static function feedProduct(array $ids): array
      * @param array $pack  [{goodId, base64Xml, signature}, …]
      * @return array       ['signed'=>[...], 'errors'=>[...]]
      */
-    public static function sendSignPack(array $pack): array
+    public static function sendSignPack(array $pack, array $auth = []): array
     {
-        $resp = curlRequest('POST', '/v3/feed-product-sign-pkcs', [], $pack);
+        $resp = curlRequest('POST', '/v3/feed-product-sign-pkcs', [], $pack, $auth);
         return $resp['result'] ?? [];
     }
 
@@ -120,9 +133,9 @@ public static function feedProduct(array $ids): array
      * @param array $pack  [{goodId, xml}, …]
      * @return array       ['signed'=>[...], 'errors'=>[...]]
      */
-    public static function sendSignAttached(array $pack): array
+    public static function sendSignAttached(array $pack, array $auth = []): array
     {
-        $resp = curlRequest('POST', '/v3/feed-product-sign', [], $pack);
+        $resp = curlRequest('POST', '/v3/feed-product-sign', [], $pack, $auth);
         return $resp['result'] ?? [];
     }
 }

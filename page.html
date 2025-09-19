@@ -665,6 +665,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             const API_ENDPOINT = './servis_CHZ-MS/api/product-list.php';
             const ORDER_ENDPOINT = './servis_CHZ-MS/api/create-order.php';
+            const TRUE_API_AUTH_ENDPOINT = './servis_CHZ-MS/api/true-api-auth.php';
     
             const elements = {
                 certSelect: document.getElementById('certSelect'),
@@ -691,10 +692,23 @@
                 confirmOrder: document.getElementById('confirmOrder'),
             };
     
+            function createEmptyAuthState() {
+                return {
+                    token: null,
+                    expiresAt: null,
+                    issuedAt: null,
+                    organization: null,
+                    raw: null,
+                };
+            }
+
             const state = {
                 certificates: [],
                 selectedCert: null,
                 isAuthorized: false,
+                isAuthorizing: false,
+                auth: createEmptyAuthState(),
+                authChallenge: null,
                 products: [],
                 meta: { total: 0, count: 0 },
                 filters: {
@@ -822,6 +836,9 @@
             }
     
             async function handleAuth() {
+                if (state.isAuthorizing) {
+                    return;
+                }
                 if (state.certificates.length === 0) {
                     await loadCertificates();
                     if (state.certificates.length === 0) {
@@ -839,28 +856,92 @@
                     showToast('error', 'Выбранный сертификат недоступен.');
                     return;
                 }
-                state.isAuthorized = true;
+
+                state.isAuthorizing = true;
                 state.selectedCert = certificate;
                 updateAuthStatus();
-                showToast('success', 'Авторизация выполнена.');
+                updateOrderButtonState();
+
+                try {
+                    const inn = certificate.inn || extractInnFromSubject(certificate.subject);
+                    const { challenge, exchange } = await obtainTrueApiToken({
+                        thumbprint: certificate.thumbprint,
+                        inn,
+                    });
+                    const issuedAt = new Date();
+                    const expiresAt = parseIsoDate(exchange.expiresAt);
+                    state.auth = {
+                        token: exchange.token,
+                        issuedAt,
+                        expiresAt,
+                        organization: buildOrganizationInfo(exchange.organization, certificate, inn),
+                        raw: exchange.raw ?? null,
+                    };
+                    state.authChallenge = challenge;
+                    state.isAuthorized = true;
+                    showToast('success', 'Bearer-токен True API получен. Обновляем карточки…');
+                    updateAuthStatus();
+                    await loadProducts();
+                } catch (error) {
+                    console.error('True API authorization error', error);
+                    state.isAuthorized = false;
+                    state.auth = createEmptyAuthState();
+                    state.authChallenge = null;
+                    showToast('error', `Не удалось получить bearer-токен True API: ${normalizeError(error)}`);
+                } finally {
+                    state.isAuthorizing = false;
+                    updateAuthStatus();
+                    updateOrderButtonState();
+                }
             }
     
             function handleLogout() {
                 state.isAuthorized = false;
+                state.isAuthorizing = false;
                 state.selectedCert = null;
+                state.auth = createEmptyAuthState();
+                state.authChallenge = null;
                 updateAuthStatus();
+                updateOrderButtonState();
                 showToast('success', 'Вы вышли из системы.');
+                loadProducts();
             }
     
             function updateAuthStatus() {
                 if (!elements.authStatus || !elements.userOrg) {
                     return;
                 }
-                if (state.isAuthorized && state.selectedCert) {
+
+                if (elements.authBtn) {
+                    elements.authBtn.disabled = state.isAuthorizing || state.certificates.length === 0;
+                }
+                if (elements.certSelect) {
+                    elements.certSelect.disabled = state.isAuthorizing || state.certificates.length === 0;
+                }
+
+                if (state.isAuthorizing) {
+                    elements.authStatus.textContent = 'Получение токена…';
+                    elements.authStatus.classList.add('status-unauthorized');
+                    elements.authStatus.classList.remove('status-authorized');
+                    elements.authStatus.title = 'Подписываем challenge True API через CryptoPro.';
+                    elements.userOrg.textContent = 'Подождите, выполняется подпись challenge True API…';
+                    if (elements.logoutBtn) elements.logoutBtn.style.display = 'none';
+                    if (elements.authBtn) elements.authBtn.style.display = 'flex';
+                    updateOrderButtonState();
+                    return;
+                }
+
+                if (state.isAuthorized && state.selectedCert && state.auth?.token) {
                     elements.authStatus.textContent = 'Авторизован';
                     elements.authStatus.classList.remove('status-unauthorized');
                     elements.authStatus.classList.add('status-authorized');
-                    elements.userOrg.textContent = formatOrganization(state.selectedCert.subject);
+                    const expiresLabel = state.auth.expiresAt instanceof Date && !Number.isNaN(state.auth.expiresAt.getTime())
+                        ? state.auth.expiresAt.toLocaleString('ru-RU')
+                        : null;
+                    elements.authStatus.title = expiresLabel
+                        ? `Bearer-токен действует до ${expiresLabel}`
+                        : '';
+                    elements.userOrg.textContent = describeOrganization(state.auth.organization, state.selectedCert.subject);
                     if (elements.logoutBtn) elements.logoutBtn.style.display = 'flex';
                     if (elements.authBtn) elements.authBtn.style.display = 'none';
                     if (elements.certSelect) elements.certSelect.disabled = true;
@@ -868,9 +949,13 @@
                     elements.authStatus.textContent = 'Не авторизован';
                     elements.authStatus.classList.add('status-unauthorized');
                     elements.authStatus.classList.remove('status-authorized');
+                    elements.authStatus.title = '';
                     elements.userOrg.textContent = 'Организация не выбрана';
                     if (elements.logoutBtn) elements.logoutBtn.style.display = 'none';
-                    if (elements.authBtn) elements.authBtn.style.display = 'flex';
+                    if (elements.authBtn) {
+                        elements.authBtn.style.display = 'flex';
+                        elements.authBtn.disabled = state.certificates.length === 0;
+                    }
                     if (elements.certSelect) {
                         elements.certSelect.disabled = state.certificates.length === 0;
                     }
@@ -909,9 +994,12 @@
                         if (Number.isNaN(validTo.getTime()) || validTo < new Date()) {
                             continue;
                         }
+                        const thumbprint = await certificate.Thumbprint;
+                        const subject = await certificate.SubjectName;
                         certificates.push({
-                            thumbprint: await certificate.Thumbprint,
-                            subject: await certificate.SubjectName,
+                            thumbprint,
+                            subject,
+                            inn: extractInnFromSubject(subject),
                             validTo,
                         });
                     }
@@ -925,6 +1013,7 @@
                     elements.certSelect.innerHTML = '<option value="">Ошибка загрузки сертификатов</option>';
                     showToast('error', normalizeError(error));
                 }
+                updateAuthStatus();
             }
     
             function resolveCadesPlugin(plugin) {
@@ -933,7 +1022,139 @@
                 }
                 return Promise.resolve(plugin);
             }
-    
+
+            function normalizePluginError(error) {
+                if (window.cadesplugin && typeof window.cadesplugin.getLastError === 'function') {
+                    try {
+                        return window.cadesplugin.getLastError(error);
+                    } catch (inner) {
+                        console.warn('CryptoPro getLastError failed', inner);
+                    }
+                }
+                if (error?.message) {
+                    return error.message;
+                }
+                return String(error);
+            }
+
+            async function getCertificateFromStore(plugin, thumbprint) {
+                const store = await plugin.CreateObjectAsync('CAdESCOM.Store');
+                await store.Open(2, 'My', 2);
+                try {
+                    const certificates = await store.Certificates;
+                    const matched = await certificates.Find(plugin.CAPICOM_CERTIFICATE_FIND_SHA1_HASH, thumbprint);
+                    const count = await matched.Count;
+                    if (count === 0) {
+                        throw new Error('Сертификат не найден в хранилище CryptoPro.');
+                    }
+                    const certificate = await matched.Item(1);
+                    return { certificate, store };
+                } catch (error) {
+                    await store.Close();
+                    throw error;
+                }
+            }
+
+            async function signTrueApiChallenge(data, thumbprint) {
+                if (!data) {
+                    throw new Error('Нет данных для подписи True API.');
+                }
+                if (!thumbprint) {
+                    throw new Error('Не выбран сертификат для подписи True API.');
+                }
+                if (typeof window.cadesplugin === 'undefined') {
+                    throw new Error('CryptoPro Browser Plug-in недоступен.');
+                }
+                const plugin = await resolveCadesPlugin(window.cadesplugin);
+                if (!plugin?.CreateObjectAsync) {
+                    throw new Error('Обновите CryptoPro Browser Plug-in до версии с CreateObjectAsync.');
+                }
+                const { certificate, store } = await getCertificateFromStore(plugin, thumbprint);
+                try {
+                    const signer = await plugin.CreateObjectAsync('CAdESCOM.CPSigner');
+                    await signer.propset_Certificate(certificate);
+                    await signer.propset_CheckCertificate(true);
+
+                    const signedData = await plugin.CreateObjectAsync('CAdESCOM.CadesSignedData');
+                    await signedData.propset_ContentEncoding(plugin.CADESCOM_STRING_TO_UCS2LE);
+                    await signedData.propset_Content(data);
+
+                    return await signedData.SignCades(
+                        signer,
+                        plugin.CADESCOM_CADES_BES,
+                        false,
+                        plugin.CADESCOM_ENCODE_BASE64,
+                    );
+                } catch (error) {
+                    throw new Error(`Ошибка CryptoPro: ${normalizePluginError(error)}`);
+                } finally {
+                    await store.Close();
+                }
+            }
+
+            async function requestTrueApiChallenge(inn) {
+                const params = new URLSearchParams();
+                if (inn) {
+                    params.set('inn', inn);
+                }
+                const url = params.toString() ? `${TRUE_API_AUTH_ENDPOINT}?${params}` : TRUE_API_AUTH_ENDPOINT;
+                const response = await fetch(url, { headers: { Accept: 'application/json' } });
+                const text = await response.text();
+                let data = {};
+                try {
+                    data = text ? JSON.parse(text) : {};
+                } catch (error) {
+                    throw new Error('Некорректный ответ сервера True API (challenge).');
+                }
+                if (!response.ok) {
+                    const message = data?.error || text || `Ошибка получения challenge True API (${response.status})`;
+                    throw new Error(message);
+                }
+                if (!data?.data) {
+                    throw new Error('Сервер не вернул строку для подписи True API.');
+                }
+                return { uuid: data.uuid ?? null, data: data.data };
+            }
+
+            async function exchangeSignatureForToken({ uuid, signature, inn }) {
+                const payload = { signature };
+                if (uuid) payload.uuid = uuid;
+                if (inn) payload.inn = inn;
+                const response = await fetch(TRUE_API_AUTH_ENDPOINT, {
+                    method: 'POST',
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload),
+                });
+                const text = await response.text();
+                let data = {};
+                try {
+                    data = text ? JSON.parse(text) : {};
+                } catch (error) {
+                    throw new Error('Некорректный ответ сервера True API при обмене подписи.');
+                }
+                if (!response.ok) {
+                    const message = data?.error || text || `Ошибка обмена подписи True API (${response.status})`;
+                    throw new Error(message);
+                }
+                if (!data?.token) {
+                    throw new Error('Сервер не вернул bearer-токен True API.');
+                }
+                return data;
+            }
+
+            async function obtainTrueApiToken({ thumbprint, inn }) {
+                if (!thumbprint) {
+                    throw new Error('Не выбран сертификат для подписи.');
+                }
+                const challenge = await requestTrueApiChallenge(inn);
+                const signature = await signTrueApiChallenge(challenge.data, thumbprint);
+                const exchange = await exchangeSignatureForToken({ uuid: challenge.uuid, signature, inn });
+                return { challenge, exchange };
+            }
+
             function updateCertificateSelect() {
                 if (!elements.certSelect) return;
                 const select = elements.certSelect;
@@ -981,6 +1202,99 @@
                 }
                 return subject;
             }
+
+            function extractInnFromSubject(subject) {
+                if (!subject) return null;
+                const normalized = String(subject).replace(/\s+/g, ' ');
+                const patterns = [/ИНН(?:ЮЛ|ФЛ)?=([^,]+)/i, /INN=([^,]+)/i];
+                for (const pattern of patterns) {
+                    const match = normalized.match(pattern);
+                    if (match) {
+                        const value = match[1].trim();
+                        const digits = value.replace(/[^0-9]/g, '');
+                        return digits || value;
+                    }
+                }
+                return null;
+            }
+
+            function parseIsoDate(value) {
+                if (!value) return null;
+                if (value instanceof Date) {
+                    return Number.isNaN(value.getTime()) ? null : value;
+                }
+                const fromString = new Date(value);
+                if (!Number.isNaN(fromString.getTime())) {
+                    return fromString;
+                }
+                const numeric = Number(value);
+                if (Number.isFinite(numeric)) {
+                    const fromNumeric = new Date(numeric);
+                    if (!Number.isNaN(fromNumeric.getTime())) {
+                        return fromNumeric;
+                    }
+                }
+                return null;
+            }
+
+            function describeOrganization(organization, subject) {
+                if (!organization || typeof organization !== 'object') {
+                    return formatOrganization(subject);
+                }
+                const name = pickFirstNonEmpty(
+                    organization.name,
+                    organization.fullName,
+                    organization.organizationName,
+                    organization.participantName,
+                );
+                const inn = pickFirstNonEmpty(organization.inn, organization.orgInn, organization.participantInn);
+                const kpp = pickFirstNonEmpty(organization.kpp, organization.participantKpp);
+                const ogrn = pickFirstNonEmpty(organization.ogrn, organization.orgOgrn);
+                const parts = [];
+                if (name) parts.push(name);
+                if (inn) parts.push(`ИНН ${inn}`);
+                if (kpp) parts.push(`КПП ${kpp}`);
+                if (ogrn) parts.push(`ОГРН ${ogrn}`);
+                if (parts.length === 0) {
+                    return formatOrganization(subject);
+                }
+                return parts.join(' · ');
+            }
+
+            function buildOrganizationInfo(responseOrg, certificate, fallbackInn) {
+                const subject = certificate?.subject ?? '';
+                const subjectInn = fallbackInn || extractInnFromSubject(subject);
+                const subjectName = formatOrganization(subject);
+
+                if (!responseOrg || typeof responseOrg !== 'object') {
+                    const base = {};
+                    if (subjectName) base.name = subjectName;
+                    if (subjectInn) base.inn = subjectInn;
+                    return Object.keys(base).length ? base : null;
+                }
+
+                const result = {
+                    name: pickFirstNonEmpty(
+                        responseOrg.name,
+                        responseOrg.fullName,
+                        responseOrg.organizationName,
+                        responseOrg.participantName,
+                        subjectName,
+                    ),
+                    inn: pickFirstNonEmpty(responseOrg.inn, responseOrg.orgInn, responseOrg.participantInn, subjectInn),
+                    kpp: pickFirstNonEmpty(responseOrg.kpp, responseOrg.participantKpp),
+                    ogrn: pickFirstNonEmpty(responseOrg.ogrn, responseOrg.orgOgrn),
+                };
+
+                const cleaned = Object.fromEntries(
+                    Object.entries(result).filter(([, value]) => {
+                        if (value === undefined || value === null) return false;
+                        return String(value).trim() !== '';
+                    }),
+                );
+
+                return Object.keys(cleaned).length ? cleaned : null;
+            }
     
             async function loadProducts() {
                 if (!elements.catalogContent) return;
@@ -995,7 +1309,11 @@
                     if (state.filters.group) params.set('group', state.filters.group);
                     const query = params.toString();
                     const url = query ? `${API_ENDPOINT}?${query}` : API_ENDPOINT;
-                    const response = await fetch(url);
+                    const headers = new Headers();
+                    if (state.isAuthorized && state.auth?.token) {
+                        headers.set('Authorization', `Bearer ${state.auth.token}`);
+                    }
+                    const response = await fetch(url, { headers });
                     const text = await response.text();
                     if (!response.ok) {
                         throw new Error(text || `Ошибка загрузки данных (${response.status})`);
