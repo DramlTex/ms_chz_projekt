@@ -661,292 +661,788 @@
         </div>
     </div>
 
-    <script>
-        // Demo data for products
-        const demoProducts = [
-            {
-                gtin: '4600123456789',
-                name: 'Платье женское летнее',
-                brand: 'Fashion Style',
-                category: 'Одежда',
-                model: 'DS-2024-001',
-                size: 'M',
-                color: 'Синий'
-            },
-            {
-                gtin: '4600987654321',
-                name: 'Рубашка мужская классическая',
-                brand: 'Business Line',
-                category: 'Одежда',
-                model: 'BL-SHIRT-05',
-                size: 'L',
-                color: 'Белый'
-            },
-            {
-                gtin: '4601234567890',
-                name: 'Кроссовки спортивные',
-                brand: 'SportMax',
-                category: 'Обувь',
-                model: 'SM-RUN-2024',
-                size: '42',
-                color: 'Черный/Красный'
-            },
-            {
-                gtin: '4602345678901',
-                name: 'Джинсы женские',
-                brand: 'Denim Pro',
-                category: 'Одежда',
-                model: 'DP-JNS-W-03',
-                size: 'S',
-                color: 'Голубой'
-            },
-            {
-                gtin: '4603456789012',
-                name: 'Футболка детская',
-                brand: 'Kids World',
-                category: 'Одежда',
-                model: 'KW-TEE-CH-12',
-                size: '128',
-                color: 'Зеленый'
-            },
-            {
-                gtin: '4604567890123',
-                name: 'Туфли женские',
-                brand: 'Elegance',
-                category: 'Обувь',
-                model: 'EL-HEEL-07',
-                size: '38',
-                color: 'Черный'
-            },
-            {
-                gtin: '4605678901234',
-                name: 'Куртка мужская зимняя',
-                brand: 'Winter Tech',
-                category: 'Одежда',
-                model: 'WT-JKT-M-24',
-                size: 'XL',
-                color: 'Темно-синий'
-            },
-            {
-                gtin: '4606789012345',
-                name: 'Шарф шерстяной',
-                brand: 'Warm & Cozy',
-                category: 'Текстиль',
-                model: 'WC-SCRF-02',
-                size: 'Универсальный',
-                color: 'Серый'
-            },
-            {
-                gtin: '4607890123456',
-                name: 'Парфюмерная вода',
-                brand: 'Luxe Parfum',
-                category: 'Парфюмерия',
-                model: 'LP-EDT-50',
-                size: '50ml',
-                color: '-'
-            },
-            {
-                gtin: '4608901234567',
-                name: 'Постельное белье',
-                brand: 'Sleep Well',
-                category: 'Текстиль',
-                model: 'SW-BED-2SP',
-                size: '2-спальный',
-                color: 'Бежевый'
+        <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const API_ENDPOINT = './servis_CHZ-MS/api/product-list.php';
+            const ORDER_ENDPOINT = './servis_CHZ-MS/api/create-order.php';
+    
+            const elements = {
+                certSelect: document.getElementById('certSelect'),
+                authBtn: document.getElementById('authBtn'),
+                logoutBtn: document.getElementById('logoutBtn'),
+                userOrg: document.getElementById('userOrg'),
+                authStatus: document.getElementById('authStatus'),
+                groupFilter: document.getElementById('productGroupFilter'),
+                dateFrom: document.getElementById('dateFrom'),
+                dateTo: document.getElementById('dateTo'),
+                applyFilters: document.getElementById('applyFilters'),
+                searchInput: document.getElementById('searchInput'),
+                searchBtn: document.getElementById('searchBtn'),
+                createOrderBtn: document.getElementById('createOrderBtn'),
+                catalogContent: document.getElementById('catalogContent'),
+                totalProducts: document.getElementById('totalProducts'),
+                selectedCount: document.getElementById('selectedCount'),
+                totalCodes: document.getElementById('totalCodes'),
+                orderModal: document.getElementById('orderModal'),
+                modalPositions: document.getElementById('modalPositions'),
+                modalTotalCodes: document.getElementById('modalTotalCodes'),
+                modalProductList: document.getElementById('modalProductList'),
+                cancelOrder: document.getElementById('cancelOrder'),
+                confirmOrder: document.getElementById('confirmOrder'),
+            };
+    
+            const state = {
+                certificates: [],
+                selectedCert: null,
+                isAuthorized: false,
+                products: [],
+                meta: { total: 0, count: 0 },
+                filters: {
+                    search: '',
+                    group: '',
+                    dateFrom: null,
+                    dateTo: null,
+                },
+                selectedProducts: new Map(),
+                loading: false,
+                lastError: null,
+            };
+    
+            const numberFormatter = new Intl.NumberFormat('ru-RU');
+    
+            const toastRoot = createToastContainer();
+    
+            init();
+    
+            async function init() {
+                setDefaultDates();
+                state.filters.group = elements.groupFilter?.value ?? '';
+                state.filters.search = elements.searchInput?.value?.trim() ?? '';
+                updateAuthStatus();
+                setupEventListeners();
+                loadCertificates();
+                await loadProducts();
             }
-        ];
-
-        // App State
-        const state = {
-            isAuthorized: false,
-            certificates: [],
-            selectedCert: null,
-            products: [],
-            selectedProducts: new Map(),
-            filters: {
-                search: '',
-                group: '',
-                dateFrom: null,
-                dateTo: null
+    
+            function createToastContainer() {
+                const container = document.createElement('div');
+                container.style.position = 'fixed';
+                container.style.bottom = '20px';
+                container.style.right = '20px';
+                container.style.display = 'flex';
+                container.style.flexDirection = 'column';
+                container.style.gap = '10px';
+                container.style.zIndex = '2000';
+                container.setAttribute('aria-live', 'polite');
+                container.setAttribute('aria-atomic', 'true');
+                document.body.appendChild(container);
+                return container;
             }
-        };
-
-        // Initialize app
-        async function initApp() {
-            loadCertificates();
-            loadProducts();
-            setupEventListeners();
-            updateStats();
-        }
-
-        // Load certificates (demo)
-        function loadCertificates() {
-            // Demo certificates
-            const demoCerts = [
-                { thumbprint: 'cert1', name: 'ООО "Модный дом" (Директор Иванов И.И.)', validTo: '2025-12-31' },
-                { thumbprint: 'cert2', name: 'ИП Петров П.П.', validTo: '2025-06-30' },
-                { thumbprint: 'cert3', name: 'АО "ТекстильПром" (Директор Сидоров С.С.)', validTo: '2026-01-15' }
-            ];
-            
-            state.certificates = demoCerts;
-            
-            const certSelect = document.getElementById('certSelect');
-            certSelect.innerHTML = '<option value="">Выберите сертификат...</option>';
-            
-            demoCerts.forEach(cert => {
-                const option = document.createElement('option');
-                option.value = cert.thumbprint;
-                option.textContent = cert.name;
-                certSelect.appendChild(option);
-            });
-        }
-
-        // Load products
-        function loadProducts() {
-            state.products = demoProducts.map((p, index) => ({
-                ...p,
-                id: index + 1,
-                selected: false,
-                quantity: 100
-            }));
-            renderCatalog();
-        }
-
-        // Render catalog table
-        function renderCatalog() {
-            const container = document.getElementById('catalogContent');
-            
-            if (state.products.length === 0) {
-                container.innerHTML = `
-                    <div class="empty-state">
-                        <div class="empty-icon">📦</div>
-                        <h3>Товары не найдены</h3>
-                        <p>Попробуйте изменить параметры поиска</p>
-                    </div>
+    
+            function showToast(type, message) {
+                const text = (message ?? '').toString().trim();
+                if (!text) return;
+                const toast = document.createElement('div');
+                toast.className = 'toast';
+                if (type) {
+                    toast.classList.add(`toast-${type}`);
+                }
+                toast.textContent = text;
+                toast.setAttribute('role', 'alert');
+                toastRoot.appendChild(toast);
+                setTimeout(() => {
+                    toast.remove();
+                }, 4000);
+            }
+    
+            function setDefaultDates() {
+                const today = new Date();
+                const from = new Date();
+                from.setMonth(from.getMonth() - 3);
+                const fromValue = formatDateInput(from);
+                const toValue = formatDateInput(today);
+                state.filters.dateFrom = fromValue;
+                state.filters.dateTo = toValue;
+                if (elements.dateFrom && !elements.dateFrom.value) {
+                    elements.dateFrom.value = fromValue;
+                }
+                if (elements.dateTo && !elements.dateTo.value) {
+                    elements.dateTo.value = toValue;
+                }
+            }
+    
+            function formatDateInput(date) {
+                if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+                    return '';
+                }
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                return `${date.getFullYear()}-${month}-${day}`;
+            }
+    
+            function setupEventListeners() {
+                elements.authBtn?.addEventListener('click', handleAuth);
+                elements.logoutBtn?.addEventListener('click', handleLogout);
+                elements.applyFilters?.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    applyFilters();
+                });
+                elements.searchBtn?.addEventListener('click', handleSearch);
+                elements.searchInput?.addEventListener('keypress', (event) => {
+                    if (event.key === 'Enter') {
+                        event.preventDefault();
+                        handleSearch();
+                    }
+                });
+                elements.createOrderBtn?.addEventListener('click', showOrderModal);
+                elements.cancelOrder?.addEventListener('click', hideOrderModal);
+                elements.confirmOrder?.addEventListener('click', confirmOrder);
+                elements.orderModal?.addEventListener('click', (event) => {
+                    if (event.target === elements.orderModal) {
+                        hideOrderModal();
+                    }
+                });
+                document.addEventListener('keydown', (event) => {
+                    if (event.key === 'Escape') {
+                        hideOrderModal();
+                    }
+                });
+            }
+    
+            function applyFilters() {
+                state.filters.group = elements.groupFilter?.value ?? '';
+                state.filters.dateFrom = elements.dateFrom?.value || null;
+                state.filters.dateTo = elements.dateTo?.value || null;
+                loadProducts();
+            }
+    
+            function handleSearch() {
+                state.filters.search = elements.searchInput?.value.trim() ?? '';
+                loadProducts();
+            }
+    
+            async function handleAuth() {
+                if (state.certificates.length === 0) {
+                    await loadCertificates();
+                    if (state.certificates.length === 0) {
+                        showToast('warning', 'Сертификаты недоступны. Подключите CryptoPro Browser Plug-in.');
+                        return;
+                    }
+                }
+                const selectedThumbprint = elements.certSelect?.value ?? '';
+                if (!selectedThumbprint) {
+                    showToast('warning', 'Выберите сертификат для авторизации.');
+                    return;
+                }
+                const certificate = state.certificates.find((item) => item.thumbprint === selectedThumbprint);
+                if (!certificate) {
+                    showToast('error', 'Выбранный сертификат недоступен.');
+                    return;
+                }
+                state.isAuthorized = true;
+                state.selectedCert = certificate;
+                updateAuthStatus();
+                showToast('success', 'Авторизация выполнена.');
+            }
+    
+            function handleLogout() {
+                state.isAuthorized = false;
+                state.selectedCert = null;
+                updateAuthStatus();
+                showToast('success', 'Вы вышли из системы.');
+            }
+    
+            function updateAuthStatus() {
+                if (!elements.authStatus || !elements.userOrg) {
+                    return;
+                }
+                if (state.isAuthorized && state.selectedCert) {
+                    elements.authStatus.textContent = 'Авторизован';
+                    elements.authStatus.classList.remove('status-unauthorized');
+                    elements.authStatus.classList.add('status-authorized');
+                    elements.userOrg.textContent = formatOrganization(state.selectedCert.subject);
+                    if (elements.logoutBtn) elements.logoutBtn.style.display = 'flex';
+                    if (elements.authBtn) elements.authBtn.style.display = 'none';
+                    if (elements.certSelect) elements.certSelect.disabled = true;
+                } else {
+                    elements.authStatus.textContent = 'Не авторизован';
+                    elements.authStatus.classList.add('status-unauthorized');
+                    elements.authStatus.classList.remove('status-authorized');
+                    elements.userOrg.textContent = 'Организация не выбрана';
+                    if (elements.logoutBtn) elements.logoutBtn.style.display = 'none';
+                    if (elements.authBtn) elements.authBtn.style.display = 'flex';
+                    if (elements.certSelect) {
+                        elements.certSelect.disabled = state.certificates.length === 0;
+                    }
+                }
+                updateOrderButtonState();
+            }
+    
+            function updateOrderButtonState() {
+                if (!elements.createOrderBtn) return;
+                elements.createOrderBtn.disabled = !state.isAuthorized || state.selectedProducts.size === 0;
+            }
+    
+            async function loadCertificates() {
+                if (!elements.certSelect) return;
+                elements.certSelect.innerHTML = '<option value="">Загрузка сертификатов…</option>';
+                elements.certSelect.disabled = true;
+                state.certificates = [];
+                if (typeof window.cadesplugin === 'undefined') {
+                    elements.certSelect.innerHTML = '<option value="">Подключите CryptoPro Browser Plug-in</option>';
+                    return;
+                }
+                try {
+                    const plugin = await resolveCadesPlugin(window.cadesplugin);
+                    if (!plugin?.CreateObjectAsync) {
+                        elements.certSelect.innerHTML = '<option value="">Обновите CryptoPro</option>';
+                        return;
+                    }
+                    const store = await plugin.CreateObjectAsync('CAdESCOM.Store');
+                    await store.Open(2, 'My', 2);
+                    const collection = await store.Certificates;
+                    const count = await collection.Count;
+                    const certificates = [];
+                    for (let index = 1; index <= count; index += 1) {
+                        const certificate = await collection.Item(index);
+                        const validTo = new Date(await certificate.ValidToDate);
+                        if (Number.isNaN(validTo.getTime()) || validTo < new Date()) {
+                            continue;
+                        }
+                        certificates.push({
+                            thumbprint: await certificate.Thumbprint,
+                            subject: await certificate.SubjectName,
+                            validTo,
+                        });
+                    }
+                    state.certificates = certificates;
+                    updateCertificateSelect();
+                    if (certificates.length === 0) {
+                        showToast('warning', 'Сертификаты УКЭП не найдены или все истекли.');
+                    }
+                } catch (error) {
+                    state.certificates = [];
+                    elements.certSelect.innerHTML = '<option value="">Ошибка загрузки сертификатов</option>';
+                    showToast('error', normalizeError(error));
+                }
+            }
+    
+            function resolveCadesPlugin(plugin) {
+                if (plugin && typeof plugin.then === 'function') {
+                    return plugin;
+                }
+                return Promise.resolve(plugin);
+            }
+    
+            function updateCertificateSelect() {
+                if (!elements.certSelect) return;
+                const select = elements.certSelect;
+                select.innerHTML = '';
+                const placeholder = document.createElement('option');
+                placeholder.value = '';
+                placeholder.textContent = state.certificates.length ? 'Выберите сертификат…' : 'Сертификаты не найдены';
+                select.appendChild(placeholder);
+                if (state.certificates.length === 0) {
+                    select.disabled = true;
+                    return;
+                }
+                state.certificates.forEach((certificate) => {
+                    const option = document.createElement('option');
+                    option.value = certificate.thumbprint;
+                    option.textContent = `${formatCertificateName(certificate.subject)} (до ${formatDate(certificate.validTo)})`;
+                    select.appendChild(option);
+                });
+                select.disabled = false;
+            }
+    
+            function formatCertificateName(subject) {
+                if (!subject) return 'Сертификат УКЭП';
+                const match = subject.match(/CN=([^,]+)/i);
+                if (match) {
+                    return match[1].trim();
+                }
+                return subject;
+            }
+    
+            function formatDate(date) {
+                if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+                return date.toLocaleDateString('ru-RU');
+            }
+    
+            function formatOrganization(subject) {
+                if (!subject) return 'Организация не выбрана';
+                const orgMatch = subject.match(/O=([^,]+)/i);
+                if (orgMatch) {
+                    return orgMatch[1].trim();
+                }
+                const cnMatch = subject.match(/CN=([^,]+)/i);
+                if (cnMatch) {
+                    return cnMatch[1].trim();
+                }
+                return subject;
+            }
+    
+            async function loadProducts() {
+                if (!elements.catalogContent) return;
+                state.loading = true;
+                state.lastError = null;
+                renderCatalog();
+                try {
+                    const params = new URLSearchParams();
+                    if (state.filters.dateFrom) params.set('from', state.filters.dateFrom);
+                    if (state.filters.dateTo) params.set('to', state.filters.dateTo);
+                    if (state.filters.search) params.set('search', state.filters.search);
+                    if (state.filters.group) params.set('group', state.filters.group);
+                    const query = params.toString();
+                    const url = query ? `${API_ENDPOINT}?${query}` : API_ENDPOINT;
+                    const response = await fetch(url);
+                    const text = await response.text();
+                    if (!response.ok) {
+                        throw new Error(text || `Ошибка загрузки данных (${response.status})`);
+                    }
+                    const data = text ? JSON.parse(text) : {};
+                    if (data.error) {
+                        throw new Error(data.error);
+                    }
+                    const items = Array.isArray(data.items) ? data.items : [];
+                    state.products = items.map(mapProductFromServer);
+                    const total = Number(data.meta?.total ?? state.products.length);
+                    const count = Number(data.meta?.count ?? state.products.length);
+                    state.meta.total = Number.isFinite(total) ? total : state.products.length;
+                    state.meta.count = Number.isFinite(count) ? count : state.products.length;
+                    cleanupSelection();
+                } catch (error) {
+                    state.products = [];
+                    state.meta.total = 0;
+                    state.meta.count = 0;
+                    state.lastError = normalizeError(error);
+                    showToast('error', state.lastError);
+                } finally {
+                    state.loading = false;
+                    renderCatalog();
+                    updateStats();
+                    updateOrderButtonState();
+                }
+            }
+    
+            function mapProductFromServer(item) {
+                return {
+                    id: String(item?.id ?? item?.goodId ?? ''),
+                    gtin: pickFirstNonEmpty(item?.gtin, item?.gtin13, item?.globalTradeItemNumber),
+                    name: pickFirstNonEmpty(item?.name, item?.good_name, item?.title),
+                    brand: pickFirstNonEmpty(item?.brand, item?.brand_name),
+                    category: pickFirstNonEmpty(item?.category, item?.categoryName, item?.group_name, item?.groupName, item?.categoryTitle),
+                    size: pickFirstNonEmpty(item?.size, item?.sizeName),
+                    color: pickFirstNonEmpty(item?.color, item?.colorName),
+                    tnved: pickFirstNonEmpty(item?.tnved, item?.tn_ved),
+                    article: pickFirstNonEmpty(item?.article, item?.model),
+                    status: pickFirstNonEmpty(item?.status, item?.good_status),
+                    updatedAt: item?.updatedAt ?? item?.updated_at ?? item?.last_update ?? null,
+                };
+            }
+    
+            function pickFirstNonEmpty(...values) {
+                for (const value of values) {
+                    if (value === undefined || value === null) continue;
+                    const text = String(value).trim();
+                    if (text) return text;
+                }
+                return '';
+            }
+    
+            function cleanupSelection() {
+                const validIds = new Set(state.products.map((product) => product.id));
+                for (const [key, entry] of Array.from(state.selectedProducts.entries())) {
+                    if (!validIds.has(key)) {
+                        state.selectedProducts.delete(key);
+                        continue;
+                    }
+                    const updatedProduct = state.products.find((product) => product.id === key);
+                    if (updatedProduct) {
+                        entry.product = updatedProduct;
+                        state.selectedProducts.set(key, entry);
+                    }
+                }
+            }
+    
+            function renderCatalog() {
+                if (!elements.catalogContent) return;
+                if (state.loading) {
+                    elements.catalogContent.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+                    return;
+                }
+                if (state.lastError) {
+                    elements.catalogContent.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-icon">⚠️</div>
+                            <h3>Не удалось загрузить карточки</h3>
+                            <p>${escapeHtml(state.lastError)}</p>
+                        </div>
+                    `;
+                    return;
+                }
+                if (state.products.length === 0) {
+                    elements.catalogContent.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-icon">📦</div>
+                            <h3>Карточки не найдены</h3>
+                            <p>Измените параметры фильтрации и повторите попытку.</p>
+                        </div>
+                    `;
+                    return;
+                }
+                const filtered = filterProducts();
+                if (filtered.length === 0) {
+                    elements.catalogContent.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-icon">🔎</div>
+                            <h3>Нет совпадений</h3>
+                            <p>По текущему поиску ничего не найдено.</p>
+                        </div>
+                    `;
+                    return;
+                }
+                let html = `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th class="checkbox-cell">
+                                    <input type="checkbox" id="selectAll">
+                                </th>
+                                <th>Товар</th>
+                                <th>Бренд</th>
+                                <th>Категория</th>
+                                <th>Размер</th>
+                                <th>Цвет</th>
+                                <th>Кол-во КМ</th>
+                            </tr>
+                        </thead>
+                        <tbody>
                 `;
-                return;
-            }
-
-            let html = `
-                <table>
-                    <thead>
+                filtered.forEach((product) => {
+                    const entry = state.selectedProducts.get(product.id);
+                    const quantity = entry?.quantity ?? 100;
+                    html += `
                         <tr>
-                            <th class="checkbox-cell">
-                                <input type="checkbox" id="selectAll">
-                            </th>
-                            <th>Товар</th>
-                            <th>Бренд</th>
-                            <th>Категория</th>
-                            <th>Размер</th>
-                            <th>Цвет</th>
-                            <th>Кол-во КМ</th>
+                            <td class="checkbox-cell">
+                                <input type="checkbox"
+                                    class="product-checkbox"
+                                    data-id="${escapeAttribute(product.id)}"
+                                    ${entry ? 'checked' : ''}>
+                            </td>
+                            <td>
+                                <div class="product-info">
+                                    <span class="product-name">${escapeHtml(product.name) || '—'}</span>
+                                    <span class="product-gtin">GTIN: ${escapeHtml(product.gtin) || '—'}</span>
+                                </div>
+                            </td>
+                            <td>${escapeHtml(product.brand) || '—'}</td>
+                            <td>${escapeHtml(product.category) || '—'}</td>
+                            <td>${escapeHtml(product.size) || '—'}</td>
+                            <td>${escapeHtml(product.color) || '—'}</td>
+                            <td>
+                                <input type="number"
+                                    class="quantity-input"
+                                    data-id="${escapeAttribute(product.id)}"
+                                    value="${quantity}"
+                                    min="1"
+                                    max="150000">
+                            </td>
                         </tr>
-                    </thead>
-                    <tbody>
-            `;
-
-            const filteredProducts = filterProducts();
-            
-            filteredProducts.forEach(product => {
-                const isSelected = state.selectedProducts.has(product.id);
-                html += `
-                    <tr>
-                        <td class="checkbox-cell">
-                            <input type="checkbox" 
-                                   class="product-checkbox" 
-                                   data-id="${product.id}"
-                                   ${isSelected ? 'checked' : ''}>
-                        </td>
-                        <td>
-                            <div class="product-info">
-                                <span class="product-name">${product.name}</span>
-                                <span class="product-gtin">GTIN: ${product.gtin}</span>
+                    `;
+                });
+                html += '</tbody></table>';
+                elements.catalogContent.innerHTML = html;
+                setupTableListeners();
+                syncSelectAllIndicator();
+            }
+    
+            function filterProducts() {
+                const search = (state.filters.search ?? '').toLowerCase();
+                const group = state.filters.group;
+                return state.products.filter((product) => {
+                    if (search) {
+                        const haystack = [
+                            product.name,
+                            product.gtin,
+                            product.brand,
+                            product.tnved,
+                            product.article,
+                        ]
+                            .filter(Boolean)
+                            .join(' ')
+                            .toLowerCase();
+                        if (!haystack.includes(search)) {
+                            return false;
+                        }
+                    }
+                    if (group) {
+                        const groupMap = {
+                            clothes: ['одежда', 'легкая промышленность'],
+                            shoes: ['обувь'],
+                            textile: ['текстиль'],
+                            perfume: ['парфюмерия'],
+                            photo: ['фото'],
+                        };
+                        const expected = groupMap[group];
+                        if (expected && expected.length) {
+                            const categoryValue = (product.category ?? '').toLowerCase();
+                            const match = expected.some((value) => categoryValue.includes(value));
+                            if (!match) {
+                                return false;
+                            }
+                        }
+                    }
+                    return true;
+                });
+            }
+    
+            function setupTableListeners() {
+                if (!elements.catalogContent) return;
+                const selectAll = elements.catalogContent.querySelector('#selectAll');
+                if (selectAll) {
+                    selectAll.addEventListener('change', (event) => {
+                        const checked = event.target.checked;
+                        const filtered = filterProducts();
+                        filtered.forEach((product) => {
+                            const key = product.id;
+                            if (checked) {
+                                const current = state.selectedProducts.get(key);
+                                state.selectedProducts.set(key, {
+                                    product,
+                                    quantity: current?.quantity ?? 100,
+                                });
+                            } else {
+                                state.selectedProducts.delete(key);
+                            }
+                        });
+                        elements.catalogContent.querySelectorAll('.product-checkbox').forEach((checkbox) => {
+                            checkbox.checked = checked;
+                        });
+                        updateStats();
+                        updateOrderButtonState();
+                        syncSelectAllIndicator();
+                    });
+                }
+    
+                elements.catalogContent.querySelectorAll('.product-checkbox').forEach((checkbox) => {
+                    checkbox.addEventListener('change', (event) => {
+                        const id = event.target.dataset.id;
+                        const product = state.products.find((item) => item.id === id);
+                        if (!product) return;
+                        if (event.target.checked) {
+                            const quantityInput = event.target.closest('tr')?.querySelector('.quantity-input');
+                            const quantity = parseQuantity(quantityInput?.value ?? '100');
+                            state.selectedProducts.set(id, {
+                                product,
+                                quantity,
+                            });
+                        } else {
+                            state.selectedProducts.delete(id);
+                        }
+                        updateStats();
+                        updateOrderButtonState();
+                        syncSelectAllIndicator();
+                    });
+                });
+    
+                elements.catalogContent.querySelectorAll('.quantity-input').forEach((input) => {
+                    input.addEventListener('input', handleQuantityChange);
+                    input.addEventListener('change', handleQuantityChange);
+                });
+            }
+    
+            function handleQuantityChange(event) {
+                const input = event.target;
+                const id = input.dataset.id;
+                const value = parseQuantity(input.value);
+                input.value = value;
+                const entry = state.selectedProducts.get(id);
+                if (entry) {
+                    entry.quantity = value;
+                    state.selectedProducts.set(id, entry);
+                    updateStats();
+                }
+            }
+    
+            function parseQuantity(raw) {
+                let value = parseInt(raw, 10);
+                if (!Number.isFinite(value) || value < 1) value = 1;
+                if (value > 150000) value = 150000;
+                return value;
+            }
+    
+            function syncSelectAllIndicator() {
+                const selectAll = elements.catalogContent?.querySelector('#selectAll');
+                if (!selectAll) return;
+                const filtered = filterProducts();
+                if (filtered.length === 0) {
+                    selectAll.checked = false;
+                    selectAll.indeterminate = false;
+                    return;
+                }
+                const selectedInFiltered = filtered.filter((product) => state.selectedProducts.has(product.id)).length;
+                if (selectedInFiltered === filtered.length) {
+                    selectAll.checked = true;
+                    selectAll.indeterminate = false;
+                } else if (selectedInFiltered > 0) {
+                    selectAll.checked = false;
+                    selectAll.indeterminate = true;
+                } else {
+                    selectAll.checked = false;
+                    selectAll.indeterminate = false;
+                }
+            }
+    
+            function updateStats() {
+                if (elements.totalProducts) {
+                    elements.totalProducts.textContent = numberFormatter.format(state.meta.total || state.products.length);
+                }
+                if (elements.selectedCount) {
+                    elements.selectedCount.textContent = numberFormatter.format(state.selectedProducts.size);
+                }
+                if (elements.totalCodes) {
+                    const total = Array.from(state.selectedProducts.values()).reduce((acc, entry) => acc + entry.quantity, 0);
+                    elements.totalCodes.textContent = numberFormatter.format(total);
+                }
+            }
+    
+            function showOrderModal() {
+                if (!state.isAuthorized) {
+                    showToast('warning', 'Авторизуйтесь по УКЭП, чтобы оформить заказ.');
+                    return;
+                }
+                if (state.selectedProducts.size === 0) {
+                    showToast('warning', 'Выберите хотя бы одну карточку для заказа.');
+                    return;
+                }
+                if (!elements.orderModal) return;
+                const entries = Array.from(state.selectedProducts.values());
+                const totalCodes = entries.reduce((acc, entry) => acc + entry.quantity, 0);
+                if (elements.modalPositions) {
+                    elements.modalPositions.textContent = numberFormatter.format(entries.length);
+                }
+                if (elements.modalTotalCodes) {
+                    elements.modalTotalCodes.textContent = numberFormatter.format(totalCodes);
+                }
+                if (elements.modalProductList) {
+                    elements.modalProductList.innerHTML = entries.map((entry) => `
+                        <div class="summary-item">
+                            <div>
+                                <div class="product-name">${escapeHtml(entry.product.name) || '—'}</div>
+                                <div class="product-gtin">GTIN: ${escapeHtml(entry.product.gtin) || '—'}</div>
                             </div>
-                        </td>
-                        <td>${product.brand}</td>
-                        <td>${product.category}</td>
-                        <td>${product.size}</td>
-                        <td>${product.color}</td>
-                        <td>
-                            <input type="number" 
-                                   class="quantity-input" 
-                                   data-id="${product.id}"
-                                   value="${state.selectedProducts.get(product.id)?.quantity || 100}"
-                                   min="1"
-                                   max="150000">
-                        </td>
-                    </tr>
-                `;
-            });
-
-            html += '</tbody></table>';
-            container.innerHTML = html;
-
-            // Add table event listeners
-            setupTableListeners();
-        }
-
-        // Filter products
-        function filterProducts() {
-            return state.products.filter(product => {
-                // Search filter
-                if (state.filters.search) {
-                    const search = state.filters.search.toLowerCase();
-                    if (!product.name.toLowerCase().includes(search) && 
-                        !product.gtin.includes(search) &&
-                        !product.brand.toLowerCase().includes(search)) {
-                        return false;
-                    }
+                            <div class="summary-value">${numberFormatter.format(entry.quantity)}</div>
+                        </div>
+                    `).join('');
                 }
-
-                // Group filter
-                if (state.filters.group) {
-                    const groupMap = {
-                        'clothes': 'Одежда',
-                        'shoes': 'Обувь',
-                        'textile': 'Текстиль',
-                        'perfume': 'Парфюмерия'
-                    };
-                    if (product.category !== groupMap[state.filters.group]) {
-                        return false;
-                    }
+                elements.orderModal.classList.add('active');
+            }
+    
+            function hideOrderModal() {
+                elements.orderModal?.classList.remove('active');
+            }
+    
+            async function confirmOrder() {
+                if (!state.isAuthorized || state.selectedProducts.size === 0) {
+                    showToast('warning', 'Выберите карточки для заказа.');
+                    return;
                 }
+                if (!elements.confirmOrder) return;
+                elements.confirmOrder.disabled = true;
+                try {
+                    const payload = buildOrderPayload();
+                    const response = await submitOrder(payload);
+                    const orderId = response?.order?.id ?? '';
+                    const positions = response?.order?.positions ?? state.selectedProducts.size;
+                    const successMessage = orderId
+                        ? `Заказ ${orderId} создан (${positions} позиций).`
+                        : 'Заказ создан.';
+                    showToast('success', successMessage);
+                    state.selectedProducts.clear();
+                    hideOrderModal();
+                    updateStats();
+                    renderCatalog();
+                    updateOrderButtonState();
+                } catch (error) {
+                    showToast('error', normalizeError(error));
+                } finally {
+                    elements.confirmOrder.disabled = false;
+                }
+            }
+    
+            function buildOrderPayload() {
+                const items = Array.from(state.selectedProducts.values()).map((entry) => ({
+                    id: entry.product.id,
+                    gtin: entry.product.gtin,
+                    name: entry.product.name,
+                    quantity: entry.quantity,
+                }));
+                const certificate = state.selectedCert
+                    ? {
+                        thumbprint: state.selectedCert.thumbprint,
+                        subject: state.selectedCert.subject,
+                        validTo: state.selectedCert.validTo instanceof Date && !Number.isNaN(state.selectedCert.validTo.getTime())
+                            ? state.selectedCert.validTo.toISOString()
+                            : null,
+                    }
+                    : null;
+                return {
+                    certificate,
+                    filters: {
+                        search: state.filters.search,
+                        group: state.filters.group,
+                        dateFrom: state.filters.dateFrom,
+                        dateTo: state.filters.dateTo,
+                    },
+                    items,
+                };
+            }
+    
+            async function submitOrder(payload) {
+                const response = await fetch(ORDER_ENDPOINT, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const text = await response.text();
+                let data = {};
+                try {
+                    data = text ? JSON.parse(text) : {};
+                } catch (error) {
+                    throw new Error('Некорректный ответ сервера при создании заказа.');
+                }
+                if (!response.ok) {
+                    const message = data?.error || text || `Ошибка создания заказа (${response.status})`;
+                    throw new Error(message);
+                }
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                return data;
+            }
+    
+            function escapeHtml(value) {
+                return String(value ?? '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;');
+            }
+    
+            function escapeAttribute(value) {
+                return escapeHtml(value);
+            }
+    
+            function normalizeError(error) {
+                if (!error) return 'Неизвестная ошибка';
+                if (typeof error === 'string') return error;
+                if (error.message) return error.message;
+                return String(error);
+            }
+        });
+    </script>
 
-                return true;
-            });
-        }
-
-        // Setup event listeners
-        function setupEventListeners() {
-            // Auth button
-            document.getElementById('authBtn').addEventListener('click', handleAuth);
-            document.getElementById('logoutBtn').addEventListener('click', handleLogout);
-
-            // Search
-            document.getElementById('searchBtn').addEventListener('click', handleSearch);
-            document.getElementById('searchInput').addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') handleSearch();
-            });
-
-            // Filters
-            document.getElementById('applyFilters').addEventListener('click', applyFilters);
-
-            // Create order
-            document.getElementById('createOrderBtn').addEventListener('click', showOrderModal);
-
-            // Modal
-            document.getElementById('cancelOrder').addEventListener('click', hideOrderModal);
-            document.getElementById('confirmOrder').addEventListener('click', confirmOrder);
-            document.getElementById('orderModal').addEventListener('click', (e) => {
-                if (e.target.id === 'orderModal') hideOrderModal();
-            });
-        }
-
-        // Setup table listeners
-        function setupTableListeners() {
-            // Select all checkbox
-            const selectAll = document.getElementById('selectAll');
-            if (selectAll) {
-                selectAll.addEventListener('change', (e) => {
-                    const checkboxes = document.querySelectorAll('.product-checkbox');
-                    check
+</body>
+</html>
