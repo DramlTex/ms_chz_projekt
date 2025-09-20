@@ -795,26 +795,182 @@
             nmcades_api_onload();
             return;
         }
+
         var operaUrl = "chrome-extension://epebfcehmdedogndhlcacafjaacknbcm/nmcades_plugin_api.js";
         var manifestv2Url = "chrome-extension://iifchhfnnmpdbibifmljnfjhpififfog/nmcades_plugin_api.js";
         var manifestv3Url = "chrome-extension://pfhgbfnnjiafkhfdkmpiflachepdcjod/nmcades_plugin_api.js";
-        if (isYandex) {
-            // в асинхронном варианте для Yandex пробуем подключить расширения по очереди
-            load_js_script(operaUrl, nmcades_api_onload, function () {
-                load_js_script(manifestv2Url, nmcades_api_onload, function () {
-                    load_js_script(manifestv3Url, nmcades_api_onload, plugin_loaded_error);
+
+        function normalizeExtensionUrl(candidate) {
+            if (typeof candidate !== "string") {
+                return null;
+            }
+            var value = candidate.trim();
+            if (!value) {
+                return null;
+            }
+            if (value.indexOf("chrome-extension://") === 0) {
+                if (/\/nmcades_plugin_api\.js$/i.test(value)) {
+                    return value;
+                }
+                if (value.charAt(value.length - 1) === "/") {
+                    return value + "nmcades_plugin_api.js";
+                }
+                return value + "/nmcades_plugin_api.js";
+            }
+            var extensionId = value.toLowerCase();
+            if (!/^[a-z0-9]{32}$/.test(extensionId)) {
+                return null;
+            }
+            return "chrome-extension://" + extensionId + "/nmcades_plugin_api.js";
+        }
+
+        function collectManualExtensionUrls() {
+            var urls = [];
+            if (typeof window !== "object") {
+                return urls;
+            }
+            var candidates = [];
+            if (typeof window.cadespluginExtensionId === "string") {
+                candidates.push(window.cadespluginExtensionId);
+            }
+            if (typeof window.cadespluginExtensionUrl === "string") {
+                candidates.push(window.cadespluginExtensionUrl);
+            }
+            if (window.cadespluginExtensionIds && window.cadespluginExtensionIds.length) {
+                candidates = candidates.concat(window.cadespluginExtensionIds);
+            }
+            if (window.cadespluginExtensionUrls && window.cadespluginExtensionUrls.length) {
+                candidates = candidates.concat(window.cadespluginExtensionUrls);
+            }
+            for (var i = 0; i < candidates.length; i++) {
+                var normalized = normalizeExtensionUrl(candidates[i]);
+                if (normalized && urls.indexOf(normalized) === -1) {
+                    urls.push(normalized);
+                }
+            }
+            return urls;
+        }
+
+        function dedupeUrls(urls) {
+            var result = [];
+            var seen = {};
+            for (var i = 0; i < urls.length; i++) {
+                var url = urls[i];
+                if (!url || seen[url]) {
+                    continue;
+                }
+                seen[url] = true;
+                result.push(url);
+            }
+            return result;
+        }
+
+        function tryLoadUrlsSequentially(urls) {
+            var normalizedUrls = dedupeUrls(urls);
+            if (!normalizedUrls.length) {
+                plugin_loaded_error();
+                return;
+            }
+            var index = 0;
+            function next() {
+                if (index >= normalizedUrls.length) {
+                    plugin_loaded_error();
+                    return;
+                }
+                var current = normalizedUrls[index];
+                index += 1;
+                load_js_script(current, nmcades_api_onload, function () {
+                    next();
                 });
-            });
+            }
+            next();
+        }
+
+        function buildDefaultUrls() {
+            if (isYandex) {
+                return [operaUrl, manifestv2Url, manifestv3Url];
+            }
+            if (isOpera) {
+                return [operaUrl];
+            }
+            return [manifestv2Url, manifestv3Url];
+        }
+
+        function requestDynamicExtensionUrls(onSuccess, onTimeout) {
+            if (typeof window !== "object" ||
+                typeof window.addEventListener !== "function" ||
+                typeof window.postMessage !== "function") {
+                onTimeout();
+                return;
+            }
+
+            var responded = false;
+            var timerId = window.setTimeout(function () {
+                if (responded) {
+                    return;
+                }
+                cleanup();
+                onTimeout();
+            }, 500);
+
+            function cleanup() {
+                if (timerId) {
+                    window.clearTimeout(timerId);
+                    timerId = null;
+                }
+                window.removeEventListener("message", onMessage, false);
+            }
+
+            function onMessage(event) {
+                var resp_prefix = "cadesplugin_extension_id_response:";
+                if (typeof (event.data) !== "string" || event.data.indexOf(resp_prefix) !== 0) {
+                    return;
+                }
+                responded = true;
+                cleanup();
+                var extId = event.data.substring(resp_prefix.length);
+                var url = normalizeExtensionUrl(extId);
+                if (url) {
+                    onSuccess([url]);
+                    return;
+                }
+                onSuccess([]);
+            }
+
+            window.addEventListener("message", onMessage, false);
+            try {
+                window.postMessage("cadesplugin_extension_id_request", "*");
+            } catch (e) {
+                cleanup();
+                onTimeout();
+            }
+        }
+
+        var manualUrls = collectManualExtensionUrls();
+        var loadStarted = false;
+
+        function startLoading(dynamicUrls) {
+            if (loadStarted) {
+                return;
+            }
+            loadStarted = true;
+            var candidates = manualUrls.slice();
+            if (dynamicUrls && dynamicUrls.length) {
+                candidates = candidates.concat(dynamicUrls);
+            }
+            candidates = candidates.concat(buildDefaultUrls());
+            tryLoadUrlsSequentially(candidates);
+        }
+
+        if (manualUrls.length > 0) {
+            startLoading([]);
             return;
         }
-        if (isOpera) {
-            // в асинхронном варианте для Opera подключаем расширение из Opera Store.
-            load_js_script(operaUrl, nmcades_api_onload, plugin_loaded_error);
-            return;
-        }
-        // для Chrome, Chromium, Chromium Edge расширение из Chrome store
-        load_js_script(manifestv2Url, nmcades_api_onload, function () {
-            load_js_script(manifestv3Url, nmcades_api_onload, plugin_loaded_error);
+
+        requestDynamicExtensionUrls(function (dynamicUrls) {
+            startLoading(dynamicUrls);
+        }, function () {
+            startLoading([]);
         });
     }
 
