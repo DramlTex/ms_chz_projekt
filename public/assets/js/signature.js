@@ -4,6 +4,10 @@
     certificateMap: new Map(),
   };
 
+  function normalizeThumbprint(value) {
+    return (value || '').replace(/\s+/g, '').toUpperCase();
+  }
+
   function ensurePlugin() {
     if (typeof global.cadesplugin === 'undefined') {
       return Promise.reject(new Error('CryptoPro plug-in не найден. Установите расширение.'));
@@ -29,46 +33,79 @@
     ]).then(([subject, issuer, thumbprint, validFrom, validTo, serial]) => ({
       subject,
       issuer,
-      thumbprint: thumbprint ? thumbprint.toUpperCase() : '',
+      thumbprint: normalizeThumbprint(thumbprint),
       validFrom: validFrom ? new Date(validFrom).toISOString() : null,
       validTo: validTo ? new Date(validTo).toISOString() : null,
       serialNumber: serial || null,
     }));
   }
 
+  async function createObject(name, maybePlugin) {
+    const plugin = maybePlugin || (await ensurePlugin());
+    if (typeof plugin.CreateObjectAsync === 'function') {
+      return plugin.CreateObjectAsync(name);
+    }
+    if (typeof plugin.CreateObject === 'function') {
+      try {
+        return plugin.CreateObject(name);
+      } catch (error) {
+        throw new Error(`Не удалось создать объект ${name}: ${error.message || error}`);
+      }
+    }
+    throw new Error('CryptoPro plug-in не поддерживает создание объектов.');
+  }
+
   async function loadCertificates() {
     const plugin = await ensurePlugin();
-    const store = await plugin.CreateObjectAsync('CAdESCOM.Store');
-    await store.Open(2, 'My', 2);
-    const collection = await store.Certificates;
-    const count = await collection.Count;
+    const store = await createObject('CAdESCOM.Store', plugin);
+    const open = store.Open || store.open;
+    if (typeof open !== 'function') {
+      throw new Error('CryptoPro plug-in: метод открытия хранилища недоступен.');
+    }
 
-    state.certificates = [];
-    state.certificateMap.clear();
+    const location = plugin.CAPICOM_CURRENT_USER_STORE ?? 2;
+    const mode = plugin.CAPICOM_STORE_OPEN_MAXIMUM_ALLOWED ?? 2;
 
-    for (let index = 1; index <= count; index += 1) {
-      const cert = await collection.Item(index);
-      const validTo = new Date(await cert.ValidToDate);
-      if (Number.isFinite(validTo.getTime()) && validTo < new Date()) {
-        continue;
+    await open.call(store, location, 'My', mode);
+    try {
+      const collection = await store.Certificates;
+      const count = await collection.Count;
+
+      state.certificates = [];
+      state.certificateMap.clear();
+
+      for (let index = 1; index <= count; index += 1) {
+        const cert = await collection.Item(index);
+        const validTo = new Date(await cert.ValidToDate);
+        if (Number.isFinite(validTo.getTime()) && validTo < new Date()) {
+          continue;
+        }
+        const info = await serializeCertificate(cert);
+        if (!info.thumbprint) {
+          continue;
+        }
+        state.certificates.push(info);
+        state.certificateMap.set(info.thumbprint, cert);
       }
-      const info = await serializeCertificate(cert);
-      state.certificates.push(info);
-      state.certificateMap.set(info.thumbprint, cert);
-    }
 
-    if (!state.certificates.length) {
-      throw new Error('Не найдены действующие сертификаты в хранилище.');
-    }
+      if (!state.certificates.length) {
+        throw new Error('Не найдены действующие сертификаты в хранилище.');
+      }
 
-    return state.certificates.slice();
+      return state.certificates.slice();
+    } finally {
+      const close = store.Close || store.close;
+      if (typeof close === 'function') {
+        await close.call(store);
+      }
+    }
   }
 
   async function getCertificate(thumbprint) {
     if (!thumbprint) {
       throw new Error('Не выбран сертификат.');
     }
-    const upper = thumbprint.toUpperCase();
+    const upper = normalizeThumbprint(thumbprint);
     if (state.certificateMap.has(upper)) {
       return state.certificateMap.get(upper);
     }
@@ -81,10 +118,19 @@
 
   async function buildSigner(cert) {
     const plugin = await ensurePlugin();
-    const signer = await plugin.CreateObjectAsync('CAdESCOM.CSigner');
-    await signer.propset_Certificate(cert);
+    const signer = await createObject('CAdESCOM.CSigner', plugin);
+    if (typeof signer.propset_Certificate === 'function') {
+      await signer.propset_Certificate(cert);
+    } else if ('Certificate' in signer) {
+      signer.Certificate = cert;
+    } else {
+      throw new Error('Не удалось привязать сертификат к подписанту.');
+    }
+    const includeChain = plugin.CAPICOM_CERTIFICATE_INCLUDE_WHOLE_CHAIN ?? 0;
     if (typeof signer.propset_Options === 'function') {
-      await signer.propset_Options(plugin.CAPICOM_CERTIFICATE_INCLUDE_WHOLE_CHAIN);
+      await signer.propset_Options(includeChain);
+    } else if ('Options' in signer) {
+      signer.Options = includeChain;
     }
     return signer;
   }
@@ -93,22 +139,36 @@
     const plugin = await ensurePlugin();
     const certificate = await getCertificate(thumbprint);
     const signer = await buildSigner(certificate);
-    const signedData = await plugin.CreateObjectAsync('CAdESCOM.CadesSignedData');
+    const signedData = await createObject('CAdESCOM.CadesSignedData', plugin);
 
     try {
+      const encodingValue = plugin.CADESCOM_BASE64_TO_BINARY ?? 1;
       if (typeof signedData.propset_ContentEncoding === 'function') {
-        await signedData.propset_ContentEncoding(plugin.CADESCOM_BASE64_TO_BINARY);
+        await signedData.propset_ContentEncoding(encodingValue);
+      } else if ('ContentEncoding' in signedData) {
+        signedData.ContentEncoding = encodingValue;
+      }
+      if (typeof signedData.propset_Content === 'function') {
         await signedData.propset_Content(base64Payload);
+      } else if ('Content' in signedData) {
+        signedData.Content = base64Payload;
       } else {
         await signedData.propset_Content(global.atob(base64Payload));
       }
     } catch (error) {
-      await signedData.propset_Content(global.atob(base64Payload));
+      if (typeof signedData.propset_Content === 'function') {
+        await signedData.propset_Content(global.atob(base64Payload));
+      } else if ('Content' in signedData) {
+        signedData.Content = global.atob(base64Payload);
+      } else {
+        throw error;
+      }
     }
 
+    const cadesType = plugin.CADESCOM_CADES_BES ?? 1;
     return signedData.SignCades(
       signer,
-      plugin.CADESCOM_CADES_BES,
+      cadesType,
       true,
     );
   }
@@ -121,11 +181,16 @@
     const plugin = await ensurePlugin();
     const certificate = await getCertificate(thumbprint);
     const signer = await buildSigner(certificate);
-    const signedData = await plugin.CreateObjectAsync('CAdESCOM.CadesSignedData');
-    await signedData.propset_Content(challenge);
+    const signedData = await createObject('CAdESCOM.CadesSignedData', plugin);
+    if (typeof signedData.propset_Content === 'function') {
+      await signedData.propset_Content(challenge);
+    } else if ('Content' in signedData) {
+      signedData.Content = challenge;
+    }
+    const cadesType = plugin.CADESCOM_CADES_BES ?? 1;
     return signedData.SignCades(
       signer,
-      plugin.CADESCOM_CADES_BES,
+      cadesType,
       false,
     );
   }
