@@ -726,7 +726,63 @@
             const numberFormatter = new Intl.NumberFormat('ru-RU');
     
             const toastRoot = createToastContainer();
-    
+
+            let cryptoProPluginPromise = null;
+
+            function supportsAsyncCryptoPro(plugin) {
+                return Boolean(plugin && typeof plugin.CreateObjectAsync === 'function');
+            }
+
+            function supportsSyncCryptoPro(plugin) {
+                return Boolean(plugin && typeof plugin.CreateObject === 'function');
+            }
+
+            async function createCryptoProObject(plugin, progId) {
+                if (supportsAsyncCryptoPro(plugin)) {
+                    return plugin.CreateObjectAsync(progId);
+                }
+                if (supportsSyncCryptoPro(plugin)) {
+                    return plugin.CreateObject(progId);
+                }
+                throw new Error('CryptoPro Browser Plug-in не предоставляет API CreateObject. Обновите расширение.');
+            }
+
+            async function ensureCryptoProPlugin() {
+                if (cryptoProPluginPromise) {
+                    return cryptoProPluginPromise;
+                }
+                cryptoProPluginPromise = (async () => {
+                    if (typeof window === 'undefined') {
+                        throw new Error('CryptoPro Browser Plug-in доступен только в браузере.');
+                    }
+                    let plugin = window.cadesplugin;
+                    if (!plugin) {
+                        throw new Error('CryptoPro Browser Plug-in не обнаружен. Установите расширение и перезапустите браузер.');
+                    }
+                    if (typeof plugin.then === 'function') {
+                        try {
+                            await plugin;
+                        } catch (error) {
+                            throw error instanceof Error ? error : new Error(String(error));
+                        }
+                        plugin = window.cadesplugin || plugin;
+                    }
+                    if (!supportsAsyncCryptoPro(plugin) && !supportsSyncCryptoPro(plugin)) {
+                        throw new Error('CryptoPro Browser Plug-in не поддерживает необходимый API. Обновите расширение.');
+                    }
+                    try {
+                        await createCryptoProObject(plugin, 'CAdESCOM.About');
+                    } catch (error) {
+                        throw new Error(`CryptoPro Browser Plug-in недоступен. ${normalizePluginError(error)}`);
+                    }
+                    return plugin;
+                })().catch((error) => {
+                    cryptoProPluginPromise = null;
+                    throw error;
+                });
+                return cryptoProPluginPromise;
+            }
+
             init();
     
             async function init() {
@@ -796,6 +852,7 @@
             }
     
             function setupEventListeners() {
+                elements.certSelect?.addEventListener('change', handleCertificateChange);
                 elements.authBtn?.addEventListener('click', handleAuth);
                 elements.logoutBtn?.addEventListener('click', handleLogout);
                 elements.applyFilters?.addEventListener('click', (event) => {
@@ -835,7 +892,22 @@
                 state.filters.search = elements.searchInput?.value.trim() ?? '';
                 loadProducts();
             }
-    
+
+            function handleCertificateChange() {
+                const thumbprint = elements.certSelect?.value ?? '';
+                const nextCertificate = state.certificates.find((item) => item.thumbprint === thumbprint) || null;
+                const changed = (state.selectedCert?.thumbprint ?? '') !== (nextCertificate?.thumbprint ?? '');
+                state.selectedCert = nextCertificate;
+                if (changed && state.isAuthorized) {
+                    state.isAuthorized = false;
+                    state.auth = createEmptyAuthState();
+                    state.authChallenge = null;
+                    showToast('warning', 'Сертификат изменён. Выполните авторизацию заново.');
+                }
+                updateAuthStatus();
+                updateOrderButtonState();
+            }
+
             async function handleAuth() {
                 if (state.isAuthorizing) {
                     return;
@@ -950,8 +1022,14 @@
                     elements.authStatus.textContent = 'Не авторизован';
                     elements.authStatus.classList.add('status-unauthorized');
                     elements.authStatus.classList.remove('status-authorized');
-                    elements.authStatus.title = '';
-                    elements.userOrg.textContent = 'Организация не выбрана';
+                    if (state.selectedCert) {
+                        const subject = describeOrganization(null, state.selectedCert.subject);
+                        elements.userOrg.textContent = subject || 'Сертификат выбран, авторизуйтесь.';
+                        elements.authStatus.title = 'Выберите «Войти по УКЭП», чтобы получить токен True API.';
+                    } else {
+                        elements.authStatus.title = '';
+                        elements.userOrg.textContent = 'Организация не выбрана';
+                    }
                     if (elements.logoutBtn) elements.logoutBtn.style.display = 'none';
                     if (elements.authBtn) {
                         elements.authBtn.style.display = 'flex';
@@ -974,25 +1052,20 @@
                 elements.certSelect.innerHTML = '<option value="">Загрузка сертификатов…</option>';
                 elements.certSelect.disabled = true;
                 state.certificates = [];
-                if (typeof window.cadesplugin === 'undefined') {
-                    elements.certSelect.innerHTML = '<option value="">Подключите CryptoPro Browser Plug-in</option>';
-                    return;
-                }
+                let store = null;
+                const previousThumbprint = state.selectedCert?.thumbprint ?? '';
                 try {
-                    const plugin = await resolveCadesPlugin(window.cadesplugin);
-                    if (!plugin?.CreateObjectAsync) {
-                        elements.certSelect.innerHTML = '<option value="">Обновите CryptoPro</option>';
-                        return;
-                    }
-                    const store = await plugin.CreateObjectAsync('CAdESCOM.Store');
+                    const plugin = await ensureCryptoProPlugin();
+                    store = await createCryptoProObject(plugin, 'CAdESCOM.Store');
                     await store.Open(2, 'My', 2);
                     const collection = await store.Certificates;
                     const count = await collection.Count;
                     const certificates = [];
+                    const now = new Date();
                     for (let index = 1; index <= count; index += 1) {
                         const certificate = await collection.Item(index);
                         const validTo = new Date(await certificate.ValidToDate);
-                        if (Number.isNaN(validTo.getTime()) || validTo < new Date()) {
+                        if (Number.isNaN(validTo.getTime()) || validTo < now) {
                             continue;
                         }
                         const thumbprint = await certificate.Thumbprint;
@@ -1005,23 +1078,28 @@
                         });
                     }
                     state.certificates = certificates;
+                    if (!certificates.some((item) => item.thumbprint === previousThumbprint)) {
+                        state.selectedCert = null;
+                    }
                     updateCertificateSelect();
                     if (certificates.length === 0) {
                         showToast('warning', 'Сертификаты УКЭП не найдены или все истекли.');
                     }
                 } catch (error) {
                     state.certificates = [];
+                    state.selectedCert = null;
                     elements.certSelect.innerHTML = '<option value="">Ошибка загрузки сертификатов</option>';
                     showToast('error', normalizeError(error));
+                } finally {
+                    if (store && typeof store.Close === 'function') {
+                        try {
+                            await store.Close();
+                        } catch (closeError) {
+                            console.warn('Не удалось закрыть хранилище сертификатов', closeError);
+                        }
+                    }
                 }
                 updateAuthStatus();
-            }
-    
-            function resolveCadesPlugin(plugin) {
-                if (plugin && typeof plugin.then === 'function') {
-                    return plugin;
-                }
-                return Promise.resolve(plugin);
             }
 
             function normalizePluginError(error) {
@@ -1039,7 +1117,7 @@
             }
 
             async function getCertificateFromStore(plugin, thumbprint) {
-                const store = await plugin.CreateObjectAsync('CAdESCOM.Store');
+                const store = await createCryptoProObject(plugin, 'CAdESCOM.Store');
                 await store.Open(2, 'My', 2);
                 try {
                     const certificates = await store.Certificates;
@@ -1063,28 +1141,28 @@
                 if (!thumbprint) {
                     throw new Error('Не выбран сертификат для подписи True API.');
                 }
-                if (typeof window.cadesplugin === 'undefined') {
-                    throw new Error('CryptoPro Browser Plug-in недоступен.');
-                }
-                const plugin = await resolveCadesPlugin(window.cadesplugin);
-                if (!plugin?.CreateObjectAsync) {
-                    throw new Error('Обновите CryptoPro Browser Plug-in до версии с CreateObjectAsync.');
-                }
+                const plugin = await ensureCryptoProPlugin();
                 const { certificate, store } = await getCertificateFromStore(plugin, thumbprint);
                 try {
-                    const signer = await plugin.CreateObjectAsync('CAdESCOM.CPSigner');
+                    const signer = await createCryptoProObject(plugin, 'CAdESCOM.CPSigner');
                     await signer.propset_Certificate(certificate);
-                    await signer.propset_CheckCertificate(true);
+                    if (typeof signer.propset_CheckCertificate === 'function') {
+                        await signer.propset_CheckCertificate(true);
+                    }
 
-                    const signedData = await plugin.CreateObjectAsync('CAdESCOM.CadesSignedData');
-                    await signedData.propset_ContentEncoding(plugin.CADESCOM_STRING_TO_UCS2LE);
+                    const signedData = await createCryptoProObject(plugin, 'CAdESCOM.CadesSignedData');
+                    if (typeof signedData.propset_ContentEncoding === 'function' && typeof plugin.CADESCOM_STRING_TO_UCS2LE !== 'undefined') {
+                        await signedData.propset_ContentEncoding(plugin.CADESCOM_STRING_TO_UCS2LE);
+                    }
                     await signedData.propset_Content(data);
 
                     return await signedData.SignCades(
                         signer,
                         plugin.CADESCOM_CADES_BES,
                         false,
-                        plugin.CADESCOM_ENCODE_BASE64,
+                        typeof plugin.CADESCOM_ENCODE_BASE64 !== 'undefined'
+                            ? plugin.CADESCOM_ENCODE_BASE64
+                            : 1,
                     );
                 } catch (error) {
                     throw new Error(`Ошибка CryptoPro: ${normalizePluginError(error)}`);
@@ -1661,22 +1739,248 @@
             function hideOrderModal() {
                 elements.orderModal?.classList.remove('active');
             }
-    
+
+            function uniqueNonEmptyIds(values) {
+                const seen = new Set();
+                const result = [];
+                for (const value of values || []) {
+                    const text = String(value ?? '').trim();
+                    if (!text || seen.has(text)) {
+                        continue;
+                    }
+                    seen.add(text);
+                    result.push(text);
+                }
+                return result;
+            }
+
+            async function fetchDocumentsForSignature(ids) {
+                const uniqueIds = uniqueNonEmptyIds(ids);
+                if (uniqueIds.length === 0) {
+                    return [];
+                }
+                const documents = [];
+                const chunkSize = 25;
+                for (let index = 0; index < uniqueIds.length; index += chunkSize) {
+                    const chunk = uniqueIds.slice(index, index + chunkSize);
+                    if (chunk.length === 0) {
+                        continue;
+                    }
+                    const params = new URLSearchParams();
+                    params.set('ids', chunk.join(','));
+                    const url = `../servis_CHZ-MS/get_xml.php?${params.toString()}`;
+                    let response;
+                    try {
+                        response = await fetch(url);
+                    } catch (error) {
+                        throw new Error(`Не удалось получить документы для подписи: ${normalizeError(error)}`);
+                    }
+                    const text = await response.text();
+                    let data;
+                    try {
+                        data = text ? JSON.parse(text) : [];
+                    } catch (parseError) {
+                        throw new Error('Некорректный ответ сервиса get_xml.php.');
+                    }
+                    if (!response.ok) {
+                        const message = data?.error || text || `Ошибка получения документов (${response.status})`;
+                        throw new Error(message);
+                    }
+                    if (data?.error) {
+                        throw new Error(data.error);
+                    }
+                    if (!Array.isArray(data)) {
+                        throw new Error('Некорректный формат документов для подписи.');
+                    }
+                    documents.push(...data);
+                }
+                return documents;
+            }
+
+            function isBase64String(value) {
+                if (typeof value !== 'string') return false;
+                const normalized = value.replace(/\s+/g, '');
+                if (normalized === '') return false;
+                return /^[0-9A-Za-z+/]+={0,2}$/.test(normalized);
+            }
+
+            function encodeUtf8ToBase64(text) {
+                try {
+                    return btoa(unescape(encodeURIComponent(text)));
+                } catch (error) {
+                    throw new Error('Не удалось преобразовать XML в Base64.');
+                }
+            }
+
+            function normalizeDocumentXml(source) {
+                const text = (source ?? '').toString();
+                if (!text) {
+                    throw new Error('Пустой XML-документ для подписи.');
+                }
+                const normalized = text.replace(/\s+/g, '');
+                if (isBase64String(normalized)) {
+                    return normalized;
+                }
+                return encodeUtf8ToBase64(text);
+            }
+
+            async function createDetachedSignature(plugin, signer, base64Xml) {
+                const signedData = await createCryptoProObject(plugin, 'CAdESCOM.CadesSignedData');
+                try {
+                    if (typeof signedData.propset_ContentEncoding === 'function' && typeof plugin.CADESCOM_BASE64_TO_BINARY !== 'undefined') {
+                        await signedData.propset_ContentEncoding(plugin.CADESCOM_BASE64_TO_BINARY);
+                    }
+                    await signedData.propset_Content(base64Xml);
+                    return await signedData.SignCades(signer, plugin.CADESCOM_CADES_BES, true);
+                } catch (error) {
+                    await signedData.propset_Content(atob(base64Xml));
+                    return await signedData.SignCades(signer, plugin.CADESCOM_CADES_BES, true);
+                }
+            }
+
+            async function signDocumentsWithCryptoPro(documents, thumbprint) {
+                if (!Array.isArray(documents) || documents.length === 0) {
+                    return { pack: [], errors: [] };
+                }
+                const plugin = await ensureCryptoProPlugin();
+                const { certificate, store } = await getCertificateFromStore(plugin, thumbprint);
+                const errors = [];
+                const pack = [];
+                try {
+                    const signer = await createCryptoProObject(plugin, 'CAdESCOM.CPSigner');
+                    await signer.propset_Certificate(certificate);
+                    if (typeof signer.propset_CheckCertificate === 'function') {
+                        await signer.propset_CheckCertificate(true);
+                    }
+                    for (const document of documents) {
+                        const goodId = String(document?.goodId ?? document?.id ?? '').trim();
+                        try {
+                            const base64Xml = normalizeDocumentXml(document?.xmlB64 ?? document?.xml ?? '');
+                            const signature = await createDetachedSignature(plugin, signer, base64Xml);
+                            pack.push({
+                                goodId,
+                                base64Xml,
+                                signature,
+                            });
+                        } catch (error) {
+                            errors.push({ goodId, message: normalizePluginError(error) });
+                        }
+                    }
+                } finally {
+                    if (store && typeof store.Close === 'function') {
+                        try {
+                            await store.Close();
+                        } catch (closeError) {
+                            console.warn('Не удалось закрыть хранилище при подписи документов', closeError);
+                        }
+                    }
+                }
+                return { pack, errors };
+            }
+
+            async function sendSignaturePack(pack) {
+                if (!Array.isArray(pack) || pack.length === 0) {
+                    return null;
+                }
+                let response;
+                try {
+                    response = await fetch('../servis_CHZ-MS/send_signature.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ signPack: pack }),
+                    });
+                } catch (error) {
+                    throw new Error(`Не удалось отправить подписи: ${normalizeError(error)}`);
+                }
+                const text = await response.text();
+                let data = null;
+                if (text) {
+                    try {
+                        data = JSON.parse(text);
+                    } catch (parseError) {
+                        data = { raw: text };
+                    }
+                }
+                if (!response.ok) {
+                    const message = data?.error || text || `Ошибка отправки подписей (${response.status})`;
+                    throw new Error(message);
+                }
+                return data ?? {};
+            }
+
+            function formatSignatureErrors(errors) {
+                if (!Array.isArray(errors) || errors.length === 0) {
+                    return '';
+                }
+                return errors
+                    .map((item) => {
+                        const id = item?.goodId ? ` ${item.goodId}` : ' —';
+                        const message = item?.message || item?.error || 'Неизвестная ошибка подписи.';
+                        return `•${id}: ${message}`;
+                    })
+                    .join('; ');
+            }
+
             async function confirmOrder() {
                 if (!state.isAuthorized || state.selectedProducts.size === 0) {
                     showToast('warning', 'Выберите карточки для заказа.');
                     return;
                 }
                 if (!elements.confirmOrder) return;
+                const thumbprint = state.selectedCert?.thumbprint || elements.certSelect?.value || '';
+                if (!thumbprint) {
+                    showToast('warning', 'Выберите сертификат для подписи.');
+                    return;
+                }
                 elements.confirmOrder.disabled = true;
                 try {
                     const payload = buildOrderPayload();
+                    const ids = payload.items.map((item) => item.id);
+                    if (ids.length === 0) {
+                        throw new Error('Не найдены карточки для подписи.');
+                    }
+                    showToast('info', 'Получаем XML карточек для подписи…');
+                    const documents = await fetchDocumentsForSignature(ids);
+                    if (!documents.length) {
+                        throw new Error('Сервис подписи не вернул документы для выбранных карточек.');
+                    }
+                    showToast('info', `Подписываем ${documents.length} ${documents.length === 1 ? 'карточку' : 'карточки'}…`);
+                    const { pack, errors } = await signDocumentsWithCryptoPro(documents, thumbprint);
+                    if (errors.length) {
+                        const errorDetails = formatSignatureErrors(errors);
+                        throw new Error(errorDetails || 'Не удалось подписать выбранные карточки.');
+                    }
+                    if (!pack.length) {
+                        throw new Error('Не удалось сформировать подписи для выбранных карточек.');
+                    }
+                    const expectedIds = uniqueNonEmptyIds(ids);
+                    const signedIds = new Set(pack.map((item) => String(item?.goodId ?? '').trim()).filter((value) => value));
+                    const missing = expectedIds.filter((id) => !signedIds.has(id));
+                    if (missing.length) {
+                        throw new Error(`Не удалось подписать карточки: ${missing.join(', ')}`);
+                    }
+                    showToast('success', 'Подписи сформированы. Отправляем их в Национальный каталог…');
+                    const signatureResponse = await sendSignaturePack(pack);
+                    if (signatureResponse?.signed?.length) {
+                        showToast('success', `НК принял подписи: ${signatureResponse.signed.join(', ')}`);
+                    }
+                    if (signatureResponse?.errors?.length) {
+                        const nkErrors = formatSignatureErrors(signatureResponse.errors);
+                        if (nkErrors) {
+                            showToast('warning', nkErrors);
+                        }
+                    }
+                    payload.signaturePack = pack;
+                    payload.signatureResponse = signatureResponse;
                     const response = await submitOrder(payload);
                     const orderId = response?.order?.id ?? '';
                     const positions = response?.order?.positions ?? state.selectedProducts.size;
-                    const successMessage = orderId
+                    let successMessage = orderId
                         ? `Заказ ${orderId} создан (${positions} позиций).`
                         : 'Заказ создан.';
+                    if (signatureResponse?.signed?.length) {
+                        successMessage += ` Подписано: ${signatureResponse.signed.join(', ')}`;
+                    }
                     showToast('success', successMessage);
                     state.selectedProducts.clear();
                     hideOrderModal();
