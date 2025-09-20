@@ -52,6 +52,36 @@ try {
 
     [$normalizedItems, $totalCodes] = normalizeItems($items);
 
+    $signaturePack = [];
+    if (!empty($payload['signaturePack']) && is_array($payload['signaturePack'])) {
+        foreach ($payload['signaturePack'] as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+            $signaturePack[] = [
+                'goodId' => (string) ($entry['goodId'] ?? ''),
+                'base64Xml' => trim((string) ($entry['base64Xml'] ?? '')),
+                'signature' => trim((string) ($entry['signature'] ?? '')),
+            ];
+        }
+    }
+
+    $signatureResponse = null;
+    if (array_key_exists('signatureResponse', $payload)) {
+        $rawSignatureResponse = $payload['signatureResponse'];
+        if (is_array($rawSignatureResponse) || is_scalar($rawSignatureResponse) || $rawSignatureResponse === null) {
+            $signatureResponse = $rawSignatureResponse;
+        } else {
+            $encoded = json_encode($rawSignatureResponse);
+            if ($encoded !== false) {
+                $decoded = json_decode($encoded, true);
+                if (is_array($decoded) || is_scalar($decoded) || $decoded === null) {
+                    $signatureResponse = $decoded;
+                }
+            }
+        }
+    }
+
     $certificate = null;
     if (!empty($payload['certificate']) && is_array($payload['certificate'])) {
         $certificate = [
@@ -85,6 +115,8 @@ try {
             'items' => $normalizedItems,
             'certificate' => $certificate,
             'filters' => $filters,
+            'signaturePack' => $signaturePack,
+            'signatureResponse' => $signatureResponse,
         ],
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 } catch (InvalidArgumentException | JsonException $exception) {
