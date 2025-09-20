@@ -76,6 +76,9 @@
         select.appendChild(option);
       });
       state.certificateThumbprint = certificates[0]?.thumbprint || '';
+      if (state.certificateThumbprint) {
+        select.value = state.certificateThumbprint;
+      }
       updateCertificateInfo();
       log('✅ Сертификаты загружены.');
     } catch (error) {
