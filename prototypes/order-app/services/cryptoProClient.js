@@ -1,9 +1,14 @@
 const pluginScriptCandidates = (() => {
   const candidates = [];
   try {
-    candidates.push(new URL('../../crypto_pro/cadesplugin_api.js', import.meta.url).href);
+    candidates.push(new URL('../../../vendor/crypto_pro/cadesplugin_api.js', import.meta.url).href);
   } catch (error) {
     // игнорируем: модуль может быть переупакован бандлером
+  }
+  try {
+    candidates.push(new URL('../../crypto_pro/cadesplugin_api.js', import.meta.url).href);
+  } catch (error) {
+    // игнорируем: fallback для исторической структуры
   }
   try {
     candidates.push(new URL('../crypto_pro/cadesplugin_api.js', import.meta.url).href);
@@ -11,6 +16,11 @@ const pluginScriptCandidates = (() => {
     // игнорируем: fallback для иной структуры каталогов
   }
   if (typeof document !== 'undefined' && document.baseURI) {
+    try {
+      candidates.push(new URL('../vendor/crypto_pro/cadesplugin_api.js', document.baseURI).href);
+    } catch (error) {
+      // нет baseURI — продолжаем подбор путей ниже
+    }
     try {
       candidates.push(new URL('./crypto_pro/cadesplugin_api.js', document.baseURI).href);
     } catch (error) {
