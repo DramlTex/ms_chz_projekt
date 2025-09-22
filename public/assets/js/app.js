@@ -663,17 +663,25 @@
     });
   }
 
-  async function init() {
-    bindEvents();
-    try {
-      await Signature.ensureReady();
-      log('✅ CryptoPro готов к работе.');
-    } catch (error) {
-      log(`⚠️ CryptoPro: ${error.message || error}`);
+async function init() {
+  bindEvents();
+  try {
+    // ждём пока плагин полностью инициализируется
+    if (window.cadesplugin && typeof window.cadesplugin.then === "function") {
+      await window.cadesplugin;
     }
-    await refreshCertificates();
-    await loadSession();
+
+    // проверяем доступность плагина
+    await Signature.ensureReady();
+    log("✅ CryptoPro готов к работе.");
+  } catch (error) {
+    log(`⚠️ CryptoPro: ${error.message || error}`);
   }
+
+  // после готовности можно дергать сертификаты и сессию
+  await refreshCertificates();
+  await loadSession();
+}
 
   document.addEventListener('DOMContentLoaded', () => {
     init().catch((error) => log(error.message || error));
