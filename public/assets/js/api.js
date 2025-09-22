@@ -1,19 +1,50 @@
 const Api = (() => {
-  const apiRoot = (window.APP_CONFIG && window.APP_CONFIG.apiRoot) || '';
+  function resolveApiBase() {
+    const rawRoot = (window.APP_CONFIG && window.APP_CONFIG.apiRoot) || '';
+    const trimmed = typeof rawRoot === 'string' ? rawRoot.trim() : '';
+
+    const ensureTrailingSlash = (value) => (value.endsWith('/') ? value : `${value}/`);
+
+    if (!trimmed) {
+      return new URL('./', window.location.href);
+    }
+
+    if (/^https?:\/\//i.test(trimmed)) {
+      return new URL(ensureTrailingSlash(trimmed));
+    }
+
+    if (trimmed.startsWith('//')) {
+      return new URL(`${window.location.protocol}${ensureTrailingSlash(trimmed)}`);
+    }
+
+    if (trimmed.startsWith('/')) {
+      return new URL(ensureTrailingSlash(trimmed), window.location.origin);
+    }
+
+    return new URL(ensureTrailingSlash(trimmed), window.location.href);
+  }
+
+  const apiBase = resolveApiBase();
 
   function buildUrl(path, params) {
-    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-    const query = new URLSearchParams();
+    const rawPath = typeof path === 'string' ? path.trim() : '';
+    const isAbsolute = /^https?:\/\//i.test(rawPath) || rawPath.startsWith('//');
+    const normalizedPath = rawPath.replace(/^\/+/g, '');
+
+    const url = isAbsolute
+      ? new URL(rawPath, window.location.href)
+      : new URL(normalizedPath, apiBase);
+
     if (params && typeof params === 'object') {
       Object.entries(params).forEach(([key, value]) => {
         if (value === undefined || value === null || value === '') {
           return;
         }
-        query.append(key, String(value));
+        url.searchParams.append(key, String(value));
       });
     }
-    const queryString = query.toString();
-    return `${apiRoot}${normalizedPath}${queryString ? `?${queryString}` : ''}`;
+
+    return url.toString();
   }
 
   async function request(path, options = {}) {
