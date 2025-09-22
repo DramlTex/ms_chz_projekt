@@ -9,21 +9,26 @@
   }
 
   async function ensurePlugin() {
-    const plugin = global.cadesplugin;
-    if (typeof plugin === 'undefined' || plugin === null) {
-      throw new Error('CryptoPro plug-in не найден. Установите расширение.');
+    // Дожидаемся промиса плагина (если это промис)
+    const maybe = global.cadesplugin;
+    if (typeof maybe === 'undefined' || maybe === null) {
+      throw new Error('CryptoPro plug-in не найден. Установите и активируйте расширение.');
     }
-    if (typeof plugin.then === 'function') {
+
+    // Если это Promise — ждём *фактической* инициализации
+    if (typeof maybe.then === 'function') {
       try {
-        await plugin;
+        await maybe; // ждём завершения загрузки расширения
       } catch (error) {
         const message = typeof error === 'string' ? error : (error && error.message) ? error.message : error;
         throw new Error(`Не удалось инициализировать CryptoPro plug-in: ${message}`);
       }
-      if (typeof global.cadesplugin === 'undefined' || global.cadesplugin === null) {
-        throw new Error('CryptoPro plug-in не доступен после инициализации.');
-      }
-      return global.cadesplugin;
+    }
+
+    // К этому моменту расширение могло подменить window.cadesplugin на готовый объект
+    const plugin = global.cadesplugin;
+    if (!plugin || (typeof plugin !== 'object' && typeof plugin !== 'function')) {
+      throw new Error('CryptoPro plug-in не доступен после инициализации.');
     }
     return plugin;
   }
@@ -52,9 +57,18 @@
 
   async function createObject(name, maybePlugin) {
     const plugin = maybePlugin || (await ensurePlugin());
+
+    // Страхуемся от ложноположительной готовности
+    if (!plugin) {
+      throw new Error('CryptoPro plug-in не инициализирован (plugin=undefined).');
+    }
+
+    // В Chrome/Edge должен быть асинхронный фабричный метод
     if (typeof plugin.CreateObjectAsync === 'function') {
       return plugin.CreateObjectAsync(name);
     }
+
+    // Фолбэк для старых окружений (IE/NPAPI)
     if (typeof plugin.CreateObject === 'function') {
       try {
         return plugin.CreateObject(name);
@@ -62,7 +76,9 @@
         throw new Error(`Не удалось создать объект ${name}: ${error.message || error}`);
       }
     }
-    throw new Error('CryptoPro plug-in не поддерживает создание объектов.');
+
+    // Плагин есть, но фабрики нет — обычно это означает, что расширение ещё не подцепилось
+    throw new Error('CryptoPro plug-in не поддерживает создание объектов. Проверьте расширение и перезапустите браузер.');
   }
 
   async function loadCertificates() {
