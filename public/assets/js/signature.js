@@ -1,36 +1,41 @@
 (function (global) {
-  const state = {
-    certificates: [],
-    certificateMap: new Map(),
-  };
+  const state = { certificates: [], certificateMap: new Map() };
 
   function normalizeThumbprint(value) {
     return (value || '').replace(/\s+/g, '').toUpperCase();
   }
 
-  async function ensurePlugin() {
-    // Дожидаемся промиса плагина (если это промис)
-    const maybe = global.cadesplugin;
-    if (typeof maybe === 'undefined' || maybe === null) {
-      throw new Error('CryptoPro plug-in не найден. Установите и активируйте расширение.');
+  // Ждём не просто промис, а появление фабрики CreateObjectAsync
+  async function waitForCadesReady(maxMs = 10000) {
+    const start = Date.now();
+
+    if (global.cadesplugin && typeof global.cadesplugin.then === 'function') {
+      try { await global.cadesplugin; } catch (_) {}
     }
 
-    // Если это Promise — ждём *фактической* инициализации
-    if (typeof maybe.then === 'function') {
-      try {
-        await maybe; // ждём завершения загрузки расширения
-      } catch (error) {
-        const message = typeof error === 'string' ? error : (error && error.message) ? error.message : error;
-        throw new Error(`Не удалось инициализировать CryptoPro plug-in: ${message}`);
+    for (;;) {
+      const p = global.cadesplugin;
+      if (p && typeof p.CreateObjectAsync === 'function') return p;
+      if (Date.now() - start > maxMs) {
+        throw new Error('CryptoPro plug-in не успел инициализироваться (нет CreateObjectAsync).');
       }
+      await new Promise(r => setTimeout(r, 100));
     }
+  }
 
-    // К этому моменту расширение могло подменить window.cadesplugin на готовый объект
-    const plugin = global.cadesplugin;
-    if (!plugin || (typeof plugin !== 'object' && typeof plugin !== 'function')) {
-      throw new Error('CryptoPro plug-in не доступен после инициализации.');
+  async function ensurePlugin() {
+    return waitForCadesReady();
+  }
+
+  async function createObject(name, maybePlugin) {
+    const plugin = maybePlugin || (await ensurePlugin());
+    if (typeof plugin.CreateObjectAsync === 'function') {
+      return plugin.CreateObjectAsync(name);
     }
-    return plugin;
+    if (typeof plugin.CreateObject === 'function') {
+      return plugin.CreateObject(name);
+    }
+    throw new Error('CryptoPro plug-in загружен, но фабрики объектов нет (CreateObjectAsync).');
   }
 
   function utf8ToBase64(text) {
@@ -39,12 +44,8 @@
 
   function serializeCertificate(cert) {
     return Promise.all([
-      cert.SubjectName,
-      cert.IssuerName,
-      cert.Thumbprint,
-      cert.ValidFromDate,
-      cert.ValidToDate,
-      cert.SerialNumber,
+      cert.SubjectName, cert.IssuerName, cert.Thumbprint,
+      cert.ValidFromDate, cert.ValidToDate, cert.SerialNumber,
     ]).then(([subject, issuer, thumbprint, validFrom, validTo, serial]) => ({
       subject,
       issuer,
@@ -53,32 +54,6 @@
       validTo: validTo ? new Date(validTo).toISOString() : null,
       serialNumber: serial || null,
     }));
-  }
-
-  async function createObject(name, maybePlugin) {
-    const plugin = maybePlugin || (await ensurePlugin());
-
-    // Страхуемся от ложноположительной готовности
-    if (!plugin) {
-      throw new Error('CryptoPro plug-in не инициализирован (plugin=undefined).');
-    }
-
-    // В Chrome/Edge должен быть асинхронный фабричный метод
-    if (typeof plugin.CreateObjectAsync === 'function') {
-      return plugin.CreateObjectAsync(name);
-    }
-
-    // Фолбэк для старых окружений (IE/NPAPI)
-    if (typeof plugin.CreateObject === 'function') {
-      try {
-        return plugin.CreateObject(name);
-      } catch (error) {
-        throw new Error(`Не удалось создать объект ${name}: ${error.message || error}`);
-      }
-    }
-
-    // Плагин есть, но фабрики нет — обычно это означает, что расширение ещё не подцепилось
-    throw new Error('CryptoPro plug-in не поддерживает создание объектов. Проверьте расширение и перезапустите браузер.');
   }
 
   async function loadCertificates() {
@@ -103,13 +78,11 @@
       for (let index = 1; index <= count; index += 1) {
         const cert = await collection.Item(index);
         const validTo = new Date(await cert.ValidToDate);
-        if (Number.isFinite(validTo.getTime()) && validTo < new Date()) {
-          continue;
-        }
+        if (Number.isFinite(validTo.getTime()) && validTo < new Date()) continue;
+
         const info = await serializeCertificate(cert);
-        if (!info.thumbprint) {
-          continue;
-        }
+        if (!info.thumbprint) continue;
+
         state.certificates.push(info);
         state.certificateMap.set(info.thumbprint, cert);
       }
@@ -117,33 +90,25 @@
       if (!state.certificates.length) {
         throw new Error('Не найдены действующие сертификаты в хранилище.');
       }
-
       return state.certificates.slice();
     } finally {
       const close = store.Close || store.close;
-      if (typeof close === 'function') {
-        await close.call(store);
-      }
+      if (typeof close === 'function') await close.call(store);
     }
   }
 
   async function getCertificate(thumbprint) {
-    if (!thumbprint) {
-      throw new Error('Не выбран сертификат.');
-    }
+    if (!thumbprint) throw new Error('Не выбран сертификат.');
     const upper = normalizeThumbprint(thumbprint);
-    if (state.certificateMap.has(upper)) {
-      return state.certificateMap.get(upper);
-    }
+    if (state.certificateMap.has(upper)) return state.certificateMap.get(upper);
     await loadCertificates();
-    if (state.certificateMap.has(upper)) {
-      return state.certificateMap.get(upper);
-    }
+    if (state.certificateMap.has(upper)) return state.certificateMap.get(upper);
     throw new Error('Сертификат не найден в хранилище.');
   }
 
   async function buildSigner(cert) {
     const plugin = await ensurePlugin();
+    // Можно использовать CSigner (как у тебя) или CPSigner — обе работают
     const signer = await createObject('CAdESCOM.CSigner', plugin);
     if (typeof signer.propset_Certificate === 'function') {
       await signer.propset_Certificate(cert);
@@ -192,11 +157,7 @@
     }
 
     const cadesType = plugin.CADESCOM_CADES_BES ?? 1;
-    return signedData.SignCades(
-      signer,
-      cadesType,
-      true,
-    );
+    return signedData.SignCades(signer, cadesType, true);
   }
 
   async function signUtf8Detached(text, thumbprint) {
@@ -214,19 +175,13 @@
       signedData.Content = challenge;
     }
     const cadesType = plugin.CADESCOM_CADES_BES ?? 1;
-    return signedData.SignCades(
-      signer,
-      cadesType,
-      false,
-    );
+    return signedData.SignCades(signer, cadesType, false);
   }
 
   global.Signature = {
     ensureReady: ensurePlugin,
     loadCertificates,
-    getCertificates() {
-      return state.certificates.slice();
-    },
+    getCertificates() { return state.certificates.slice(); },
     signForAuth,
     signUtf8Detached,
     signBase64Detached,

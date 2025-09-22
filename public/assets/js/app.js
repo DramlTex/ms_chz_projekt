@@ -666,12 +666,9 @@
 async function init() {
   bindEvents();
   try {
-    // ждём пока плагин полностью инициализируется
     if (window.cadesplugin && typeof window.cadesplugin.then === "function") {
       await window.cadesplugin;
     }
-
-    // проверяем доступность плагина
     await Signature.ensureReady();
     log("✅ CryptoPro готов к работе.");
   } catch (error) {
