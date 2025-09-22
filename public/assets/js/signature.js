@@ -8,14 +8,24 @@
     return (value || '').replace(/\s+/g, '').toUpperCase();
   }
 
-  function ensurePlugin() {
-    if (typeof global.cadesplugin === 'undefined') {
-      return Promise.reject(new Error('CryptoPro plug-in не найден. Установите расширение.'));
+  async function ensurePlugin() {
+    const plugin = global.cadesplugin;
+    if (typeof plugin === 'undefined' || plugin === null) {
+      throw new Error('CryptoPro plug-in не найден. Установите расширение.');
     }
-    if (typeof global.cadesplugin.then === 'function') {
+    if (typeof plugin.then === 'function') {
+      try {
+        await plugin;
+      } catch (error) {
+        const message = typeof error === 'string' ? error : (error && error.message) ? error.message : error;
+        throw new Error(`Не удалось инициализировать CryptoPro plug-in: ${message}`);
+      }
+      if (typeof global.cadesplugin === 'undefined' || global.cadesplugin === null) {
+        throw new Error('CryptoPro plug-in не доступен после инициализации.');
+      }
       return global.cadesplugin;
     }
-    return Promise.resolve(global.cadesplugin);
+    return plugin;
   }
 
   function utf8ToBase64(text) {
