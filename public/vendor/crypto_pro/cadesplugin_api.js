@@ -174,6 +174,7 @@
         cadesplugin.CAPICOM_CERTIFICATE_INCLUDE_CHAIN_EXCEPT_ROOT = 0;
         cadesplugin.CAPICOM_CERTIFICATE_INCLUDE_WHOLE_CHAIN = 1;
         cadesplugin.CAPICOM_CERTIFICATE_INCLUDE_END_ENTITY_ONLY = 2;
+        cadesplugin.CAPICOM_CERTIFICATE_INCLUDE_NONE = 0x100;
 
         cadesplugin.CAPICOM_CERT_INFO_SUBJECT_SIMPLE_NAME = 0;
         cadesplugin.CAPICOM_CERT_INFO_ISSUER_SIMPLE_NAME = 1;
@@ -479,16 +480,6 @@
         }
     }
 
-    function ensurePluginObject(methodName) {
-        if (!pluginObject || (methodName && typeof pluginObject[methodName] !== "function")) {
-            var message = "CryptoPro plug-in не инициализирован: метод " + methodName + " недоступен. " +
-                "Убедитесь, что браузерное расширение установлено и активно.";
-            cpcsp_console_log(cadesplugin.LOG_LEVEL_ERROR, "cadesplugin_api.js: " + message);
-            throw new Error(message);
-        }
-        return pluginObject;
-    }
-
     // Функция активации объектов КриптоПро ЭЦП Browser plug-in
     function CreateObject(name) {
         if (isIOS()) {
@@ -526,7 +517,7 @@
             }
         }
         // создаются объекты NPAPI
-        return ensurePluginObject("CreateObject").CreateObject(name);
+        return pluginObject.CreateObject(name);
     }
 
     function decimalToHexString(number) {
@@ -567,7 +558,7 @@
 
     // Функция активации асинхронных объектов КриптоПро ЭЦП Browser plug-in
     function CreateObjectAsync(name) {
-        return ensurePluginObject("CreateObjectAsync").CreateObjectAsync(name);
+        return pluginObject.CreateObjectAsync(name);
     }
 
     // Функции для IOS
@@ -671,89 +662,9 @@
         var script = document.createElement("script");
         script.setAttribute("type", "text/javascript");
         script.setAttribute("src", url);
-        if (typeof errorFunc === "function") {
-            script.onerror = errorFunc;
-        }
-        if (typeof successFunc === "function") {
-            script.onload = successFunc;
-        }
-
-        function getAppendTarget() {
-            return document.head ||
-                document.getElementsByTagName("head")[0] ||
-                document.body ||
-                document.getElementsByTagName("body")[0] ||
-                document.documentElement;
-        }
-
-        function reportAppendError() {
-            cpcsp_console_log(cadesplugin.LOG_LEVEL_ERROR,
-                "cadesplugin_api.js: cannot append script \"" + url + "\" — document has no container element");
-            if (typeof errorFunc === "function") {
-                errorFunc();
-            }
-        }
-
-        function detachListeners() {
-            if (document.removeEventListener) {
-                document.removeEventListener("DOMContentLoaded", appendScript, false);
-            }
-            if (window.removeEventListener) {
-                window.removeEventListener("load", appendScript, false);
-            }
-            if (document.detachEvent) {
-                document.detachEvent("onreadystatechange", onReadyStateChange);
-            }
-            if (window.detachEvent) {
-                window.detachEvent("onload", appendScript);
-            }
-        }
-
-        function appendScript() {
-            if (script.parentNode) {
-                detachListeners();
-                return;
-            }
-            var target = getAppendTarget();
-            if (!target) {
-                if (document.readyState === "complete" || document.readyState === "interactive") {
-                    reportAppendError();
-                    detachListeners();
-                }
-                return;
-            }
-            target.appendChild(script);
-            detachListeners();
-        }
-
-        function onReadyStateChange() {
-            if (document.readyState === "complete") {
-                appendScript();
-            }
-        }
-
-        var target = getAppendTarget();
-        if (target) {
-            target.appendChild(script);
-            return;
-        }
-
-        if (document.addEventListener) {
-            document.addEventListener("DOMContentLoaded", appendScript, false);
-            window.addEventListener("load", appendScript, false);
-        } else if (document.attachEvent) {
-            document.attachEvent("onreadystatechange", onReadyStateChange);
-            window.attachEvent("onload", appendScript);
-        } else {
-            window.setTimeout(function () {
-                appendScript();
-                if (!script.parentNode) {
-                    reportAppendError();
-                }
-            }, 0);
-        }
-
-        appendScript();
+        script.onerror = errorFunc;
+        script.onload = successFunc;
+        document.getElementsByTagName("head")[0].appendChild(script);
     }
 
     function nmcades_api_onload() {
@@ -795,182 +706,21 @@
             nmcades_api_onload();
             return;
         }
-
         var operaUrl = "chrome-extension://epebfcehmdedogndhlcacafjaacknbcm/nmcades_plugin_api.js";
         var manifestv2Url = "chrome-extension://iifchhfnnmpdbibifmljnfjhpififfog/nmcades_plugin_api.js";
         var manifestv3Url = "chrome-extension://pfhgbfnnjiafkhfdkmpiflachepdcjod/nmcades_plugin_api.js";
-
-        function normalizeExtensionUrl(candidate) {
-            if (typeof candidate !== "string") {
-                return null;
-            }
-            var value = candidate.trim();
-            if (!value) {
-                return null;
-            }
-            if (value.indexOf("chrome-extension://") === 0) {
-                if (/\/nmcades_plugin_api\.js$/i.test(value)) {
-                    return value;
-                }
-                if (value.charAt(value.length - 1) === "/") {
-                    return value + "nmcades_plugin_api.js";
-                }
-                return value + "/nmcades_plugin_api.js";
-            }
-            var extensionId = value.toLowerCase();
-            if (!/^[a-z0-9]{32}$/.test(extensionId)) {
-                return null;
-            }
-            return "chrome-extension://" + extensionId + "/nmcades_plugin_api.js";
-        }
-
-        function collectManualExtensionUrls() {
-            var urls = [];
-            if (typeof window !== "object") {
-                return urls;
-            }
-            var candidates = [];
-            if (typeof window.cadespluginExtensionId === "string") {
-                candidates.push(window.cadespluginExtensionId);
-            }
-            if (typeof window.cadespluginExtensionUrl === "string") {
-                candidates.push(window.cadespluginExtensionUrl);
-            }
-            if (window.cadespluginExtensionIds && window.cadespluginExtensionIds.length) {
-                candidates = candidates.concat(window.cadespluginExtensionIds);
-            }
-            if (window.cadespluginExtensionUrls && window.cadespluginExtensionUrls.length) {
-                candidates = candidates.concat(window.cadespluginExtensionUrls);
-            }
-            for (var i = 0; i < candidates.length; i++) {
-                var normalized = normalizeExtensionUrl(candidates[i]);
-                if (normalized && urls.indexOf(normalized) === -1) {
-                    urls.push(normalized);
-                }
-            }
-            return urls;
-        }
-
-        function dedupeUrls(urls) {
-            var result = [];
-            var seen = {};
-            for (var i = 0; i < urls.length; i++) {
-                var url = urls[i];
-                if (!url || seen[url]) {
-                    continue;
-                }
-                seen[url] = true;
-                result.push(url);
-            }
-            return result;
-        }
-
-        function tryLoadUrlsSequentially(urls) {
-            var normalizedUrls = dedupeUrls(urls);
-            if (!normalizedUrls.length) {
-                plugin_loaded_error();
-                return;
-            }
-            var index = 0;
-            function next() {
-                if (index >= normalizedUrls.length) {
-                    plugin_loaded_error();
-                    return;
-                }
-                var current = normalizedUrls[index];
-                index += 1;
-                load_js_script(current, nmcades_api_onload, function () {
-                    next();
+        if (isYandex || isOpera) {
+            // в асинхронном варианте для Yandex пробуем подключить расширения по очереди
+            load_js_script(operaUrl, nmcades_api_onload, function () {
+                load_js_script(manifestv2Url, nmcades_api_onload, function () {
+                    load_js_script(manifestv3Url, nmcades_api_onload, plugin_loaded_error);
                 });
-            }
-            next();
-        }
-
-        function buildDefaultUrls() {
-            if (isYandex) {
-                return [operaUrl, manifestv2Url, manifestv3Url];
-            }
-            if (isOpera) {
-                return [operaUrl];
-            }
-            return [manifestv2Url, manifestv3Url];
-        }
-
-        function requestDynamicExtensionUrls(onSuccess, onTimeout) {
-            if (typeof window !== "object" ||
-                typeof window.addEventListener !== "function" ||
-                typeof window.postMessage !== "function") {
-                onTimeout();
-                return;
-            }
-
-            var responded = false;
-            var timerId = window.setTimeout(function () {
-                if (responded) {
-                    return;
-                }
-                cleanup();
-                onTimeout();
-            }, 500);
-
-            function cleanup() {
-                if (timerId) {
-                    window.clearTimeout(timerId);
-                    timerId = null;
-                }
-                window.removeEventListener("message", onMessage, false);
-            }
-
-            function onMessage(event) {
-                var resp_prefix = "cadesplugin_extension_id_response:";
-                if (typeof (event.data) !== "string" || event.data.indexOf(resp_prefix) !== 0) {
-                    return;
-                }
-                responded = true;
-                cleanup();
-                var extId = event.data.substring(resp_prefix.length);
-                var url = normalizeExtensionUrl(extId);
-                if (url) {
-                    onSuccess([url]);
-                    return;
-                }
-                onSuccess([]);
-            }
-
-            window.addEventListener("message", onMessage, false);
-            try {
-                window.postMessage("cadesplugin_extension_id_request", "*");
-            } catch (e) {
-                cleanup();
-                onTimeout();
-            }
-        }
-
-        var manualUrls = collectManualExtensionUrls();
-        var loadStarted = false;
-
-        function startLoading(dynamicUrls) {
-            if (loadStarted) {
-                return;
-            }
-            loadStarted = true;
-            var candidates = manualUrls.slice();
-            if (dynamicUrls && dynamicUrls.length) {
-                candidates = candidates.concat(dynamicUrls);
-            }
-            candidates = candidates.concat(buildDefaultUrls());
-            tryLoadUrlsSequentially(candidates);
-        }
-
-        if (manualUrls.length > 0) {
-            startLoading([]);
+            });
             return;
         }
-
-        requestDynamicExtensionUrls(function (dynamicUrls) {
-            startLoading(dynamicUrls);
-        }, function () {
-            startLoading([]);
+        // для Chrome, Chromium, Chromium Edge расширение из Chrome store
+        load_js_script(manifestv2Url, nmcades_api_onload, function () {
+            load_js_script(manifestv3Url, nmcades_api_onload, plugin_loaded_error);
         });
     }
 
@@ -1120,7 +870,7 @@
     };
 
     //Export
-    cadesplugin.JSModuleVersion = "2.4.1";
+    cadesplugin.JSModuleVersion = "2.4.2";
     cadesplugin.async_spawn = async_spawn;
     cadesplugin.set = set_pluginObject;
     cadesplugin.set_log_level = set_log_level;
