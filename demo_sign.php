@@ -40,6 +40,11 @@ $defaultPhrase = "Демонстрационная фраза для подпи�
             gap: 0.75rem;
         }
 
+        h2 {
+            font-size: 1.3rem;
+            margin: 1.5rem 0 0.75rem;
+        }
+
         h1 span {
             display: inline-flex;
             align-items: center;
@@ -227,6 +232,21 @@ $defaultPhrase = "Демонстрационная фраза для подпи�
         <textarea id="signature" readonly placeholder="Подпись будет показана здесь"></textarea>
     </section>
 
+    <section>
+        <h2>Подпись по хэш-значению</h2>
+        <p class="small">Введите готовый хэш (шестнадцатеричная строка без пробелов). Алгоритм определяется автоматически по выбранному сертификату.</p>
+        <label for="hashInput">Хэш (hex)</label>
+        <textarea id="hashInput" placeholder="Например, 3F2A…"></textarea>
+        <div class="actions">
+            <button type="button" id="signRawHash" disabled>Raw подпись (SignHash)</button>
+            <button type="button" id="signDetachedHash" disabled>Detached CAdES (SignHash)</button>
+        </div>
+        <label for="rawSignatureOutput">Raw подпись (Base64)</label>
+        <textarea id="rawSignatureOutput" readonly placeholder="Результат RawSignature.SignHash"></textarea>
+        <label for="detachedSignatureOutput">Detached CAdES (Base64)</label>
+        <textarea id="detachedSignatureOutput" readonly placeholder="Результат CadesSignedData.SignHash"></textarea>
+    </section>
+
     <footer>
         CryptoPro Browser Plug-in должен быть установлен и активен в браузере. Если список сертификатов пуст, проверьте доступ к личному хранилищу.
     </footer>
@@ -248,6 +268,11 @@ $defaultPhrase = "Демонстрационная фраза для подпи�
     const infoIssuer = document.getElementById("infoIssuer");
     const infoValidFrom = document.getElementById("infoValidFrom");
     const infoValidTo = document.getElementById("infoValidTo");
+    const hashInput = document.getElementById("hashInput");
+    const rawSignatureOutput = document.getElementById("rawSignatureOutput");
+    const detachedSignatureOutput = document.getElementById("detachedSignatureOutput");
+    const signRawHashButton = document.getElementById("signRawHash");
+    const signDetachedHashButton = document.getElementById("signDetachedHash");
 
     function setStatus(message, type = "info") {
         statusNode.textContent = message;
@@ -269,10 +294,137 @@ $defaultPhrase = "Демонстрационная фраза для подпи�
         }).format(date);
     }
 
+    const HASH_ALGORITHMS_BY_OID = {
+        "1.2.643.7.1.1.1.1": "CADESCOM_HASH_ALGORITHM_CP_GOST_3411_2012_256",
+        "1.2.643.7.1.1.3.2": "CADESCOM_HASH_ALGORITHM_CP_GOST_3411_2012_256",
+        "1.2.643.7.1.1.1.2": "CADESCOM_HASH_ALGORITHM_CP_GOST_3411_2012_512",
+        "1.2.643.7.1.1.3.3": "CADESCOM_HASH_ALGORITHM_CP_GOST_3411_2012_512",
+        "1.2.643.2.2.19": "CADESCOM_HASH_ALGORITHM_CP_GOST_3411",
+        "1.2.643.2.2.20": "CADESCOM_HASH_ALGORITHM_CP_GOST_3411",
+        "1.2.643.2.2.3": "CADESCOM_HASH_ALGORITHM_CP_GOST_3411"
+    };
+
+    const HASH_ALGORITHM_LABELS = {
+        CADESCOM_HASH_ALGORITHM_CP_GOST_3411: "ГОСТ Р 34.11-2001",
+        CADESCOM_HASH_ALGORITHM_CP_GOST_3411_2012_256: "ГОСТ Р 34.11-2012 (256)",
+        CADESCOM_HASH_ALGORITHM_CP_GOST_3411_2012_512: "ГОСТ Р 34.11-2012 (512)"
+    };
+
+    function normalizeHexDigest(value) {
+        return (value || "").replace(/[^0-9a-f]/gi, "").toUpperCase();
+    }
+
+    function validateHexDigest(hex) {
+        if (!hex) {
+            return { valid: false, error: "Введите хэш в шестнадцатеричном формате." };
+        }
+        if (hex.length % 2 !== 0) {
+            return { valid: false, error: "Число шестнадцатеричных символов должно быть чётным (по 2 символа на байт)." };
+        }
+        if (!/^[0-9A-F]+$/.test(hex)) {
+            return { valid: false, error: "Хэш может содержать только символы 0-9 и A-F." };
+        }
+        return { valid: true };
+    }
+
+    function clearHashOutputs() {
+        rawSignatureOutput.value = "";
+        detachedSignatureOutput.value = "";
+    }
+
+    function updateHashButtonsState() {
+        const hasCertificate = Boolean(certificateList.value);
+        const normalized = normalizeHexDigest(hashInput.value);
+        const validation = validateHexDigest(normalized);
+        const enabled = hasCertificate && validation.valid;
+        signRawHashButton.disabled = !enabled;
+        signDetachedHashButton.disabled = !enabled;
+    }
+
     function handlePluginError(error) {
         console.error(error);
         const message = error && error.message ? error.message : String(error);
         setStatus(`Ошибка плагина: ${message}`, "error");
+    }
+
+    async function getAsyncProperty(object, property) {
+        if (!object) {
+            return null;
+        }
+        try {
+            const value = object[property];
+            if (typeof value === "function") {
+                return await value.call(object);
+            }
+            return await value;
+        } catch (error) {
+            console.warn(`Не удалось получить свойство ${property}`, error);
+            return null;
+        }
+    }
+
+    async function readCertificateAlgorithmOid(certificate) {
+        const publicKey = await getAsyncProperty(certificate, "PublicKey");
+        const publicKeyAlgorithm = await getAsyncProperty(publicKey, "Algorithm");
+        const publicKeyOid = await getAsyncProperty(publicKeyAlgorithm, "Value");
+        if (publicKeyOid) {
+            return publicKeyOid;
+        }
+
+        const signatureAlgorithm = await getAsyncProperty(certificate, "SignatureAlgorithm");
+        const signatureOid = await getAsyncProperty(signatureAlgorithm, "Value");
+        if (signatureOid) {
+            return signatureOid;
+        }
+
+        return null;
+    }
+
+    async function getCertificateHashAlgorithm(entry) {
+        if (entry.hashAlgorithm) {
+            return entry.hashAlgorithm;
+        }
+
+        const oid = await readCertificateAlgorithmOid(entry.certificate);
+        if (!oid) {
+            throw new Error("Не удалось определить алгоритм сертификата для подписи по хэшу.");
+        }
+
+        const constantName = HASH_ALGORITHMS_BY_OID[oid];
+        if (!constantName) {
+            throw new Error(`OID алгоритма ${oid} не поддерживается для подписи по хэшу.`);
+        }
+
+        if (!window.cadesplugin || typeof window.cadesplugin[constantName] === "undefined") {
+            throw new Error("Константы CryptoPro для алгоритма хэширования недоступны.");
+        }
+
+        const algorithmValue = window.cadesplugin[constantName];
+        entry.hashAlgorithm = algorithmValue;
+        entry.hashAlgorithmOid = oid;
+        entry.hashAlgorithmName = constantName;
+        entry.hashAlgorithmLabel = HASH_ALGORITHM_LABELS[constantName] || constantName;
+        return algorithmValue;
+    }
+
+    async function createHashedDataFromDigest(entry, hexDigest) {
+        const normalized = normalizeHexDigest(hexDigest);
+        const validation = validateHexDigest(normalized);
+        if (!validation.valid) {
+            throw new Error(validation.error);
+        }
+
+        const hashedData = await window.cadesplugin.CreateObjectAsync("CAdESCOM.HashedData");
+        const algorithm = await getCertificateHashAlgorithm(entry);
+        await hashedData.propset_Algorithm(algorithm);
+
+        try {
+            await hashedData.SetHashValue(normalized);
+        } catch (error) {
+            throw new Error(`Не удалось загрузить хэш в объект HashedData: ${error && error.message ? error.message : error}`);
+        }
+
+        return { hashedData, algorithmLabel: entry.hashAlgorithmLabel };
     }
 
     function waitForPlugin() {
@@ -287,15 +439,19 @@ $defaultPhrase = "Демонстрационная фраза для подпи�
 
     async function loadCertificates() {
         signatureOutput.value = "";
+        clearHashOutputs();
         certificateList.innerHTML = "";
         certificateCache.clear();
         certificateInfo.hidden = true;
+        updateHashButtonsState();
+
+        let store;
 
         try {
             await waitForPlugin();
             setStatus("Запрос сертификатов из локального хранилища…", "info");
 
-            const store = await window.cadesplugin.CreateObjectAsync("CAdESCOM.Store");
+            store = await window.cadesplugin.CreateObjectAsync("CAdESCOM.Store");
             await store.Open(
                 window.cadesplugin.CADESCOM_CURRENT_USER_STORE,
                 window.cadesplugin.CADESCOM_MY_STORE,
@@ -335,22 +491,33 @@ $defaultPhrase = "Демонстрационная фраза для подпи�
                 option.dataset.validTo = validTo.toISOString();
 
                 certificateList.appendChild(option);
-                certificateCache.set(thumbprint, certificate);
+                certificateCache.set(thumbprint, { certificate, thumbprint });
             }
 
             if (!certificateList.options.length) {
                 setStatus("Подходящие сертификаты не найдены. Проверьте, что в хранилище есть сертификат с закрытым ключом.", "error");
                 signButton.disabled = true;
+                updateHashButtonsState();
                 return;
             }
 
             certificateList.selectedIndex = 0;
             signButton.disabled = false;
             updateCertificateInfo();
+            updateHashButtonsState();
             setStatus("Сертификаты успешно загружены. Выберите подходящий и нажмите «Подписать фразу».", "success");
         } catch (error) {
             handlePluginError(error);
             signButton.disabled = true;
+            updateHashButtonsState();
+        } finally {
+            if (store) {
+                try {
+                    await store.Close();
+                } catch (closeError) {
+                    console.warn("Не удалось закрыть хранилище сертификатов", closeError);
+                }
+            }
         }
     }
 
@@ -368,7 +535,8 @@ $defaultPhrase = "Демонстрационная фраза для подпи�
             return;
         }
 
-        const certificate = certificateCache.get(thumbprint);
+        const certificateEntry = certificateCache.get(thumbprint);
+        const certificate = certificateEntry ? certificateEntry.certificate : null;
         if (!certificate) {
             setStatus("Не удалось получить выбранный сертификат. Попробуйте запросить список заново.", "error");
             return;
@@ -404,10 +572,108 @@ $defaultPhrase = "Демонстрационная фраза для подпи�
         }
     }
 
+    async function signHashRaw() {
+        try {
+            await waitForPlugin();
+        } catch (error) {
+            handlePluginError(error);
+            return;
+        }
+
+        const thumbprint = certificateList.value;
+        if (!thumbprint) {
+            setStatus("Сначала выберите сертификат в списке.", "error");
+            return;
+        }
+
+        const entry = certificateCache.get(thumbprint);
+        if (!entry || !entry.certificate) {
+            setStatus("Не удалось получить выбранный сертификат. Попробуйте запросить список заново.", "error");
+            return;
+        }
+
+        rawSignatureOutput.value = "";
+
+        try {
+            const normalizedHex = normalizeHexDigest(hashInput.value);
+            const validation = validateHexDigest(normalizedHex);
+            if (!validation.valid) {
+                setStatus(validation.error, "error");
+                return;
+            }
+
+            const { hashedData, algorithmLabel } = await createHashedDataFromDigest(entry, normalizedHex);
+            setStatus(`Подписываем хэш через RawSignature.SignHash (${algorithmLabel}).`, "info");
+
+            const raw = await window.cadesplugin.CreateObjectAsync("CAdESCOM.RawSignature");
+            const signature = await raw.SignHash(hashedData, entry.certificate);
+
+            rawSignatureOutput.value = signature;
+            setStatus(`Raw подпись по хэшу (${algorithmLabel}) успешно сформирована.`, "success");
+        } catch (error) {
+            handlePluginError(error);
+        }
+    }
+
+    async function signHashDetached() {
+        try {
+            await waitForPlugin();
+        } catch (error) {
+            handlePluginError(error);
+            return;
+        }
+
+        const thumbprint = certificateList.value;
+        if (!thumbprint) {
+            setStatus("Сначала выберите сертификат в списке.", "error");
+            return;
+        }
+
+        const entry = certificateCache.get(thumbprint);
+        if (!entry || !entry.certificate) {
+            setStatus("Не удалось получить выбранный сертификат. Попробуйте запросить список заново.", "error");
+            return;
+        }
+
+        detachedSignatureOutput.value = "";
+
+        try {
+            const normalizedHex = normalizeHexDigest(hashInput.value);
+            const validation = validateHexDigest(normalizedHex);
+            if (!validation.valid) {
+                setStatus(validation.error, "error");
+                return;
+            }
+
+            const { hashedData, algorithmLabel } = await createHashedDataFromDigest(entry, normalizedHex);
+            setStatus(`Формируем CAdES подпись по хэшу (${algorithmLabel}).`, "info");
+
+            const signer = await window.cadesplugin.CreateObjectAsync("CAdESCOM.CPSigner");
+            await signer.propset_Certificate(entry.certificate);
+            await signer.propset_CheckCertificate(true);
+
+            const signedData = await window.cadesplugin.CreateObjectAsync("CAdESCOM.CadesSignedData");
+            await signedData.propset_ContentEncoding(window.cadesplugin.CADESCOM_BASE64_TO_BINARY);
+            await signedData.propset_Content("");
+
+            const signature = await signedData.SignHash(
+                hashedData,
+                signer,
+                window.cadesplugin.CADESCOM_CADES_BES
+            );
+
+            detachedSignatureOutput.value = signature;
+            setStatus(`Detached CAdES подпись по хэшу (${algorithmLabel}) успешно сформирована.`, "success");
+        } catch (error) {
+            handlePluginError(error);
+        }
+    }
+
     function updateCertificateInfo() {
         const option = certificateList.options[certificateList.selectedIndex];
         if (!option) {
             certificateInfo.hidden = true;
+            updateHashButtonsState();
             return;
         }
 
@@ -416,6 +682,7 @@ $defaultPhrase = "Демонстрационная фраза для подпи�
         infoValidFrom.textContent = option.dataset.validFrom ? formatDate(new Date(option.dataset.validFrom)) : "-";
         infoValidTo.textContent = option.dataset.validTo ? formatDate(new Date(option.dataset.validTo)) : "-";
         certificateInfo.hidden = false;
+        updateHashButtonsState();
     }
 
     loadButton.addEventListener("click", () => {
@@ -432,7 +699,31 @@ $defaultPhrase = "Демонстрационная фраза для подпи�
         });
     });
 
-    certificateList.addEventListener("change", updateCertificateInfo);
+    certificateList.addEventListener("change", () => {
+        updateCertificateInfo();
+        clearHashOutputs();
+    });
+
+    hashInput.addEventListener("input", () => {
+        clearHashOutputs();
+        updateHashButtonsState();
+    });
+
+    signRawHashButton.addEventListener("click", () => {
+        signRawHashButton.disabled = true;
+        signDetachedHashButton.disabled = true;
+        signHashRaw().finally(() => {
+            updateHashButtonsState();
+        });
+    });
+
+    signDetachedHashButton.addEventListener("click", () => {
+        signRawHashButton.disabled = true;
+        signDetachedHashButton.disabled = true;
+        signHashDetached().finally(() => {
+            updateHashButtonsState();
+        });
+    });
 
     waitForPlugin()
         .then(() => setStatus("Плагин CryptoPro загружен. Нажмите «Запросить сертификаты».", "info"))
