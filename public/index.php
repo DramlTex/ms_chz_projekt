@@ -472,6 +472,53 @@ function esc(?string $value): string
             font-size: 0.95rem;
         }
 
+        .nk-auth-block {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            background: #eef2ff;
+            border: 1px solid rgba(67, 100, 216, 0.25);
+        }
+
+        .nk-auth-block__info {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            min-width: 200px;
+        }
+
+        .nk-auth-block__title {
+            margin: 0;
+            font-weight: 600;
+            font-size: 0.95rem;
+            color: #1f2937;
+        }
+
+        .nk-auth-block__status {
+            margin: 0;
+            font-size: 0.85rem;
+            color: #4b5563;
+        }
+
+        .nk-auth-block__status--active {
+            color: var(--success);
+            font-weight: 600;
+        }
+
+        .nk-auth-block__actions {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .nk-auth-block .button {
+            flex: 0 0 auto;
+        }
+
         #signLog {
             background: #0f172a;
             color: #f8fafc;
@@ -688,6 +735,16 @@ function esc(?string $value): string
                 <button type="button" class="button button--secondary" id="loadAwaiting">Отметить ожидающие подписи</button>
                 <button type="button" class="button button--ghost" id="refreshAwaitingList">Обновить список</button>
             </div>
+            <div class="nk-auth-block" id="nkAuthBlock">
+                <div class="nk-auth-block__info">
+                    <p class="nk-auth-block__title">Авторизация Национального каталога</p>
+                    <p class="nk-auth-block__status" id="nkAuthStatus">Токен не получен.</p>
+                </div>
+                <div class="nk-auth-block__actions">
+                    <button type="button" class="button button--ghost" id="nkAuthBtn">Получить токен</button>
+                    <button type="button" class="button button--ghost" id="nkAuthResetBtn">Сбросить токен</button>
+                </div>
+            </div>
             <button type="button" class="button button--primary" id="signSelectedBtn">Подписать выбранные</button>
             <div id="signLog">Инициализация CryptoPro…</div>
         </section>
@@ -720,6 +777,7 @@ function esc(?string $value): string
     signModal.classList.add('is-visible');
     signModal.setAttribute('aria-hidden', 'false');
     updateSelectionInfo();
+    refreshNkAuthStatus(false).catch(() => {});
   }
 
   function hideSignModal() {
@@ -909,6 +967,9 @@ function esc(?string $value): string
   const signButton = document.getElementById('signSelectedBtn');
   const loadAwaitingBtn = document.getElementById('loadAwaiting');
   const refreshAwaitingBtn = document.getElementById('refreshAwaitingList');
+  const nkAuthBtn = document.getElementById('nkAuthBtn');
+  const nkAuthResetBtn = document.getElementById('nkAuthResetBtn');
+  const nkAuthStatus = document.getElementById('nkAuthStatus');
   let certs = [];
 
   function logLine(message) {
@@ -957,6 +1018,9 @@ function esc(?string $value): string
       if (signButton) {
         signButton.disabled = certs.length === 0;
       }
+      if (nkAuthBtn) {
+        nkAuthBtn.disabled = certs.length === 0;
+      }
     }
   }
 
@@ -968,10 +1032,14 @@ function esc(?string $value): string
     cadesplugin.then(loadCertificates).catch((error) => {
       logLine('❌ CryptoPro: ' + (error.message || error));
       if (signButton) signButton.disabled = true;
+      if (nkAuthBtn) nkAuthBtn.disabled = true;
     });
   } else {
     logLine('❌ Плагин CryptoPro недоступен');
+    if (nkAuthBtn) nkAuthBtn.disabled = true;
   }
+
+  refreshNkAuthStatus(false).catch(() => {});
 
   const utf8ToB64 = (value) => window.btoa(unescape(encodeURIComponent(value)));
   const isBase64 = (value) => /^[0-9A-Za-z+/]+={0,2}$/.test(value.replace(/\s+/g, ''));
@@ -993,6 +1061,51 @@ function esc(?string $value): string
     await sd.propset_Content(window.atob(xmlB64));
     const pkcs7 = await sd.SignCades(signer, cadesplugin.CADESCOM_CADES_BES, true);
     return { pkcs7 };
+  }
+
+  async function signAttachedAuth(data, cert) {
+    const signer = await cadesplugin.CreateObjectAsync('CAdESCOM.CPSigner');
+    await signer.propset_Certificate(cert);
+    const sd = await cadesplugin.CreateObjectAsync('CAdESCOM.CadesSignedData');
+    if (typeof sd.propset_ContentEncoding === 'function' && typeof cadesplugin.CADESCOM_STRING_TO_UCS2LE !== 'undefined') {
+      try {
+        await sd.propset_ContentEncoding(cadesplugin.CADESCOM_STRING_TO_UCS2LE);
+      } catch (error) {
+        // устаревшие версии плагина могут не поддерживать установку кодировки
+      }
+    }
+    await sd.propset_Content(data);
+    return sd.SignCades(signer, cadesplugin.CADESCOM_CADES_BES);
+  }
+
+  function updateNkAuthStatus(text, active = false) {
+    if (!nkAuthStatus) return;
+    nkAuthStatus.textContent = text;
+    nkAuthStatus.classList.toggle('nk-auth-block__status--active', Boolean(active));
+  }
+
+  async function refreshNkAuthStatus(log = false) {
+    if (!nkAuthStatus) return;
+    try {
+      const response = await fetch('api/nk-auth.php?mode=status', { cache: 'no-store' });
+      const raw = await response.text();
+      if (!response.ok) throw new Error(`nk-auth status ${response.status}\n${raw}`);
+      const data = JSON.parse(raw);
+      if (data.active) {
+        const expiresAt = data.expiresAt ? new Date(data.expiresAt * 1000) : null;
+        updateNkAuthStatus(
+          expiresAt ? `Токен активен до ${expiresAt.toLocaleString()}` : 'Токен активен',
+          true,
+        );
+        if (log) logLine('ℹ️ Токен НК активен');
+      } else {
+        updateNkAuthStatus('Токен не получен.');
+        if (log) logLine('ℹ️ Токен НК отсутствует');
+      }
+    } catch (error) {
+      updateNkAuthStatus('Не удалось получить статус токена.');
+      if (log) logLine('❌ nk-auth status: ' + (error.message || error));
+    }
   }
 
   async function refreshAwaiting({ log = true, autoSelect = true, updateList = false } = {}) {
@@ -1053,6 +1166,71 @@ function esc(?string $value): string
   if (refreshAwaitingBtn) {
     refreshAwaitingBtn.addEventListener('click', () => {
       refreshAwaiting({ log: true, autoSelect: false, updateList: true }).catch(() => {});
+    });
+  }
+
+  if (nkAuthBtn) {
+    nkAuthBtn.addEventListener('click', async () => {
+      const selectedValue = signCertSelect ? signCertSelect.value : '';
+      const idx = selectedValue === '' ? -1 : Number(selectedValue);
+      const cert = idx >= 0 ? certs[idx] : undefined;
+      if (!cert) {
+        logLine('❌ Выберите сертификат для получения токена');
+        return;
+      }
+
+      logLine('=== Авторизация НК ===');
+
+      try {
+        const challengeResponse = await fetch('api/nk-auth.php');
+        const challengeText = await challengeResponse.text();
+        if (!challengeResponse.ok) {
+          throw new Error(`nk-auth challenge ${challengeResponse.status}\n${challengeText}`);
+        }
+        const challenge = JSON.parse(challengeText);
+        if (!challenge.uuid || !challenge.data) {
+          throw new Error('Некорректный ответ True API');
+        }
+        logLine('ℹ️ Получен challenge True API');
+
+        const signature = await signAttachedAuth(challenge.data, cert);
+        logLine('ℹ️ Подпись сформирована');
+
+        const tokenResponse = await fetch('api/nk-auth.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ uuid: challenge.uuid, signature }),
+        });
+        const tokenText = await tokenResponse.text();
+        if (!tokenResponse.ok) {
+          throw new Error(`nk-auth exchange ${tokenResponse.status}\n${tokenText}`);
+        }
+        const tokenData = JSON.parse(tokenText);
+        logLine('✅ Токен НК получен');
+        if (tokenData.expiresAt) {
+          const expiresAt = new Date(tokenData.expiresAt * 1000);
+          logLine('ℹ️ Токен действует до ' + expiresAt.toLocaleString());
+        }
+        await refreshNkAuthStatus(true);
+      } catch (error) {
+        logLine('❌ ' + (error.message || error));
+      }
+    });
+  }
+
+  if (nkAuthResetBtn) {
+    nkAuthResetBtn.addEventListener('click', async () => {
+      try {
+        const response = await fetch('api/nk-auth.php', { method: 'DELETE' });
+        const text = await response.text();
+        if (!response.ok) {
+          throw new Error(`nk-auth reset ${response.status}\n${text}`);
+        }
+        logLine('ℹ️ Токен НК сброшен');
+        await refreshNkAuthStatus(true);
+      } catch (error) {
+        logLine('❌ ' + (error.message || error));
+      }
     });
   }
 
