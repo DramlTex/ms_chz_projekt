@@ -1,5 +1,7 @@
 <?php
-require_once __DIR__ . '/config.php';
+declare(strict_types=1);
+
+require_once __DIR__ . '/../../config/app.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -15,10 +17,10 @@ try {
 
     $results = [];
     foreach ($payload['items'] as $item) {
-        $gtin    = trim($item['gtin']    ?? '');
-        $name    = trim($item['name']    ?? '');
-        $tnved   = trim($item['tnved']   ?? '');
-        $article = trim($item['article'] ?? '');
+        $gtin    = trim((string)($item['gtin']    ?? ''));
+        $name    = trim((string)($item['name']    ?? ''));
+        $tnved   = trim((string)($item['tnved']   ?? ''));
+        $article = trim((string)($item['article'] ?? ''));
 
         if ($gtin === '' || $name === '') {
             $results[] = ['gtin' => $gtin, 'error' => 'Недостаточно данных'];

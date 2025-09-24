@@ -1,15 +1,16 @@
 <?php
+declare(strict_types=1);
+
 /**
  * NkApi.php
  * Обёртка над REST-API Национального каталога (НКМТ).
  *
- * Требует:  config.php  — в котором объявлены:
+ * Требует:  config/app.php — в котором объявлены:
  *   • NK_BASE_URL
  *   • NK_API_KEY
  *   • функция curlRequest($method, $uri, $query = [], $body = null)
  */
-
-require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/../config/app.php';
 
 class NkApi
 {
@@ -38,26 +39,34 @@ class NkApi
 
     /**
      * Массовый запрос подробных карточек.
-     * POST /v4/product-batch
+     * GET /v3/feed-product
      *
      * @param int[] $ids  массив goodId (≤ 100)
      * @return array      массив goods, каждая содержит все поля + attributes
      */
-public static function feedProduct(array $ids): array
-{
-    if (!$ids) return [];
+    public static function feedProduct(array $ids): array
+    {
+        if (!$ids) {
+            return [];
+        }
 
-    $resp = curlRequest(
-        'GET',
-        '/v3/feed-product',
-        ['good_ids' => implode(';', $ids)]
-    );
+        $resp = curlRequest(
+            'GET',
+            '/v3/feed-product',
+            ['good_ids' => implode(';', $ids)]
+        );
 
-    /* сервер может вернуть result = [...] либо result = ['goods'=>[]] */
-    if (isset($resp['result'][0]))            return $resp['result'];          // ваш случай
-    if (isset($resp['result']['goods']))      return $resp['result']['goods'];
-    return [];
-}
+        /* сервер может вернуть result = [...] либо result = ['goods'=>[]] */
+        if (isset($resp['result'][0])) {
+            return $resp['result'];
+        }
+
+        if (isset($resp['result']['goods'])) {
+            return $resp['result']['goods'];
+        }
+
+        return [];
+    }
 
     /**
      * Получить подробную карточку по GTIN.
