@@ -2,7 +2,7 @@
 <head>
 <meta charset="utf-8">
 <title>Подписать карточки НК (detached)</title>
-<script src="cadesplugin_api.js"></script>
+<script src="assets/js/cadesplugin_api.js"></script>
 <style>
 body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;max-width:720px;margin:2rem auto;background:linear-gradient(120deg,#fdfbfb,#ebedee)}
 select{width:100%;padding:.6rem;margin-top:1rem}
@@ -31,9 +31,9 @@ function isBase64(str){
 function log(t){ $('log').textContent += '\n'+t; }
 
 async function loadCards(){
-  const resp = await fetch('list_for_sign.php');
+  const resp = await fetch('api/awaiting-list.php');
   const txt  = await resp.text();
-  if(!resp.ok){ log(`list_for_sign ${resp.status}\n${txt}`); return; }
+  if(!resp.ok){ log(`awaiting-list ${resp.status}\n${txt}`); return; }
   const data = JSON.parse(txt);
   if(data.error){ log(data.error); return; }
   const cont = $('cards');
@@ -80,7 +80,7 @@ $('go').onclick = async ()=>{
   if(!ids.length){ log('❌ Нет выбранных карточек'); return; }
 
   /* 1. получаем XML выбранных черновиков */
-  const xResp = await fetch('get_xml.php?ids='+ids.join(','));
+  const xResp = await fetch('api/get-xml.php?ids='+ids.join(','));
   const xTxt  = await xResp.text();
   if(!xResp.ok){ log(`get_xml ${xResp.status}\n${xTxt}`); return; }
   const list = JSON.parse(xTxt);
@@ -105,7 +105,7 @@ $('go').onclick = async ()=>{
   if(!pack.length){ log('✋ Нечего отправлять'); return; }
 
   /* 3. отправляем пакет */
-  const api = await fetch('send_signature.php',{
+  const api = await fetch('api/send-signature.php',{
     method :'POST',
     headers:{'Content-Type':'application/json'},
     body   : JSON.stringify({signPack:pack})

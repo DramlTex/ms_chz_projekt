@@ -7,7 +7,7 @@ $defaultPhrase = "Демонстрационная фраза для подпи�
     <meta charset="utf-8">
     <title>Тест подписи через CryptoPro</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <script src="cadesplugin_api.js"></script>
+    <script src="assets/js/cadesplugin_api.js"></script>
     <style>
         :root {
             color-scheme: light dark;

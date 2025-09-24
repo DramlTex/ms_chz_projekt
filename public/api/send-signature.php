@@ -1,11 +1,13 @@
 <?php
-require_once 'config.php';
+declare(strict_types=1);
+
+require_once __DIR__ . '/../../config/app.php';
 header('Content-Type: application/json; charset=utf-8');
 
 $payload = json_decode(file_get_contents('php://input'), true);
-if(!$payload || !isset($payload['signPack'])){
+if (!$payload || !isset($payload['signPack'])) {
     http_response_code(400);
-    echo '{"error":"Bad JSON"}';
+    echo json_encode(['error' => 'Bad JSON'], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
@@ -36,10 +38,11 @@ curl_setopt_array($ch, [
 
 $raw  = curl_exec($ch);
 $code = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-if($raw === false){
+if ($raw === false) {
     http_response_code(500);
-    echo json_encode(['error'=>'CURL: '.curl_error($ch)], JSON_UNESCAPED_UNICODE);
-    curl_close($ch);  exit;
+    echo json_encode(['error' => 'CURL: ' . curl_error($ch)], JSON_UNESCAPED_UNICODE);
+    curl_close($ch);
+    exit;
 }
 curl_close($ch);
 

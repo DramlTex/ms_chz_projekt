@@ -1,5 +1,7 @@
 <?php
-require_once __DIR__ . '/config.php';
+declare(strict_types=1);
+
+require_once __DIR__ . '/../../config/app.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -8,10 +10,10 @@ try {
         throw new RuntimeException('Method not allowed');
     }
 
-    $gtin    = trim($_POST['gtin']    ?? '');
-    $name    = trim($_POST['name']    ?? '');
-    $tnved   = trim($_POST['tnved']   ?? '');
-    $article = trim($_POST['article'] ?? '');
+    $gtin    = trim((string)($_POST['gtin']    ?? ''));
+    $name    = trim((string)($_POST['name']    ?? ''));
+    $tnved   = trim((string)($_POST['tnved']   ?? ''));
+    $article = trim((string)($_POST['article'] ?? ''));
 
     if ($gtin === '' || $name === '') {
         throw new RuntimeException('Недостаточно данных');
