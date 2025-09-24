@@ -1,0 +1,145 @@
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Подписать карточки НК (detached)</title>
+<script src="cadesplugin_api.js"></script>
+<style>
+body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;max-width:720px;margin:2rem auto;background:linear-gradient(120deg,#fdfbfb,#ebedee)}
+select{width:100%;padding:.6rem;margin-top:1rem}
+button{width:100%;padding:.6rem;margin-top:1rem;background:linear-gradient(135deg,#4b86db,#4277d6);color:#fff;border:0;border-radius:4px}
+#log{white-space:pre-wrap;border:1px solid #ccc;padding:1rem;margin-top:1rem;background:#fafafa}
+</style>
+</head>
+<body>
+<h2>Detached CAdES-BES → /v3/feed-product-sign-pkcs</h2>
+
+<select id="certs"><option>Загрузка сертификатов…</option></select>
+
+<div id="cards" style="margin-top:1rem"></div>
+
+<button id="go">Подписать выбранные</button>
+
+<div id="log">Инициализация CryptoPro…</div>
+
+<script>
+/* ── helpers ────────────────────────────────────────── */
+const $       = id => document.getElementById(id);
+const utf8ToB64 = s => btoa(unescape(encodeURIComponent(s)));
+function isBase64(str){
+  return /^[0-9A-Za-z+/]+={0,2}$/.test(str.replace(/\s+/g,''));
+}
+function log(t){ $('log').textContent += '\n'+t; }
+
+async function loadCards(){
+  const resp = await fetch('list_for_sign.php');
+  const txt  = await resp.text();
+  if(!resp.ok){ log(`list_for_sign ${resp.status}\n${txt}`); return; }
+  const data = JSON.parse(txt);
+  if(data.error){ log(data.error); return; }
+  const cont = $('cards');
+  cont.innerHTML = '';
+  for(const row of data){
+    const label = document.createElement('label');
+    label.style.display = 'block';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.value = row.goodId;
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(' ' + row.goodId + ' ' + (row.name||'')));
+    cont.appendChild(label);
+  }
+  if(!data.length) log('Нет карточек для подписи');
+}
+
+document.addEventListener('DOMContentLoaded', loadCards);
+
+/* ── загрузка сертификатов ─────────────────────────── */
+let certs=[];
+cadesplugin.then(async ()=>{
+  const store = await cadesplugin.CreateObjectAsync('CAdESCOM.Store');
+  await store.Open(2,'My',2);
+  const col = await store.Certificates;
+  const cnt = await col.Count;
+  $('certs').innerHTML='';
+  for(let i=1;i<=cnt;i++){
+    const c = await col.Item(i);
+    if(new Date(await c.ValidToDate) < new Date()) continue;
+    $('certs').add(new Option(await c.SubjectName, certs.length));
+    certs.push(c);
+  }
+  log('✅ Сертификаты загружены');
+  loadCards();
+}).catch(e=>log('❌ CryptoPro: '+e));
+
+/* ── кнопка «Подписать» ────────────────────────────── */
+$('go').onclick = async ()=>{
+  log('\n=== Новый запуск ===');
+  const cert = certs[$('certs').value];
+  if(!cert){ log('❌ Выберите сертификат'); return; }
+  const ids = Array.from(document.querySelectorAll('#cards input[type=checkbox]:checked')).map(c=>c.value);
+  if(!ids.length){ log('❌ Нет выбранных карточек'); return; }
+
+  /* 1. получаем XML выбранных черновиков */
+  const xResp = await fetch('get_xml.php?ids='+ids.join(','));
+  const xTxt  = await xResp.text();
+  if(!xResp.ok){ log(`get_xml ${xResp.status}\n${xTxt}`); return; }
+  const list = JSON.parse(xTxt);
+  if(list.error){ log(list.error); return; }
+  log(`ℹ️ К подписи: ${list.length}`);
+
+  /* 2. подписываем detached */
+  const pack = [];
+  for(const row of list){
+    try{
+      const src = row.xmlB64 ?? row.xml;             // что пришло от backend
+      const xmlB64 = isBase64(src) ? src.replace(/\s+/g,'') : utf8ToB64(src);
+      const {pkcs7} = await signDetached(xmlB64, cert);
+      pack.push({
+        goodId    : row.goodId,
+        base64Xml : xmlB64,
+        signature : pkcs7
+      });
+      log('✅ '+row.goodId);
+    }catch(e){ log('🔴 '+row.goodId+': '+(e.message||e)); }
+  }
+  if(!pack.length){ log('✋ Нечего отправлять'); return; }
+
+  /* 3. отправляем пакет */
+  const api = await fetch('send_signature.php',{
+    method :'POST',
+    headers:{'Content-Type':'application/json'},
+    body   : JSON.stringify({signPack:pack})
+  });
+  const raw = await api.text();
+  log('API:\n'+raw);
+  try{
+    const j = JSON.parse(raw);
+    if(j.signed?.length) log('🌿 Подписано: '+j.signed.join(', '));
+    if(j.errors?.length) log('⚠️ Ошибки:\n'+JSON.stringify(j.errors,null,2));
+  }catch{}
+};
+
+/* ── detached‑подпись ─────────────────────────────── */
+async function signDetached(xmlB64, cert){
+  const signer = await cadesplugin.CreateObjectAsync('CAdESCOM.CPSigner');
+  await signer.propset_Certificate(cert);
+
+  const sd = await cadesplugin.CreateObjectAsync('CAdESCOM.CadesSignedData');
+
+  /* попытка с BASE64_TO_BINARY */
+  try{
+    if(typeof sd.propset_ContentEncoding === 'function')
+      await sd.propset_ContentEncoding(cadesplugin.CADESCOM_BASE64_TO_BINARY);
+    await sd.propset_Content(xmlB64);
+    const pkcs7 = await sd.SignCades(signer, cadesplugin.CADESCOM_CADES_BES, true);
+    return {pkcs7};
+  }catch(e1){ log('ℹ️ attempt‑1: '+(e1.message||e1)); }
+
+  /* fallback: raw bytes */
+  await sd.propset_Content(atob(xmlB64));
+  const pkcs7 = await sd.SignCades(signer, cadesplugin.CADESCOM_CADES_BES, true);
+  return {pkcs7};
+}
+</script>
+</body>
+</html>
