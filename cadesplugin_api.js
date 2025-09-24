@@ -706,22 +706,130 @@
             nmcades_api_onload();
             return;
         }
-        var operaUrl = "chrome-extension://epebfcehmdedogndhlcacafjaacknbcm/nmcades_plugin_api.js";
-        var manifestv2Url = "chrome-extension://iifchhfnnmpdbibifmljnfjhpififfog/nmcades_plugin_api.js";
-        var manifestv3Url = "chrome-extension://pfhgbfnnjiafkhfdkmpiflachepdcjod/nmcades_plugin_api.js";
-        if (isYandex || isOpera) {
-            // в асинхронном варианте для Yandex пробуем подключить расширения по очереди
-            load_js_script(operaUrl, nmcades_api_onload, function () {
-                load_js_script(manifestv2Url, nmcades_api_onload, function () {
-                    load_js_script(manifestv3Url, nmcades_api_onload, plugin_loaded_error);
-                });
-            });
-            return;
+
+        var extensionQueue = [];
+        var attemptedExtensionIds = {};
+        var extensionIdRequestCompleted = false;
+        var isLoadingExtension = false;
+
+        function normalizeExtensionId(id) {
+            if (typeof id === "undefined" || id === null) {
+                return null;
+            }
+            if (typeof id !== "string") {
+                if (id.toString) {
+                    id = id.toString();
+                } else {
+                    return null;
+                }
+            }
+            var trimmed = id.trim();
+            if (!trimmed) {
+                return null;
+            }
+            if (trimmed.indexOf("chrome-extension://") === 0) {
+                trimmed = trimmed.substring("chrome-extension://".length);
+            }
+            var slashIndex = trimmed.indexOf("/");
+            if (slashIndex !== -1) {
+                trimmed = trimmed.substring(0, slashIndex);
+            }
+            var normalized = trimmed.toLowerCase();
+            if (!/^[a-z0-9]{32}$/.test(normalized)) {
+                cpcsp_console_log(cadesplugin.LOG_LEVEL_ERROR,
+                    "cadesplugin_api.js: некорректный ID расширения \"" + id + "\"");
+                return null;
+            }
+            return normalized;
         }
-        // для Chrome, Chromium, Chromium Edge расширение из Chrome store
-        load_js_script(manifestv2Url, nmcades_api_onload, function () {
-            load_js_script(manifestv3Url, nmcades_api_onload, plugin_loaded_error);
+
+        function enqueueExtensionId(id, toFront) {
+            var normalized = normalizeExtensionId(id);
+            if (!normalized) {
+                return false;
+            }
+            if (attemptedExtensionIds[normalized]) {
+                return false;
+            }
+            for (var i = 0; i < extensionQueue.length; i++) {
+                if (extensionQueue[i] === normalized) {
+                    return false;
+                }
+            }
+            if (toFront) {
+                extensionQueue.unshift(normalized);
+            } else {
+                extensionQueue.push(normalized);
+            }
+            cpcsp_console_log(cadesplugin.LOG_LEVEL_DEBUG,
+                "cadesplugin_api.js: поставлен в очередь ID расширения " + normalized + (toFront ? " (в начало)" : ""));
+            return true;
+        }
+
+        function loadNextExtension() {
+            if (plugin_resolved === 1 || isLoadingExtension) {
+                return;
+            }
+            if (!extensionQueue.length) {
+                if (extensionIdRequestCompleted) {
+                    cpcsp_console_log(cadesplugin.LOG_LEVEL_ERROR,
+                        "cadesplugin_api.js: не удалось загрузить ни одно расширение CryptoPro");
+                    plugin_loaded_error("Плагин недоступен");
+                }
+                return;
+            }
+            var nextId = extensionQueue.shift();
+            if (attemptedExtensionIds[nextId]) {
+                loadNextExtension();
+                return;
+            }
+            attemptedExtensionIds[nextId] = true;
+            isLoadingExtension = true;
+            var url = "chrome-extension://" + nextId + "/nmcades_plugin_api.js";
+            cpcsp_console_log(cadesplugin.LOG_LEVEL_INFO,
+                "cadesplugin_api.js: загрузка расширения из " + url);
+            load_js_script(url, function () {
+                isLoadingExtension = false;
+                nmcades_api_onload();
+            }, function () {
+                isLoadingExtension = false;
+                cpcsp_console_log(cadesplugin.LOG_LEVEL_ERROR,
+                    "cadesplugin_api.js: не удалось загрузить расширение из " + url);
+                loadNextExtension();
+            });
+        }
+
+        function finalizeExtensionIdRequest() {
+            if (extensionIdRequestCompleted) {
+                return;
+            }
+            extensionIdRequestCompleted = true;
+            loadNextExtension();
+        }
+
+        if (Array.isArray(window.cadespluginExtensionIds)) {
+            for (var i = 0; i < window.cadespluginExtensionIds.length; i++) {
+                enqueueExtensionId(window.cadespluginExtensionIds[i], false);
+            }
+        }
+        enqueueExtensionId(window.cadespluginExtensionId, false);
+        enqueueExtensionId(window.cadesplugin_extension_id, false);
+
+        get_extension_id(function (ext_id) {
+            extensionIdRequestCompleted = true;
+            enqueueExtensionId(ext_id, true);
+            loadNextExtension();
         });
+
+        window.setTimeout(finalizeExtensionIdRequest, 1500);
+
+        if (isYandex || isOpera) {
+            enqueueExtensionId("epebfcehmdedogndhlcacafjaacknbcm", false);
+        }
+        enqueueExtensionId("iifchhfnnmpdbibifmljnfjhpififfog", false);
+        enqueueExtensionId("pfhgbfnnjiafkhfdkmpiflachepdcjod", false);
+
+        loadNextExtension();
     }
 
     //Загружаем плагин для NPAPI
