@@ -1,0 +1,13 @@
+[2025-09-25T16:44:06+03:00] suz-settings updated
+[2025-09-25T16:44:06+03:00] suz-auth challenge requested
+[2025-09-25T16:44:06+03:00] suz-auth token request: omsConnection=2ee7d76e-aead-4a13-9434-9fa60c63fe6b, omsId=668cbcf0-e7b8-498e-959b-3f22f0aa907e
+[2025-09-25T16:44:07+03:00] suz-auth runtime error: True API не вернул clientToken СУЗ
+[2025-09-25T16:45:03+03:00] suz-settings updated
+[2025-09-25T16:45:03+03:00] suz-auth challenge requested
+[2025-09-25T16:45:03+03:00] suz-auth token request: omsConnection=2ee7d76e-aead-4a13-9434-9fa60c63fe6b, omsId=668cbcf0-e7b8-498e-959b-3f22f0aa907e
+[2025-09-25T16:45:04+03:00] suz-auth runtime error: True API не вернул clientToken СУЗ
+[2025-09-25T16:45:10+03:00] suz-settings updated
+[2025-09-25T16:45:11+03:00] suz-settings updated
+[2025-09-25T16:45:11+03:00] suz-auth challenge requested
+[2025-09-25T16:45:11+03:00] suz-auth token request: omsConnection=2ee7d76e-aead-4a13-9434-9fa60c63fe6b, omsId=668cbcf0-e7b8-498e-959b-3f22f0aa907e
+[2025-09-25T16:45:12+03:00] suz-auth runtime error: True API не вернул clientToken СУЗ
