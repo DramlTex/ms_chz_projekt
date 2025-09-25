@@ -13,24 +13,9 @@ if ($gtin !== '' && nkGetAuthTokenMeta() !== null) {
     }
 }
 
-$trueMeta = orderGetTrueApiTokenMeta();
-$suzMeta = orderGetSuzTokenMeta();
-$suzContext = orderGetSuzContext();
-
 $initialData = [
-    'gtin'  => $gtin,
-    'card'  => $initialCard,
-    'trueApi' => [
-        'active'    => $trueMeta !== null,
-        'expiresAt' => $trueMeta['expires_at'] ?? null,
-    ],
-    'suz' => [
-        'active'       => $suzMeta !== null,
-        'expiresAt'    => $suzMeta['expires_at'] ?? null,
-        'omsId'        => $suzMeta['oms_id'] ?? $suzContext['oms_id'] ?? '',
-        'omsConnection'=> $suzMeta['oms_connect'] ?? $suzContext['oms_connect'] ?? '',
-    ],
-    'suzContext' => $suzContext,
+    'gtin' => $gtin,
+    'card' => $initialCard,
 ];
 ?>
 <!DOCTYPE html>
@@ -178,22 +163,6 @@ $initialData = [
             font-size: 1.05rem;
         }
 
-        .status-pill {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.35rem;
-            background: rgba(21, 127, 47, 0.12);
-            color: var(--success);
-            padding: 0.25rem 0.75rem;
-            border-radius: 999px;
-            font-size: 0.8rem;
-        }
-
-        .status-pill--inactive {
-            background: rgba(180, 35, 24, 0.12);
-            color: var(--danger);
-        }
-
         textarea,
         input[type="text"],
         input[type="number"],
@@ -287,11 +256,11 @@ $initialData = [
     <header class="page-header">
         <div>
             <h1>Заказ кодов маркировки</h1>
-            <p class="block__meta">Лёгкая промышленность • True API + СУЗ</p>
+            <p class="block__meta">Лёгкая промышленность • авторизация True API и СУЗ выполняется на главной странице</p>
         </div>
         <nav class="page-nav">
             <a class="button button--ghost" href="../index.php">← К карточкам</a>
-            <a class="button button--ghost" href="settings.php">Настройки OMS</a>
+            <a class="button button--ghost" href="../index.php?suz=1">Настройки OMS и СУЗ</a>
             <button type="button" class="button button--secondary" id="refreshStatus">Обновить статусы</button>
         </nav>
     </header>
@@ -303,47 +272,18 @@ $initialData = [
     </section>
 
     <section class="block">
-        <h2>Авторизация True API</h2>
-        <p class="block__meta">Токен используется для отправки документов `/lk/documents/create` и получения статусов.</p>
-        <div class="stack">
-            <div class="info-card" id="trueApiStatus"></div>
-            <div class="grid-two">
-                <div class="form-row">
-                    <label for="trueInn">ИНН владельца (опционально)</label>
-                    <input type="text" id="trueInn" placeholder="Например, 7700000000">
-                </div>
-                <div class="form-row">
-                    <label for="certSelect">Сертификат УКЭП</label>
-                    <select id="certSelect">
-                        <option value="">Загрузка сертификатов…</option>
-                    </select>
-                </div>
+        <h2>Сертификат УКЭП</h2>
+        <p class="block__meta">Используется для подписи документов, заказов и печатных форм. Токены True API и СУЗ получаются на главной странице.</p>
+        <div class="grid-two">
+            <div class="form-row">
+                <label for="certSelect">Сертификат УКЭП</label>
+                <select id="certSelect">
+                    <option value="">Загрузка сертификатов…</option>
+                </select>
             </div>
-            <div class="page-nav">
-                <button type="button" class="button button--primary" id="getTrueToken">Получить токен True API</button>
-                <button type="button" class="button button--ghost" id="resetTrueToken">Сбросить</button>
-            </div>
-        </div>
-    </section>
-
-    <section class="block">
-        <h2>Авторизация СУЗ</h2>
-        <p class="block__meta">Необходим `clientToken` и `omsId`, чтобы оформить заказ `/api/v3/order`.</p>
-        <div class="stack">
-            <div class="info-card" id="suzStatus"></div>
-            <div class="grid-two">
-                <div class="form-row">
-                    <label for="omsConnection">omsConnection</label>
-                    <input type="text" id="omsConnection" placeholder="GUID подключения">
-                </div>
-                <div class="form-row">
-                    <label for="omsId">omsId</label>
-                    <input type="text" id="omsId" placeholder="Например, 00000000-0000-0000-0000-000000000000">
-                </div>
-            </div>
-            <div class="page-nav">
-                <button type="button" class="button button--primary" id="getSuzToken">Получить clientToken</button>
-                <button type="button" class="button button--ghost" id="resetSuzToken">Сбросить</button>
+            <div class="info-card" id="certInfo">
+                <strong>Сертификат не выбран</strong>
+                <p class="block__meta">Выберите сертификат, чтобы подписывать документы и заказы.</p>
             </div>
         </div>
     </section>
@@ -433,16 +373,8 @@ $initialData = [
 (() => {
   const initial = <?php echo json_encode($initialData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
   const productInfo = document.getElementById('productInfo');
-  const trueStatus = document.getElementById('trueApiStatus');
-  const suzStatus = document.getElementById('suzStatus');
-  const trueButton = document.getElementById('getTrueToken');
-  const trueReset = document.getElementById('resetTrueToken');
-  const suzButton = document.getElementById('getSuzToken');
-  const suzReset = document.getElementById('resetSuzToken');
   const certSelect = document.getElementById('certSelect');
-  const trueInnInput = document.getElementById('trueInn');
-  const omsConnectionInput = document.getElementById('omsConnection');
-  const omsIdInput = document.getElementById('omsId');
+  const certInfoCard = document.getElementById('certInfo');
   const markCheckButton = document.getElementById('runMarkCheck');
   const markCheckLog = document.getElementById('markCheckLog');
   const cisInput = document.getElementById('cisInput');
@@ -473,10 +405,76 @@ $initialData = [
     return JSON.parse(trimmed);
   };
 
-  const renderProduct = (card) => {
+  const normalizeGtin = (value) => {
+    const raw = String(value ?? '').trim();
+    if (!raw) return '';
+    const digits = raw.replace(/\D+/g, '');
+    if (digits.length === 14) {
+      return digits;
+    }
+    if (digits.length === 13) {
+      return digits.startsWith('0') ? digits : `0${digits}`;
+    }
+    return raw;
+  };
+
+  const renderCertificateInfo = () => {
+    if (!certInfoCard) return;
+    certInfoCard.innerHTML = '';
+    if (!certs.length) {
+      const title = document.createElement('strong');
+      title.textContent = 'Сертификаты не найдены';
+      certInfoCard.appendChild(title);
+      const hint = document.createElement('p');
+      hint.className = 'block__meta';
+      hint.textContent = 'Установите CryptoPro Browser Plug-in и перезагрузите страницу.';
+      certInfoCard.appendChild(hint);
+      return;
+    }
+    if (currentCertIndex < 0 || !certs[currentCertIndex]) {
+      const title = document.createElement('strong');
+      title.textContent = 'Сертификат не выбран';
+      certInfoCard.appendChild(title);
+      const hint = document.createElement('p');
+      hint.className = 'block__meta';
+      hint.textContent = 'Выберите сертификат, чтобы подписывать документы и заказы.';
+      certInfoCard.appendChild(hint);
+      return;
+    }
+    const meta = certs[currentCertIndex];
+    const title = document.createElement('strong');
+    title.textContent = meta.summary || meta.subjectName || 'Сертификат';
+    certInfoCard.appendChild(title);
+    if (meta.issuerName) {
+      const issuer = document.createElement('p');
+      issuer.className = 'block__meta';
+      issuer.textContent = `Выдан: ${meta.issuerName}`;
+      certInfoCard.appendChild(issuer);
+    }
+    const validFromDate = meta.validFrom instanceof Date && !Number.isNaN(meta.validFrom.getTime()) ? meta.validFrom : null;
+    const validToDate = meta.validTo instanceof Date && !Number.isNaN(meta.validTo.getTime()) ? meta.validTo : null;
+    if (validFromDate || validToDate) {
+      const period = document.createElement('p');
+      period.className = 'block__meta';
+      const fromText = validFromDate ? validFromDate.toLocaleDateString() : '—';
+      const toText = validToDate ? validToDate.toLocaleDateString() : '—';
+      period.textContent = `Срок действия: ${fromText} — ${toText}`;
+      certInfoCard.appendChild(period);
+    }
+    if (meta.thumbprint) {
+      const thumb = document.createElement('p');
+      thumb.className = 'block__meta';
+      thumb.textContent = `Отпечаток: ${meta.thumbprint}`;
+      certInfoCard.appendChild(thumb);
+    }
+  };
+
+  const renderProduct = (card, fallbackGtin = '') => {
     productInfo.innerHTML = '';
     if (!card) {
-      productInfo.innerHTML = '<div class="info-card"><strong>Карточка не загружена</strong><p class="block__meta">Введите GTIN на предыдущей странице и убедитесь, что токен НК активен.</p></div>';
+      const gtinText = fallbackGtin || initialGtin || initial.gtin || '';
+      const hint = gtinText ? `Попробуйте ещё раз для GTIN ${gtinText}.` : 'Введите GTIN на предыдущей странице.';
+      productInfo.innerHTML = `<div class="info-card"><strong>Карточка не загружена</strong><p class="block__meta">${hint}</p></div>`;
       return;
     }
     const makeItem = (title, value) => `<div class="info-card"><strong>${title}</strong><p>${value || '—'}</p></div>`;
@@ -485,9 +483,10 @@ $initialData = [
       const entry = attrs.find((attr) => attr.attr_name === name);
       return entry ? entry.attr_value : '';
     };
+    const gtinValue = card.gtin || fallbackGtin || initialGtin || initial.gtin || '—';
     const html = [
       makeItem('Наименование', card.good_name || '—'),
-      makeItem('GTIN', card.gtin || initial.gtin || '—'),
+      makeItem('GTIN', gtinValue),
       makeItem('Производитель', findAttr('Производитель') || findAttr('Изготовитель')),
       makeItem('Артикул', findAttr('Модель / артикул производителя')),
       makeItem('Цвет', findAttr('Цвет')),
@@ -496,37 +495,8 @@ $initialData = [
     productInfo.innerHTML = html;
   };
 
-  const formatStatus = (meta) => {
-    if (!meta?.active) {
-      return '<span class="status-pill status-pill--inactive">Токен отсутствует</span>';
-    }
-    if (!meta.expiresAt) {
-      return '<span class="status-pill">Активен</span>';
-    }
-    const date = new Date(meta.expiresAt * 1000);
-    return `<span class="status-pill">Активен до ${date.toLocaleString()}</span>`;
-  };
-
-  const renderTrueStatus = (meta) => {
-    trueStatus.innerHTML = `${formatStatus(meta)}<p class="block__meta">Используется для вызовов True API</p>`;
-  };
-
-  const renderSuzStatus = (meta) => {
-    const info = [];
-    if (meta?.omsId) info.push(`omsId: ${meta.omsId}`);
-    if (meta?.omsConnection) info.push(`omsConnection: ${meta.omsConnection}`);
-    suzStatus.innerHTML = `${formatStatus(meta)}<p class="block__meta">${info.join(' • ')}</p>`;
-    if (meta?.omsId) {
-      omsIdInput.value = meta.omsId;
-    }
-    if (meta?.omsConnection) {
-      omsConnectionInput.value = meta.omsConnection;
-    }
-  };
-
-  renderProduct(initial.card);
-  renderTrueStatus(initial.trueApi);
-  renderSuzStatus(initial.suz);
+  const initialGtin = normalizeGtin(initial.gtin);
+  renderProduct(initial.card, initialGtin);
 
   async function fetchJson(url, options) {
     const response = await fetch(url, options);
@@ -551,11 +521,13 @@ $initialData = [
 
   async function loadProduct(gtin) {
     if (!gtin) return;
+    const normalized = normalizeGtin(gtin);
+    const query = normalized || gtin;
     try {
-      const data = await fetchJson(`../api/orders/product.php?gtin=${encodeURIComponent(gtin)}`);
-      renderProduct(data.card);
+      const data = await fetchJson(`../api/orders/product.php?gtin=${encodeURIComponent(query)}`);
+      renderProduct(data.card, query);
     } catch (error) {
-      renderProduct(null);
+      renderProduct(null, query);
       console.error(error);
     }
   }
@@ -570,6 +542,9 @@ $initialData = [
   const loadCertificates = async () => {
     certs = [];
     currentCertIndex = -1;
+    if (certInfoCard) {
+      certInfoCard.innerHTML = '<strong>Загрузка сертификатов…</strong>';
+    }
     try {
       store = await cadesplugin.CreateObjectAsync('CAdESCOM.Store');
       await store.Open();
@@ -596,22 +571,33 @@ $initialData = [
         option.value = '';
         option.textContent = 'Сертификаты не найдены';
         certSelect.appendChild(option);
+        renderCertificateInfo();
       } else {
         currentCertIndex = 0;
         certSelect.value = '0';
+        renderCertificateInfo();
       }
     } catch (error) {
       console.error('Certificates error', error);
       certSelect.innerHTML = '<option value="">Ошибка загрузки сертификатов</option>';
+      certs = [];
+      currentCertIndex = -1;
+      if (certInfoCard) {
+        certInfoCard.innerHTML = '<strong>Ошибка загрузки сертификатов</strong><p class="block__meta">Проверьте плагин CryptoPro.</p>';
+      }
     } finally {
       if (store) {
         try { await store.Close(); } catch (e) { /* ignore */ }
+      }
+      if (certs.length === 0) {
+        renderCertificateInfo();
       }
     }
   };
 
   const selectCertificate = (index) => {
     currentCertIndex = index;
+    renderCertificateInfo();
   };
 
   certSelect?.addEventListener('change', (event) => {
@@ -622,7 +608,12 @@ $initialData = [
   if (typeof cadesplugin !== 'undefined' && typeof cadesplugin.then === 'function') {
     cadesplugin.then(loadCertificates).catch((error) => {
       console.error('CryptoPro', error);
+      if (certInfoCard) {
+        certInfoCard.innerHTML = '<strong>CryptoPro недоступен</strong><p class="block__meta">Проверьте установку плагина и перезагрузите страницу.</p>';
+      }
     });
+  } else if (certInfoCard) {
+    certInfoCard.innerHTML = '<strong>CryptoPro недоступен</strong><p class="block__meta">Установите плагин, чтобы выбрать сертификат.</p>';
   }
 
   async function signAttached(data, cert) {
@@ -654,66 +645,6 @@ $initialData = [
     }
     return certs[currentCertIndex].cert;
   };
-
-  trueButton?.addEventListener('click', async () => {
-    try {
-      const cert = ensureCert();
-      const challenge = await fetchJson('../api/orders/true-api-auth.php?mode=challenge');
-      const signature = await signAttached(challenge.data, cert);
-      const payload = { uuid: challenge.uuid, signature };
-      const inn = trueInnInput?.value.trim();
-      if (inn) {
-        payload.details = { inn };
-      }
-      const response = await fetchJson('../api/orders/true-api-auth.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      renderTrueStatus({ active: true, expiresAt: response.expiresAt });
-    } catch (error) {
-      alert(error.message || error);
-    }
-  });
-
-  trueReset?.addEventListener('click', async () => {
-    try {
-      await fetchJson('../api/orders/true-api-auth.php', { method: 'DELETE' });
-      renderTrueStatus({ active: false });
-    } catch (error) {
-      alert(error.message || error);
-    }
-  });
-
-  suzButton?.addEventListener('click', async () => {
-    try {
-      const cert = ensureCert();
-      const challenge = await fetchJson('../api/orders/suz-auth.php?mode=challenge');
-      const signature = await signAttached(challenge.data, cert);
-      const omsConnection = omsConnectionInput.value.trim();
-      const omsId = omsIdInput.value.trim();
-      if (!omsConnection || !omsId) {
-        throw new Error('Заполните omsConnection и omsId');
-      }
-      const response = await fetchJson('../api/orders/suz-auth.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uuid: challenge.uuid, signature, omsConnection, omsId }),
-      });
-      renderSuzStatus({ active: true, expiresAt: response.expiresAt, omsId, omsConnection });
-    } catch (error) {
-      alert(error.message || error);
-    }
-  });
-
-  suzReset?.addEventListener('click', async () => {
-    try {
-      await fetchJson('../api/orders/suz-auth.php', { method: 'DELETE' });
-      renderSuzStatus({ active: false });
-    } catch (error) {
-      alert(error.message || error);
-    }
-  });
 
   markCheckButton?.addEventListener('click', async () => {
     resetLog(markCheckLog, '=== mark-check ===');

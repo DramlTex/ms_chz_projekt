@@ -11,6 +11,11 @@ $page        = max(1, (int)($_GET['page'] ?? 1));
 $search      = trim((string)($_GET['q'] ?? ''));
 $fromRaw     = trim((string)($_GET['from'] ?? ''));
 $toRaw       = trim((string)($_GET['to']   ?? ''));
+$statusFilter = strtolower(trim((string)($_GET['status'] ?? '')));
+$allowedStatuses = ['draft', 'waitsign', 'notsigned', 'published'];
+if ($statusFilter !== '' && !in_array($statusFilter, $allowedStatuses, true)) {
+    $statusFilter = '';
+}
 
 $normalizeDate = static function (string $value): string {
     if ($value === '') {
@@ -39,6 +44,17 @@ if ($toDate !== '') {
 
 $nkAuthActive = nkGetAuthTokenMeta() !== null;
 $cryptoProBootstrap = renderCryptoProExtensionBootstrap();
+$suzContext = orderGetSuzContext();
+$suzMeta    = orderGetSuzTokenMeta();
+$suzInitial = [
+    'context' => $suzContext,
+    'status'  => [
+        'active'        => $suzMeta !== null,
+        'expiresAt'     => $suzMeta['expires_at'] ?? null,
+        'omsId'         => $suzMeta['oms_id'] ?? $suzContext['oms_id'] ?? '',
+        'omsConnection' => $suzMeta['oms_connect'] ?? $suzContext['oms_connect'] ?? '',
+    ],
+];
 
 $all    = [];
 $total  = 0;
@@ -63,6 +79,12 @@ if ($nkAuthActive) {
             $name = mb_strtolower((string)($row['good_name'] ?? ''));
             $code = strtolower(gtin($row));
             return mb_stripos($name, $needle) !== false || str_contains($code, $needle);
+        }));
+    }
+
+    if ($statusFilter !== '') {
+        $all = array_values(array_filter($all, static function (array $row) use ($statusFilter): bool {
+            return strtolower((string)($row['good_status'] ?? '')) === $statusFilter;
         }));
     }
 
@@ -108,6 +130,18 @@ function gtin(array $row): string
 function esc(?string $value): string
 {
     return htmlspecialchars((string)$value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+}
+
+function status_label(string $status): string
+{
+    $map = [
+        'draft'     => 'Черновик',
+        'published' => 'Опубликована',
+        'waitsign'  => 'Ожидает подписания',
+        'notsigned' => 'Требует изменений',
+    ];
+    $key = strtolower($status);
+    return $map[$key] ?? $status;
 }
 ?>
 <!DOCTYPE html>
@@ -196,7 +230,8 @@ function esc(?string $value): string
         }
 
         .filters input[type="text"],
-        .filters input[type="datetime-local"] {
+        .filters input[type="datetime-local"],
+        .filters select {
             padding: 0.6rem 0.75rem;
             border-radius: 8px;
             border: 1px solid var(--border-color);
@@ -738,6 +773,118 @@ function esc(?string $value): string
             color: #4b5563;
         }
 
+        .modal-window--settings {
+            max-width: 960px;
+            width: 100%;
+        }
+
+        .suz-settings {
+            display: flex;
+            flex-direction: column;
+            gap: 1.75rem;
+        }
+
+        .suz-settings__header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1.5rem;
+        }
+
+        .suz-settings__title {
+            margin: 0;
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .suz-settings__meta {
+            margin: 0.3rem 0 0;
+            color: #4b5563;
+        }
+
+        .suz-settings__grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1.25rem;
+        }
+
+        .suz-form-row {
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+
+        .suz-form-row label {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #4b5563;
+        }
+
+        .suz-form-row input,
+        .suz-form-row textarea,
+        .suz-form-row select {
+            padding: 0.6rem 0.75rem;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            font-size: 0.95rem;
+            font-family: inherit;
+            background: #f9fafb;
+        }
+
+        .suz-form-row textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        .suz-status-card {
+            border-radius: 12px;
+            border: 1px dashed rgba(67, 100, 216, 0.35);
+            background: rgba(67, 100, 216, 0.08);
+            padding: 1rem 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            border-radius: 999px;
+            padding: 0.3rem 0.9rem;
+            background: rgba(21, 127, 47, 0.12);
+            color: #157f2f;
+            font-weight: 600;
+            font-size: 0.85rem;
+        }
+
+        .status-pill--inactive {
+            background: rgba(180, 35, 24, 0.12);
+            color: #b42318;
+        }
+
+        .suz-actions {
+            display: flex;
+            justify-content: flex-end;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            margin-top: 1rem;
+        }
+
+        .settings-log {
+            font-family: "Fira Code", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+            font-size: 0.85rem;
+            background: #0f172a;
+            color: #e2e8f0;
+            border-radius: 12px;
+            padding: 1rem;
+            min-height: 120px;
+            max-height: 240px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            margin: 0;
+        }
+
         @media (max-width: 1024px) {
             body { padding: 1.5rem; }
             .page { padding: 1.75rem; }
@@ -770,6 +917,7 @@ function esc(?string $value): string
         <div class="page__actions">
             <button type="button" class="button button--ghost" id="openNkAuthModal">Авторизация</button>
             <button type="button" class="button button--primary" id="openSignModal">Подписание карточек</button>
+            <button type="button" class="button button--secondary" id="openSuzSettings">Настройки OMS и СУЗ</button>
         </div>
     </header>
 
@@ -792,6 +940,15 @@ function esc(?string $value): string
         <label>
             Дата создания до
             <input type="datetime-local" name="to" value="<?= esc($toRaw) ?>">
+        </label>
+        <label>
+            Статус карточки
+            <select name="status">
+                <option value="">Все статусы</option>
+                <?php foreach ($allowedStatuses as $code): ?>
+                    <option value="<?= esc($code) ?>" <?= $statusFilter === $code ? 'selected' : '' ?>><?= esc(status_label($code)) ?></option>
+                <?php endforeach; ?>
+            </select>
         </label>
         <div>
             <button type="submit" class="button button--secondary">Применить фильтр</button>
@@ -823,13 +980,26 @@ function esc(?string $value): string
 
                 $gtin = gtin($row);
                 $status = (string)($row['good_status'] ?? '');
-                $detailed = array_filter((array)($row['good_detailed_status'] ?? []));
+                $statusKey = strtolower($status);
+                $statusLabel = status_label($status);
+                $detailedRaw = array_filter((array)($row['good_detailed_status'] ?? []), static fn ($item) => trim((string)$item) !== '');
+                $detailed = [];
+                foreach ($detailedRaw as $item) {
+                    $normalized = strtolower((string)$item);
+                    if ($normalized === $statusKey || $normalized === '') {
+                        continue;
+                    }
+                    $label = status_label((string)$item);
+                    if (!in_array($label, $detailed, true)) {
+                        $detailed[] = $label;
+                    }
+                }
                 $statusClass = [
                     'draft' => 'status-draft',
                     'notsigned' => 'status-notsigned',
                     'waitsign' => 'status-waitSign',
                     'published' => 'status-published',
-                ][$status] ?? '';
+                ][$statusKey] ?? '';
             ?>
             <tr class="<?= $statusClass ?>"
                 data-id="<?= esc($id) ?>"
@@ -856,7 +1026,7 @@ function esc(?string $value): string
                     </dl>
                 </td>
                 <td>
-                    <span class="status-badge <?= esc($statusClass) ?>"><?= esc($status ?: '—') ?></span>
+                    <span class="status-badge <?= esc($statusClass) ?>"><?= esc($statusLabel ?: '—') ?></span>
                     <?php if ($detailed): ?>
                         <ul class="status-list">
                             <?php foreach ($detailed as $item): ?>
@@ -883,17 +1053,17 @@ function esc(?string $value): string
         <button type="button" class="button button--primary" id="createSelected">Создать выбранные</button>
         <div class="pagination">
             <?php if ($page > 1): ?>
-                <a href="?<?= http_build_query(['page' => $page - 1, 'q' => $search, 'from' => $fromRaw, 'to' => $toRaw]) ?>">&laquo; Назад</a>
+                <a href="?<?= http_build_query(['page' => $page - 1, 'q' => $search, 'from' => $fromRaw, 'to' => $toRaw, 'status' => $statusFilter]) ?>">&laquo; Назад</a>
             <?php endif; ?>
             <?php for ($i = 1; $i <= $pages; $i++): ?>
                 <?php if ($i === $page): ?>
                     <span class="current"><?= $i ?></span>
                 <?php else: ?>
-                    <a href="?<?= http_build_query(['page' => $i, 'q' => $search, 'from' => $fromRaw, 'to' => $toRaw]) ?>"><?= $i ?></a>
+                    <a href="?<?= http_build_query(['page' => $i, 'q' => $search, 'from' => $fromRaw, 'to' => $toRaw, 'status' => $statusFilter]) ?>"><?= $i ?></a>
                 <?php endif; ?>
             <?php endfor; ?>
             <?php if ($hasMore): ?>
-                <a href="?<?= http_build_query(['page' => $page + 1, 'q' => $search, 'from' => $fromRaw, 'to' => $toRaw]) ?>">Вперёд &raquo;</a>
+                <a href="?<?= http_build_query(['page' => $page + 1, 'q' => $search, 'from' => $fromRaw, 'to' => $toRaw, 'status' => $statusFilter]) ?>">Вперёд &raquo;</a>
             <?php endif; ?>
         </div>
     </div>
@@ -935,6 +1105,61 @@ function esc(?string $value): string
                     </div>
                 </div>
             </div>
+        </section>
+    </div>
+</div>
+
+<div id="suzSettingsModal" class="modal-overlay" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal-window modal-window--settings">
+        <button type="button" class="modal-close" aria-label="Закрыть настройки OMS">&times;</button>
+        <section class="suz-settings">
+            <header class="suz-settings__header">
+                <div>
+                    <h2 class="suz-settings__title">Настройки OMS и СУЗ</h2>
+                    <p class="suz-settings__meta">Сохраните параметры подключения и проверьте получение clientToken.</p>
+                </div>
+            </header>
+            <div class="suz-status-card" id="suzStatusCard"></div>
+            <div class="suz-settings__grid">
+                <div class="suz-form-row">
+                    <label for="suzOmsConnection">Идентификатор соединения (omsConnection)</label>
+                    <input type="text" id="suzOmsConnection" placeholder="GUID подключения">
+                </div>
+                <div class="suz-form-row">
+                    <label for="suzOmsId">OMS ID</label>
+                    <input type="text" id="suzOmsId" placeholder="00000000-0000-0000-0000-000000000000">
+                </div>
+                <div class="suz-form-row">
+                    <label for="suzParticipantInn">ИНН участника оборота</label>
+                    <input type="text" id="suzParticipantInn" placeholder="Например, 7700000000">
+                </div>
+                <div class="suz-form-row">
+                    <label for="suzStationUrl">Сервер станции управления заказами</label>
+                    <input type="text" id="suzStationUrl" placeholder="https://suzgrid.crpt.ru/api/v3">
+                </div>
+            </div>
+            <div class="suz-form-row">
+                <label for="suzLocationAddress">Адрес нахождения</label>
+                <textarea id="suzLocationAddress" placeholder="Город, улица, дом"></textarea>
+            </div>
+            <div class="suz-settings__grid">
+                <div class="suz-form-row">
+                    <label for="suzCert">Сертификат УКЭП</label>
+                    <select id="suzCert">
+                        <option value="">Загрузка сертификатов…</option>
+                    </select>
+                </div>
+                <div class="sign-cert-info" id="suzCertInfo">
+                    <p class="sign-cert-info__title">Сертификат не выбран.</p>
+                    <p class="sign-cert-info__meta">Выберите сертификат, чтобы подписать challenge True API.</p>
+                </div>
+            </div>
+            <div class="suz-actions">
+                <button type="button" class="button button--secondary" id="suzSaveSettings">Сохранить</button>
+                <button type="button" class="button button--primary" id="suzTestConnection">Тестовое подключение</button>
+                <button type="button" class="button button--ghost" id="suzResetToken">Сбросить token</button>
+            </div>
+            <pre class="settings-log" id="suzTestLog">Готово к тестированию…</pre>
         </section>
     </div>
 </div>
@@ -993,6 +1218,7 @@ function esc(?string $value): string
 <script>
 (() => {
   const nkAuthActive = <?php echo $nkAuthActive ? 'true' : 'false'; ?>;
+  const suzInitial = <?php echo json_encode($suzInitial, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
   const modal = document.getElementById('modal');
   const modalBody = document.getElementById('modal-body');
   const modalClose = modal.querySelector('.modal-close');
@@ -1000,8 +1226,11 @@ function esc(?string $value): string
   const signClose = signModal.querySelector('.modal-close');
   const nkAuthModal = document.getElementById('nkAuthModal');
   const nkAuthClose = nkAuthModal ? nkAuthModal.querySelector('.modal-close') : null;
+  const suzModal = document.getElementById('suzSettingsModal');
+  const suzClose = suzModal ? suzModal.querySelector('.modal-close') : null;
   const openNkAuthButton = document.getElementById('openNkAuthModal');
   const openSignButton = document.getElementById('openSignModal');
+  const openSuzButton = document.getElementById('openSuzSettings');
   const awaitingContainer = document.getElementById('awaitingList');
   const selectionInfo = document.getElementById('signSelection');
 
@@ -1041,6 +1270,20 @@ function esc(?string $value): string
     signModal.setAttribute('aria-hidden', 'true');
   }
 
+  function showSuzModal() {
+    if (!suzModal) return;
+    applySuzContext(suzState.context);
+    renderSuzStatus(suzState.status, suzState.context);
+    suzModal.classList.add('is-visible');
+    suzModal.setAttribute('aria-hidden', 'false');
+  }
+
+  function hideSuzModal() {
+    if (!suzModal) return;
+    suzModal.classList.remove('is-visible');
+    suzModal.setAttribute('aria-hidden', 'true');
+  }
+
   modalClose.addEventListener('click', hideModal);
   modal.addEventListener('click', (event) => {
     if (event.target === modal) hideModal();
@@ -1061,11 +1304,22 @@ function esc(?string $value): string
     });
   }
 
+  if (suzClose) {
+    suzClose.addEventListener('click', hideSuzModal);
+  }
+
+  if (suzModal) {
+    suzModal.addEventListener('click', (event) => {
+      if (event.target === suzModal) hideSuzModal();
+    });
+  }
+
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
       hideModal();
       hideSignModal();
       hideNkAuthModal();
+      hideSuzModal();
     }
   });
 
@@ -1080,6 +1334,17 @@ function esc(?string $value): string
       showSignModal();
       refreshAwaiting({ log: false, autoSelect: true, updateList: true }).catch(() => {});
     });
+  }
+
+  if (openSuzButton) {
+    openSuzButton.addEventListener('click', () => {
+      showSuzModal();
+    });
+  }
+
+  const urlParams = new URLSearchParams(window.location.search);
+  if ((urlParams.get('suz') === '1' || window.location.hash === '#suz-settings') && suzModal) {
+    showSuzModal();
   }
 
   async function sendCreate(product) {
@@ -1251,6 +1516,8 @@ function esc(?string $value): string
   const signCertInfo = document.getElementById('signCertInfo');
   const nkAuthCertSelect = document.getElementById('nkAuthCert');
   const nkAuthCertInfo = document.getElementById('nkAuthCertInfo');
+  const suzCertSelect = document.getElementById('suzCert');
+  const suzCertInfo = document.getElementById('suzCertInfo');
   const signLog = document.getElementById('signLog');
   const signButton = document.getElementById('signSelectedBtn');
   const loadAwaitingBtn = document.getElementById('loadAwaiting');
@@ -1258,6 +1525,16 @@ function esc(?string $value): string
   const nkAuthBtn = document.getElementById('nkAuthBtn');
   const nkAuthResetBtn = document.getElementById('nkAuthResetBtn');
   const nkAuthStatus = document.getElementById('nkAuthStatus');
+  const suzStatusCard = document.getElementById('suzStatusCard');
+  const suzOmsConnectionInput = document.getElementById('suzOmsConnection');
+  const suzOmsIdInput = document.getElementById('suzOmsId');
+  const suzParticipantInnInput = document.getElementById('suzParticipantInn');
+  const suzStationUrlInput = document.getElementById('suzStationUrl');
+  const suzLocationAddressInput = document.getElementById('suzLocationAddress');
+  const suzSaveButton = document.getElementById('suzSaveSettings');
+  const suzTestButton = document.getElementById('suzTestConnection');
+  const suzResetButton = document.getElementById('suzResetToken');
+  const suzLog = document.getElementById('suzTestLog');
   let certs = [];
   const certMeta = [];
   let currentCertIndex = -1;
@@ -1265,6 +1542,7 @@ function esc(?string $value): string
   const certInfoTargets = [
     { container: signCertInfo, context: 'sign' },
     { container: nkAuthCertInfo, context: 'auth' },
+    { container: suzCertInfo, context: 'suz' },
   ];
 
   function logLine(message) {
@@ -1397,6 +1675,7 @@ function esc(?string $value): string
     const value = index >= 0 ? String(index) : '';
     setSelectValue(signCertSelect, value);
     setSelectValue(nkAuthCertSelect, value);
+    setSelectValue(suzCertSelect, value);
     certInfoTargets.forEach(({ container, context }) => {
       renderCertInfo(container, index, context);
     });
@@ -1405,7 +1684,7 @@ function esc(?string $value): string
   applyCertSelection(-1);
 
   async function loadCertificates() {
-    const certSelects = [signCertSelect, nkAuthCertSelect].filter(Boolean);
+    const certSelects = [signCertSelect, nkAuthCertSelect, suzCertSelect].filter(Boolean);
     if (!certSelects.length) return;
     certs = [];
     certMeta.length = 0;
@@ -1509,6 +1788,9 @@ function esc(?string $value): string
       if (nkAuthBtn) {
         nkAuthBtn.disabled = certs.length === 0;
       }
+      if (suzTestButton) {
+        suzTestButton.disabled = certs.length === 0;
+      }
     }
   }
 
@@ -1526,6 +1808,10 @@ function esc(?string $value): string
     nkAuthCertSelect.addEventListener('change', handleCertChange);
   }
 
+  if (suzCertSelect) {
+    suzCertSelect.addEventListener('change', handleCertChange);
+  }
+
   if (signButton) {
     signButton.disabled = true;
   }
@@ -1535,10 +1821,12 @@ function esc(?string $value): string
       logLine('❌ CryptoPro: ' + (error.message || error));
       if (signButton) signButton.disabled = true;
       if (nkAuthBtn) nkAuthBtn.disabled = true;
+      if (suzTestButton) suzTestButton.disabled = true;
     });
   } else {
     logLine('❌ Плагин CryptoPro недоступен');
     if (nkAuthBtn) nkAuthBtn.disabled = true;
+    if (suzTestButton) suzTestButton.disabled = true;
   }
 
   refreshNkAuthStatus(false).catch(() => {});
@@ -1610,6 +1898,99 @@ function esc(?string $value): string
     }
   }
 
+  const suzState = {
+    context: (suzInitial && typeof suzInitial === 'object' && suzInitial.context) || {},
+    status: (suzInitial && typeof suzInitial === 'object' && suzInitial.status) || {},
+  };
+
+  const formatSuzStatus = (meta) => {
+    if (!meta || !meta.active) {
+      return '<span class="status-pill status-pill--inactive">clientToken отсутствует</span>';
+    }
+    if (!meta.expiresAt) {
+      return '<span class="status-pill">Токен активен</span>';
+    }
+    const date = new Date(meta.expiresAt * 1000);
+    return `<span class="status-pill">Активен до ${date.toLocaleString()}</span>`;
+  };
+
+  const renderSuzStatus = (meta, context) => {
+    if (!suzStatusCard) return;
+    const info = [];
+    const connection = context?.oms_connect ?? context?.omsConnection ?? '';
+    const omsId = context?.oms_id ?? context?.omsId ?? '';
+    if (connection) info.push(`omsConnection: ${connection}`);
+    if (omsId) info.push(`omsId: ${omsId}`);
+    suzStatusCard.innerHTML = `${formatSuzStatus(meta)}<p class="suz-settings__meta">${info.join(' • ') || 'Параметры не заданы'}</p>`;
+  };
+
+  const applySuzContext = (context) => {
+    if (!context) return;
+    if (suzOmsConnectionInput) suzOmsConnectionInput.value = context.oms_connect || context.omsConnection || '';
+    if (suzOmsIdInput) suzOmsIdInput.value = context.oms_id || context.omsId || '';
+    if (suzParticipantInnInput) suzParticipantInnInput.value = context.participant_inn || context.participantInn || '';
+    if (suzStationUrlInput) suzStationUrlInput.value = context.station_url || context.stationUrl || '';
+    if (suzLocationAddressInput) suzLocationAddressInput.value = context.location_address || context.locationAddress || '';
+  };
+
+  const currentSuzContext = () => ({
+    omsConnection: suzOmsConnectionInput ? suzOmsConnectionInput.value.trim() : '',
+    omsId: suzOmsIdInput ? suzOmsIdInput.value.trim() : '',
+    participantInn: suzParticipantInnInput ? suzParticipantInnInput.value.trim() : '',
+    stationUrl: suzStationUrlInput ? suzStationUrlInput.value.trim() : '',
+    locationAddress: suzLocationAddressInput ? suzLocationAddressInput.value.trim() : '',
+  });
+
+  const logSuz = (message) => {
+    if (!suzLog) return;
+    suzLog.textContent += (suzLog.textContent ? '\n' : '') + message;
+    suzLog.scrollTop = suzLog.scrollHeight;
+  };
+
+  const resetSuzLog = () => {
+    if (suzLog) {
+      suzLog.textContent = '=== тест подключения ===';
+    }
+  };
+
+  async function fetchJson(url, options) {
+    const response = await fetch(url, options);
+    const text = await response.text();
+    if (!response.ok) {
+      throw new Error(`${url} → ${response.status}\n${text}`);
+    }
+    return text ? JSON.parse(text) : {};
+  }
+
+  const ensureCurrentCert = () => {
+    const idx = currentCertIndex;
+    const cert = idx >= 0 ? certs[idx] : undefined;
+    if (!cert) {
+      throw new Error('Выберите сертификат');
+    }
+    return cert;
+  };
+
+  const saveSuzContext = async (showLog = true) => {
+    const payload = currentSuzContext();
+    const response = await fetchJson('api/orders/suz-settings.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const context = response.context || payload;
+    suzState.context = context;
+    if (showLog) {
+      resetSuzLog();
+      logSuz('Настройки сохранены');
+    }
+    renderSuzStatus(suzState.status, context);
+    return context;
+  };
+
+  applySuzContext(suzState.context);
+  renderSuzStatus(suzState.status, suzState.context);
+
   async function refreshAwaiting({ log = true, autoSelect = true, updateList = false } = {}) {
     if (!loadAwaitingBtn) return { total: 0, matched: 0 };
     loadAwaitingBtn.disabled = true;
@@ -1668,6 +2049,73 @@ function esc(?string $value): string
   if (refreshAwaitingBtn) {
     refreshAwaitingBtn.addEventListener('click', () => {
       refreshAwaiting({ log: true, autoSelect: false, updateList: true }).catch(() => {});
+    });
+  }
+
+  if (suzSaveButton) {
+    suzSaveButton.addEventListener('click', async () => {
+      try {
+        await saveSuzContext(true);
+      } catch (error) {
+        alert(error.message || error);
+      }
+    });
+  }
+
+  if (suzTestButton) {
+    suzTestButton.addEventListener('click', async () => {
+      resetSuzLog();
+      try {
+        const context = await saveSuzContext(false);
+        const cert = ensureCurrentCert();
+        const connection = context.oms_connect || context.omsConnection;
+        const omsId = context.oms_id || context.omsId;
+        if (!connection) {
+          throw new Error('Заполните omsConnection');
+        }
+        if (!omsId) {
+          throw new Error('Заполните omsId');
+        }
+        logSuz('→ Запрос challenge в True API');
+        const challenge = await fetchJson('api/orders/suz-auth.php?mode=challenge');
+        if (!challenge.uuid || !challenge.data) {
+          throw new Error('Некорректный ответ True API');
+        }
+        logSuz('→ Подписываем challenge сертификатом');
+        const signature = await signAttachedAuth(challenge.data, cert);
+        logSuz('→ Обмениваем на clientToken');
+        const response = await fetchJson('api/orders/suz-auth.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ uuid: challenge.uuid, signature, omsConnection: connection, omsId }),
+        });
+        logSuz('✓ clientToken получен');
+        if (response.expiresAt) {
+          const date = new Date(response.expiresAt * 1000);
+          logSuz(`Токен действует до ${date.toLocaleString()}`);
+        }
+        suzState.status = { active: true, expiresAt: response.expiresAt };
+        renderSuzStatus(suzState.status, context);
+      } catch (error) {
+        logSuz('✗ Ошибка: ' + (error.message || error));
+        alert(error.message || error);
+      }
+    });
+  }
+
+  if (suzResetButton) {
+    suzResetButton.addEventListener('click', async () => {
+      resetSuzLog();
+      try {
+        await fetchJson('api/orders/suz-auth.php', { method: 'DELETE' });
+        logSuz('clientToken удалён');
+        suzState.status = { active: false };
+        suzState.context = currentSuzContext();
+        renderSuzStatus(suzState.status, suzState.context);
+      } catch (error) {
+        logSuz('✗ Ошибка: ' + (error.message || error));
+        alert(error.message || error);
+      }
     });
   }
 
