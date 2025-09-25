@@ -9,7 +9,7 @@ date_default_timezone_set('Europe/Moscow');
 //  БАЗОВЫЕ КОНСТАНТЫ
 // ---------------------------------------------------------------
 define('NK_BASE_URL', 'https://апи.национальный-каталог.рф');
-define('NK_API_KEY',  't2bgetnng1hhe0gi');
+define('NK_API_KEY',  getenv('NK_API_KEY') ?: '');
 define('TRUE_API_BASE_URL', getenv('TRUE_API_BASE_URL') ?: 'https://markirovka.crpt.ru/api/v3/true-api');
 
 define('NK_LOG', getenv('NK_LOG_PATH') ?: dirname(__DIR__) . '/nk_debug.log');
