@@ -1,53 +1,55 @@
 # Документация веб-страницы: `/orders/create`
 
+## История изменений
+- 2024-10-05 — Панель авторизации True API и СУЗ перенесена на главную страницу, на странице заказа остались выбор сертификата и действия с документами; запрос карточки теперь добавляет ведущий ноль к GTIN перед обращением в API.【F:public/index.php†L70-L188】【F:public/index.php†L944-L1090】【F:public/orders/create.php†L1-L120】【F:public/orders/create.php†L460-L520】
+
 ## 1. Назначение страницы и роль в продукте
-Страница предназначена для операторов лёгкой промышленности, которые оформляют заказы КМ. На одной форме пользователь выбирает карточку из НК, валидирует КИ, подписывает запросы УКЭП и отслеживает статусы документов True API/СУЗ. Ключевые метрики — количество успешно оформленных заказов, среднее время от загрузки страницы до отправки заказа, количество ошибок подписи.【F:docs/reference/national_catalog/extracted/catalog_api.txt†L2001-L2037】【F:docs/reference/true_api/extracted/true_api.txt†L7296-L7338】【F:docs/reference/suz/extracted/suz_pdf.txt†L1630-L1662】 Страница не занимается управлением складскими остатками и отчётами (`dispenser` покрывает отдельный раздел).
+Страница предназначена для операторов лёгкой промышленности, которые оформляют заказы КМ. Пользователь подгружает карточку НК, проверяет КИ, формирует документы и заказы, подписывает их УКЭП и отслеживает статусы True API/СУЗ. Авторизация и настройка OMS/СУЗ теперь выполняется на главной странице (`#suzSettingsModal`), поэтому на странице заказа остаётся только выбор сертификата и работа с готовыми токенами из сессии.【F:public/index.php†L70-L188】【F:public/index.php†L944-L1090】【F:public/orders/create.php†L1-L120】【F:public/orders/create.php†L460-L520】 Страница не занимается управлением складскими остатками и отчётами (`dispenser` покрывает отдельный раздел).
 
 ## 2. Информационная архитектура и навигация
 - Входы/откуда приходят: дашборд «Мои заказы», карточка товара (deep-link с параметром `gtin`).
-- Выходы/куда ведёт: страница статуса заказа (`/orders/:id`), раздел выгрузок (`/reports/dispenser`).
+- Выходы/куда ведёт: страница статуса заказа (`/orders/:id`), раздел выгрузок (`/reports/dispenser`), кнопка «Настройки OMS и СУЗ» ведёт на `/index.php?suz=1`, который открывает модал с настройками.【F:public/orders/create.php†L256-L306】【F:public/index.php†L70-L188】【F:public/orders/settings.php†L1-L5】
 - URL-паттерн: `/orders/create?gtin=<gtin>&inn=<inn>`; canonical — `/orders/create`.
 - Меню: раздел «Операции» → «Заказать КМ».
 
 ## 3. Состав страницы (UI-карта и состояния)
 | ID/селектор | Тип | Назначение | Условия показа | SSR/CSR | Варианты состояния |
 |---|---|---|---|---|---|
-| `#product-selector` | block | Поиск карточки НК по GTIN/ID | Всегда | CSR | idle, loading, error, selected |
-| `#product-details` | block | Просмотр полей карточки | Показывается при выбранном товаре | CSR | filled, collapsed |
-| `#cis-validation` | block | Ввод списка КИ и проверка `/v3/mark-check` | После выбора товара | CSR | idle, validating, success, error |
-| `#document-upload` | block | Прикрепление файлов (feed, сопроводительные) | Опционально (если требуется обновление) | CSR | empty, uploading, uploaded |
-| `#signature-panel` | block | Выбор сертификата и подпись `data` / `X-Signature` | Когда доступны данные для подписи | CSR | idle, signing, signed, error |
-| `#nkAuthModal` | block | Модалка авторизации НК с селектом `#nkAuthCert` | Показывается при отсутствии токена или по кнопке «Авторизация» | CSR | hidden, open |
-| `#submit-order` | atom | Кнопка отправки заказа | Активна после валидаций и подписей | CSR | enabled, disabled, loading |
-| `#status-timeline` | block | Показывает прогресс документов и заказов | После отправки | CSR | pending, processing, ready, failed |
-| `#websocket-alerts` | atom | Поток уведомлений воркера | После отправки | CSR | empty, info, error |
+| `#productInfo` | block | Просмотр карточки НК и атрибутов | Всегда; показывает заглушку при отсутствии данных | CSR | empty, filled |【F:public/orders/create.php†L268-L322】【F:public/orders/create.php†L460-L520】
+| `#certSelect`, `#certInfo` | atom/block | Выбор сертификата и сводка по нему | Всегда; обновляется через CryptoPro | CSR | loading, selected, empty, error |【F:public/orders/create.php†L256-L322】【F:public/orders/create.php†L460-L520】
+| `#cisInput`, `#markCheckLog` | block | Проверка КИ через `/api/orders/mark-check.php` | Доступно сразу после загрузки | CSR | idle, validating, success, error |【F:public/orders/create.php†L328-L368】【F:public/orders/create.php†L640-L720】
+| `#documentJson`, `#sendDocument`, `#documentLog` | block | Подготовка и отправка документа True API | Всегда | CSR | idle, signing, success, error |【F:public/orders/create.php†L368-L400】【F:public/orders/create.php†L720-L760】
+| `#orderJson`, `#sendOrder`, `#orderLog` | block | Формирование заказа СУЗ и подпись | Всегда | CSR | idle, signing, success, error |【F:public/orders/create.php†L400-L440】【F:public/orders/create.php†L760-L804】
+| `#codesList`, `#downloadPdf` | block | Генерация PDF с кодами | При наличии кодов в textarea | CSR | idle, ready |【F:public/orders/create.php†L400-L440】【F:public/orders/create.php†L804-L836】
+| `#statusBoard`, `#refreshStatus` | block | Отображение статусов документов и заказов | После нажатия «Обновить статусы» | CSR | empty, data, error |【F:public/orders/create.php†L400-L468】【F:public/orders/create.php†L836-L880】
 
-Критичные состояния: `#cis-validation` должен отображать ошибки с деталями (некорректный КИ, превышение лимита 100). `#signature-panel` содержит fallback «Установите CryptoPro» при отсутствии плагина, а `#nkAuthModal` синхронизирует выбор сертификата с панелью подписи.【F:docs/reference/national_catalog/extracted/catalog_api.txt†L5467-L5473】【F:docs/reference/true_api/extracted/true_api_quickstart.md†L64-L110】【F:public/index.php†L1216-L1370】
+Критичные состояния: `#certInfo` должен отображать ошибки загрузки сертификатов и подсказки без плагина, `#markCheckLog` и другие логи — выводить расшифровку ошибок API, `#statusBoard` — иметь читаемую заглушку при отсутствии данных.【F:public/orders/create.php†L256-L322】【F:public/orders/create.php†L640-L880】
 
 ## 4. Поведение и сценарии (user flows)
-1) `LOAD PAGE` → `fetch_product(gtin)` → `render details` → `user edits` → `cis validate` → `sign data` → `submit order` → `show status timeline`.
-2) Ошибка подписи: `sign data` → `SignatureError` → показать модалку с инструкцией (переподключить сертификат, проверить CryptoPro).
-3) Падение проверки КИ: `mark-check` вернул ошибку → вывести список проблемных КИ, запретить отправку до исправления.
-4) WebSocket уведомление `ORDER_CLOSED` → обновить таймлайн, предложить оформить выбытие.
-5) Нет токена НК → `showNkAuthModal()` → пользователь выбирает сертификат → `signAttachedAuth` → `refreshNkAuthStatus` → страница перезагружается для подтягивания карточек с новым токеном.【F:public/index.php†L997-L1004】【F:public/index.php†L1361-L1455】【F:public/index.php†L1640-L1684】
+1) `LOAD PAGE` → `normalizeGtin(gtin)` → `GET ../api/orders/product.php` → `renderProduct` заполняет карточку или показывает заглушку → пользователь при необходимости корректирует поля документа/заказа.【F:public/orders/create.php†L460-L520】【F:public/orders/create.php†L520-L600】
+2) Пользователь выбирает сертификат → `loadCertificates` читает CryptoPro → `renderCertificateInfo` показывает сведения или ошибки → действия без сертификата блокируются через `ensureCert`.【F:public/orders/create.php†L256-L322】【F:public/orders/create.php†L520-L620】【F:public/orders/create.php†L620-L720】
+3) `mark-check`: ввод кодов → `POST ../api/orders/mark-check.php` → результат выводится в `#markCheckLog`; ошибки записываются и не прерывают работу остальных блоков.【F:public/orders/create.php†L640-L720】
+4) `sendDocument`/`sendOrder`: JSON → `ensureCert` → `signDetachedBase64` → `POST create-document.php` или `create-suz-order.php` → ответы и ошибки пишутся в соответствующие логи; при успехе сохраняются идентификаторы для блока статусов.【F:public/orders/create.php†L720-L804】
+5) `refreshStatus`: пользователь вводит `docId`/`orderId` → `GET ../api/orders/status.php` → `renderStatusBoard` показывает данные или ошибки. Статусы True API/СУЗ рассчитываются на бэкенде, токены берутся из сессии (авторизация выполнена ранее через `/index.php?suz=1`).【F:public/orders/create.php†L836-L880】【F:public/index.php†L70-L188】【F:public/index.php†L944-L1090】
 
 ## 5. Данные и интеграции (API/контракты)
-- Источники данных: REST бекенд (`/api/catalog/product`, `/api/true-api/auth/key`, `/api/orders`), WebSocket `/ws/orders/:id`.
+- Источники данных: REST-бекенд (`../api/orders/product.php`, `mark-check.php`, `create-document.php`, `create-suz-order.php`, `status.php`, `print-codes.php`). Токены True API и СУЗ берутся из сессии, т.к. авторизация происходит на главной странице.【F:public/orders/create.php†L460-L520】【F:public/orders/create.php†L640-L880】【F:public/index.php†L70-L188】
 - Внешние API:
-  - `GET /v3/product` (НК) → карточка для заполнения заказа.【F:docs/reference/national_catalog/extracted/catalog_api.txt†L2001-L2037】
-  - `POST /v3/mark-check` → валидация КИ (лимит 100).【F:docs/reference/national_catalog/extracted/catalog_api.txt†L5467-L5473】
-  - `GET /auth/key` / `POST /auth/simpleSignIn` → токены True API/СУЗ.【F:docs/reference/true_api/extracted/true_api.txt†L1118-L1128】【F:docs/reference/true_api/extracted/true_api.txt†L1202-L1234】
-  - `POST /lk/documents/create` → единый документ True API.【F:docs/reference/true_api/extracted/true_api.txt†L7296-L7338】
-  - `POST /api/v3/order?omsId=...` → заказ в СУЗ.【F:docs/reference/suz/extracted/suz_pdf.txt†L1630-L1662】
-- Ошибки API отображаются inline с расшифровкой (400/403/429). Rate-limit фоны обрабатываются прогресс-барами.
+  - `GET /v3/product` (НК) — карточка товара, перед запросом GTIN нормализуется до 14 символов (добавляется ведущий ноль).【F:public/orders/create.php†L520-L600】
+  - `POST /v3/mark-check` — валидация КИ (до 100 кодов за вызов).【F:public/orders/create.php†L640-L720】
+  - `POST /lk/documents/create` — отправка документа True API (детали в `create-document.php`).【F:public/orders/create.php†L720-L760】
+  - `POST /api/v3/order` — создание заказа СУЗ (через `create-suz-order.php`).【F:public/orders/create.php†L760-L804】
+- Ошибки API выводятся в соответствующих логах (`#markCheckLog`, `#documentLog`, `#orderLog`) и через `alert` при необходимости; rate-limit не имеет отдельного UI, ошибки показываются как текст ответов.【F:public/orders/create.php†L640-L804】
 
 ## 6. Контент и локализация (i18n)
 | Ключ | Значение (ru) | Комментарий | Плейсхолдеры |
 |---|---|---|---|
-| `order.title` | Заказ кодов маркировки | Заголовок страницы | — |
-| `validation.cis.limit` | В одном запросе допускается не более 100 кодов. | Сообщение об ошибке проверки КИ | `{limit}` |
-| `signature.missing` | Установите CryptoPro Browser Plug-in и выберите сертификат. | Сообщение при отсутствии плагина | — |
-| `status.ready` | Готово к закрытию | Статус таймлайна | — |
+| `order.title` | Заказ кодов маркировки | Заголовок страницы | — |【F:public/orders/create.php†L21-L80】
+| `order.subtitle` | Лёгкая промышленность • авторизация True API и СУЗ выполняется на главной странице | Подзаголовок `p.block__meta` под заголовком | — |【F:public/orders/create.php†L248-L272】
+| `certificate.empty` | Сертификат не выбран | Карточка `#certInfo` | — |【F:public/orders/create.php†L256-L322】
+| `certificate.error` | CryptoPro недоступен. Проверьте установку плагина и перезагрузите страницу. | Сообщение при ошибке загрузки сертификатов | — |【F:public/orders/create.php†L560-L620】
+| `validation.cis.limit` | В одном запросе допускается не более 100 кодов. | Сообщение об ошибке проверки КИ | `{limit}` |【F:public/orders/create.php†L640-L720】
+| `status.empty` | Нет данных | Заглушка `#statusBoard` | — |【F:public/orders/create.php†L836-L880】
 
 Формат дат — `DD.MM.YYYY HH:mm`, суммы — ₽ с двумя знаками. Текст короткий, без пассивных форм.
 
@@ -73,7 +75,7 @@
 Конверсии не отправляются в рекламные сети (строго корпоративный доступ).
 
 ## 10. Производительность и медиа
-- LCP ≤ 2.5 c (основной блок `#product-selector` → использует SSR-шаблон без тяжёлых ресурсов).
+- LCP ≤ 2.5 c (основной блок `#productInfo` рендерится без тяжёлых ресурсов, карточка подтягивается отдельным запросом).【F:public/orders/create.php†L268-L322】【F:public/orders/create.php†L520-L600】
 - Списки КИ вводятся через textarea без перерисовок; результаты подтягиваются chunked.
 - Lazy-loading для справочников (`import()` модулей при открытии секции).
 
@@ -88,14 +90,14 @@
 - Поддерживаемые браузеры: Chromium 114+, Edge 114+, Госбраузер с CryptoPro plug-in (требование УКЭП). Safari не поддерживается для подписей.
 
 ## 13. Тестирование и критерии приёмки
-- Unit: валидация КИ (≤100), блокировка отправки без подписи.
-- E2E: happy-path (получение токенов, отправка заказа, закрытие), ошибка подписи, таймаут True API.
-- A11y: проверка фокусов, `aria-live` для ошибок, контрасты.
-- Smoke: загрузка карточки с GTIN, WebSocket уведомление `ORDER_CLOSED`.
+- Unit: валидация КИ (≤100), блокировка действий без выбранного сертификата (`ensureCert`).【F:public/orders/create.php†L620-L804】
+- E2E: happy-path (нормализация GTIN с лидирующим нулём, отправка документа и заказа, обновление статусов), ошибка подписи, таймаут True API/СУЗ.【F:public/orders/create.php†L520-L804】【F:public/orders/create.php†L836-L880】
+- A11y: проверка фокусов, доступности `#certInfo`, `#statusBoard`, сообщений в логах.
+- Smoke: загрузка карточки с 13-значным GTIN (ожидаем добавление ведущего нуля), отображение сообщения при отсутствии CryptoPro, выгрузка PDF с кодами.【F:public/orders/create.php†L520-L836】
 
 ## 14. Исполнительная часть (entrypoints/SSR/фичефлаги)
-- SSR рендерит пустой каркас с базовой информацией о пользователе; данные подтягиваются через CSR запросы.
-- PHP пробрасывает флаг `nkAuthActive`, и фронтенд автоматически открывает `#nkAuthModal`, если токен отсутствует; селект `#nkAuthCert` использует общий список сертификатов с `#signCert`.【F:public/index.php†L972-L979】【F:public/index.php†L1361-L1455】【F:public/index.php†L1783-L1785】
-- Feature flag `enableNKBulkFeed` включает/отключает блок загрузки feed.
+- SSR рендерит каркас и передаёт `initial` с GTIN и карточкой; все запросы выполняются на клиенте через REST-эндпоинты.【F:public/orders/create.php†L1-L120】【F:public/orders/create.php†L520-L804】
+- Загрузка сертификатов и подписи выполняются через CryptoPro (`cadesplugin`), а набор сертификатов синхронизируется с модалами на главной странице (`#suzSettingsModal`, `#nkAuthModal`).【F:public/index.php†L70-L188】【F:public/index.php†L1250-L1540】【F:public/orders/create.php†L256-L620】
+- Настройки OMS/СУЗ вызываются через редирект `/orders/settings.php` → `/index.php?suz=1`, где открывается модал с теми же API `suz-settings.php` и `suz-auth.php`.【F:public/orders/settings.php†L1-L5】【F:public/index.php†L70-L188】【F:public/index.php†L944-L1090】
 - Вход на страницу требует активной сессии и роли «operator_lp»; deep-link передаёт `gtin`.
 - Статический прототип для UX-согласований лежит в `web/index.html` и обращается к мокам `../servis_CHZ-MS/api/*.php`.【F:web/index.html†L664-L668】
