@@ -16,7 +16,6 @@ if ($gtin !== '' && nkGetAuthTokenMeta() !== null) {
 $trueMeta = orderGetTrueApiTokenMeta();
 $suzMeta = orderGetSuzTokenMeta();
 $suzContext = orderGetSuzContext();
-$cryptoProBootstrap = renderCryptoProExtensionBootstrap();
 
 $initialData = [
     'gtin'  => $gtin,
@@ -280,7 +279,7 @@ $initialData = [
             .page { padding: 2rem; }
         }
     </style>
-    <?php if ($cryptoProBootstrap !== '') { echo $cryptoProBootstrap, "\n"; } ?>
+    <script src="../api/crypto-pro-extension-bootstrap.php"></script>
     <script src="../assets/js/cadesplugin_api.js"></script>
 </head>
 <body>
