@@ -471,24 +471,85 @@ function esc(?string $value): string
         .sign-panel {
             display: flex;
             flex-direction: column;
-            gap: 1rem;
+            gap: 1.25rem;
         }
 
-        .sign-panel h2 {
+        .sign-panel__header {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .sign-panel__header h2 {
             margin: 0;
             font-size: 1.35rem;
         }
 
-        .sign-hint {
+        .sign-panel__intro {
             margin: 0;
             color: #6b7280;
             font-size: 0.9rem;
+        }
+
+        .sign-steps {
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+
+        .sign-step {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            padding: 1rem 1.25rem;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            background: #f9fafb;
+        }
+
+        .sign-step__header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .sign-step__badge {
+            width: 2.1rem;
+            height: 2.1rem;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--accent);
+            color: #fff;
+            font-weight: 600;
+            font-size: 0.85rem;
+        }
+
+        .sign-step__title {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 600;
+            color: #111827;
+        }
+
+        .sign-step__hint {
+            margin: 0;
+            color: #4b5563;
+            font-size: 0.9rem;
+        }
+
+        .sign-step__content {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
         }
 
         .sign-controls {
             display: flex;
             flex-wrap: wrap;
             gap: 0.75rem;
+            width: 100%;
         }
 
         .sign-controls select {
@@ -564,7 +625,8 @@ function esc(?string $value): string
             gap: 0.4rem;
             padding: 0.65rem;
             border-radius: 8px;
-            background: #f3f4f6;
+            background: #fff;
+            border: 1px dashed rgba(67, 100, 216, 0.35);
             min-height: 2.5rem;
         }
 
@@ -585,13 +647,35 @@ function esc(?string $value): string
             border-radius: 8px;
             border: 1px solid var(--border-color);
             padding: 0.75rem;
-            background: #f9fafb;
+            background: #fff;
             font-size: 0.85rem;
         }
 
         .awaiting-list ul {
             margin: 0;
             padding-left: 1.1rem;
+        }
+
+        .sign-cert-info {
+            border-radius: 8px;
+            border: 1px dashed rgba(67, 100, 216, 0.35);
+            background: #eef2ff;
+            padding: 0.75rem 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+            font-size: 0.85rem;
+            color: #1f2937;
+        }
+
+        .sign-cert-info__title {
+            margin: 0;
+            font-weight: 600;
+        }
+
+        .sign-cert-info__meta {
+            margin: 0;
+            color: #4b5563;
         }
 
         @media (max-width: 1024px) {
@@ -757,30 +841,54 @@ function esc(?string $value): string
     <div class="modal-window modal-window--wide">
         <button type="button" class="modal-close" aria-label="Закрыть окно подписи">&times;</button>
         <section class="sign-panel">
-            <div>
+            <header class="sign-panel__header">
                 <h2>Подписание карточек</h2>
-                <p class="sign-hint">Выберите сертификат, отметьте карточки и отправьте подпись. Можно автоматически отметить карточки, ожидающие подписи.</p>
-            </div>
-            <div class="sign-selection" id="signSelection" aria-live="polite">
-                <p class="sign-selection__empty">Нет выбранных карточек.</p>
-            </div>
-            <div class="awaiting-list" id="awaitingList" hidden></div>
-            <div class="sign-controls">
-                <select id="signCert">
-                    <option value="">Загрузка сертификатов…</option>
-                </select>
-                <button type="button" class="button button--secondary" id="loadAwaiting">Отметить ожидающие подписи</button>
-                <button type="button" class="button button--ghost" id="refreshAwaitingList">Обновить список</button>
-            </div>
-            <div class="nk-auth-block" id="nkAuthBlock">
-                <div class="nk-auth-block__info">
-                    <p class="nk-auth-block__title">Авторизация Национального каталога</p>
-                    <p class="nk-auth-block__status" id="nkAuthStatus">Токен не получен.</p>
-                </div>
-                <div class="nk-auth-block__actions">
-                    <button type="button" class="button button--ghost" id="nkAuthBtn">Получить токен</button>
-                    <button type="button" class="button button--ghost" id="nkAuthResetBtn">Сбросить токен</button>
-                </div>
+                <p class="sign-panel__intro">Пройдите шаги ниже: сначала авторизуйтесь в Национальном каталоге, затем выберите сертификат и отметьте карточки.</p>
+            </header>
+            <div class="sign-steps">
+                <article class="sign-step">
+                    <div class="sign-step__header">
+                        <span class="sign-step__badge">1</span>
+                        <h3 class="sign-step__title">Получите токен Национального каталога</h3>
+                    </div>
+                    <p class="sign-step__hint">Токен нужен для запросов к API. Его получает сотрудник, у которого есть действующий сертификат с правами подписи.</p>
+                    <div class="sign-step__content">
+                        <div class="nk-auth-block" id="nkAuthBlock">
+                            <div class="nk-auth-block__info">
+                                <p class="nk-auth-block__title">Авторизация Национального каталога</p>
+                                <p class="nk-auth-block__status" id="nkAuthStatus">Токен не получен.</p>
+                            </div>
+                            <div class="nk-auth-block__actions">
+                                <button type="button" class="button button--ghost" id="nkAuthBtn">Получить токен</button>
+                                <button type="button" class="button button--ghost" id="nkAuthResetBtn">Сбросить токен</button>
+                            </div>
+                        </div>
+                    </div>
+                </article>
+                <article class="sign-step">
+                    <div class="sign-step__header">
+                        <span class="sign-step__badge">2</span>
+                        <h3 class="sign-step__title">Выберите сертификат и отметьте карточки</h3>
+                    </div>
+                    <p class="sign-step__hint">Сертификаты отображаются в удобном виде. Можно автоматически отметить карточки, ожидающие подписи.</p>
+                    <div class="sign-step__content">
+                        <div class="sign-selection" id="signSelection" aria-live="polite">
+                            <p class="sign-selection__empty">Нет выбранных карточек.</p>
+                        </div>
+                        <div class="awaiting-list" id="awaitingList" hidden></div>
+                        <div class="sign-controls">
+                            <select id="signCert">
+                                <option value="">Загрузка сертификатов…</option>
+                            </select>
+                            <button type="button" class="button button--secondary" id="loadAwaiting">Отметить ожидающие подписи</button>
+                            <button type="button" class="button button--ghost" id="refreshAwaitingList">Обновить список</button>
+                        </div>
+                        <div class="sign-cert-info" id="signCertInfo">
+                            <p class="sign-cert-info__title">Сертификат не выбран.</p>
+                            <p class="sign-cert-info__meta">Выберите сертификат, чтобы посмотреть сведения о владельце и сроке действия.</p>
+                        </div>
+                    </div>
+                </article>
             </div>
             <button type="button" class="button button--primary" id="signSelectedBtn">Подписать выбранные</button>
             <div id="signLog">Инициализация CryptoPro…</div>
@@ -1000,6 +1108,7 @@ function esc(?string $value): string
   }
 
   const signCertSelect = document.getElementById('signCert');
+  const signCertInfo = document.getElementById('signCertInfo');
   const signLog = document.getElementById('signLog');
   const signButton = document.getElementById('signSelectedBtn');
   const loadAwaitingBtn = document.getElementById('loadAwaiting');
@@ -1008,6 +1117,7 @@ function esc(?string $value): string
   const nkAuthResetBtn = document.getElementById('nkAuthResetBtn');
   const nkAuthStatus = document.getElementById('nkAuthStatus');
   let certs = [];
+  const certMeta = [];
 
   function logLine(message) {
     if (!signLog) return;
@@ -1020,30 +1130,178 @@ function esc(?string $value): string
     signLog.textContent = '';
   }
 
+  const parseCertSubject = (value) => {
+    const text = String(value || '');
+    return text.split(',').reduce((acc, chunk) => {
+      const [rawKey, ...rawValue] = chunk.split('=');
+      if (!rawKey || !rawValue.length) return acc;
+      const key = rawKey.trim().toUpperCase();
+      const val = rawValue.join('=').trim();
+      if (!key || !val) return acc;
+      acc[key] = val;
+      return acc;
+    }, {});
+  };
+
+  const getSubjectValue = (subject, keys) => {
+    for (const key of keys) {
+      const upper = key.toUpperCase();
+      if (subject[upper]) return subject[upper];
+    }
+    return '';
+  };
+
+  const joinTruthy = (parts, separator = ' ') => parts.filter(Boolean).join(separator);
+
+  const truncateText = (value, maxLength = 120) => {
+    const text = String(value ?? '');
+    return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
+  };
+
+  const sanitizeDate = (date) => (Number.isNaN(date.getTime()) ? null : date);
+
+  const formatThumbprint = (value) => value.replace(/\s+/g, '').toUpperCase().replace(/(.{4})/g, '$1 ').trim();
+
+  function updateCertInfo(index) {
+    if (!signCertInfo) return;
+    signCertInfo.innerHTML = '';
+    signCertInfo.removeAttribute('title');
+    if (index < 0 || !certMeta[index]) {
+      const title = document.createElement('p');
+      title.className = 'sign-cert-info__title';
+      title.textContent = 'Сертификат не выбран.';
+      signCertInfo.appendChild(title);
+      const hint = document.createElement('p');
+      hint.className = 'sign-cert-info__meta';
+      hint.textContent = 'Выберите сертификат, чтобы посмотреть сведения о владельце и сроке действия.';
+      signCertInfo.appendChild(hint);
+      return;
+    }
+    const meta = certMeta[index];
+    const title = document.createElement('p');
+    title.className = 'sign-cert-info__title';
+    title.textContent = meta.summary || 'Сертификат';
+    signCertInfo.appendChild(title);
+
+    const positionLine = joinTruthy([meta.position, meta.org], ' • ');
+    if (positionLine) {
+      const line = document.createElement('p');
+      line.className = 'sign-cert-info__meta';
+      line.textContent = positionLine;
+      signCertInfo.appendChild(line);
+    }
+
+    if (meta.inn) {
+      const innLine = document.createElement('p');
+      innLine.className = 'sign-cert-info__meta';
+      innLine.textContent = 'ИНН: ' + meta.inn;
+      signCertInfo.appendChild(innLine);
+    }
+
+    if (meta.validFrom || meta.validTo) {
+      const period = document.createElement('p');
+      period.className = 'sign-cert-info__meta';
+      const fromText = meta.validFrom ? meta.validFrom.toLocaleDateString() : '—';
+      const toText = meta.validTo ? meta.validTo.toLocaleDateString() : '—';
+      period.textContent = 'Срок действия: ' + fromText + ' — ' + toText;
+      signCertInfo.appendChild(period);
+    }
+
+    if (meta.issuerOrg) {
+      const issuerLine = document.createElement('p');
+      issuerLine.className = 'sign-cert-info__meta';
+      issuerLine.textContent = 'Выдан: ' + meta.issuerOrg;
+      signCertInfo.appendChild(issuerLine);
+    }
+
+    if (meta.thumbprint) {
+      const thumbLine = document.createElement('p');
+      thumbLine.className = 'sign-cert-info__meta';
+      thumbLine.textContent = 'Отпечаток: ' + meta.thumbprint;
+      signCertInfo.appendChild(thumbLine);
+    }
+
+    if (meta.rawSubject || meta.rawIssuer) {
+      let tooltip = '';
+      if (meta.rawSubject) tooltip += 'Владелец: ' + meta.rawSubject;
+      if (meta.rawIssuer) tooltip += (tooltip ? '\n' : '') + 'Выдан: ' + meta.rawIssuer;
+      if (tooltip) signCertInfo.title = tooltip;
+    }
+  }
+
+  updateCertInfo(-1);
+
   async function loadCertificates() {
     if (!signCertSelect) return;
     certs = [];
+    certMeta.length = 0;
     signCertSelect.innerHTML = '';
+    signCertSelect.disabled = true;
+    updateCertInfo(-1);
     let store;
     try {
       store = await cadesplugin.CreateObjectAsync('CAdESCOM.Store');
       await store.Open(2, 'My', 2);
       const collection = await store.Certificates;
       const count = await collection.Count;
+      const now = new Date();
       for (let i = 1; i <= count; i++) {
         const cert = await collection.Item(i);
-        const validTo = new Date(await cert.ValidToDate);
-        if (validTo < new Date()) continue;
+        const validToRaw = new Date(await cert.ValidToDate);
+        if (Number.isNaN(validToRaw.getTime()) || validToRaw < now) continue;
+        const validFromRaw = new Date(await cert.ValidFromDate);
         const subject = await cert.SubjectName;
+        const issuer = await cert.IssuerName;
+        const subjectText = String(subject ?? '');
+        const issuerText = String(issuer ?? '');
+        const subjectMap = parseCertSubject(subjectText);
+        const issuerMap = parseCertSubject(issuerText);
+        const fio = getSubjectValue(subjectMap, ['CN'])
+          || joinTruthy([
+            getSubjectValue(subjectMap, ['SN', 'SURNAME']),
+            getSubjectValue(subjectMap, ['G', 'GN', 'GIVENNAME']),
+            getSubjectValue(subjectMap, ['S', 'PATRONYMIC']),
+          ]);
+        const position = getSubjectValue(subjectMap, ['T', 'TITLE']);
+        const org = getSubjectValue(subjectMap, ['O', 'OU', 'О']);
+        const inn = getSubjectValue(subjectMap, ['INN', 'ИНН']);
+        const issuerOrg = getSubjectValue(issuerMap, ['O', 'OU', 'О']);
+        const thumbprintRaw = await cert.Thumbprint;
+        const thumbprint = thumbprintRaw ? formatThumbprint(String(thumbprintRaw)) : '';
+        const optionParts = [];
+        if (fio) optionParts.push(fio);
+        if (position) optionParts.push(position);
+        if (org) optionParts.push(org);
+        const optionLabel = optionParts.join(' · ') || subjectText.replace(/\s*,\s*/g, ', ');
+        const summaryParts = [];
+        if (fio) summaryParts.push(fio);
+        if (org) summaryParts.push(org);
+        const summary = summaryParts.join(' • ') || optionLabel;
+        const index = certs.length;
         certs.push(cert);
-        signCertSelect.add(new Option(subject, String(certs.length - 1)));
+        certMeta.push({
+          summary,
+          position,
+          org,
+          inn,
+          validFrom: sanitizeDate(validFromRaw),
+          validTo: sanitizeDate(validToRaw),
+          issuerOrg,
+          thumbprint,
+          rawSubject: subjectText,
+          rawIssuer: issuerText,
+        });
+        const option = new Option(truncateText(optionLabel), String(index));
+        option.title = subjectText;
+        signCertSelect.add(option);
       }
       if (!certs.length) {
         signCertSelect.add(new Option('Нет действующих сертификатов', ''));
         logLine('⚠️ Действующих сертификатов не найдено');
       } else {
         signCertSelect.selectedIndex = 0;
-        logLine('✅ Сертификаты загружены');
+        updateCertInfo(0);
+        logLine(`✅ Сертификаты загружены (${certs.length})`);
       }
     } catch (error) {
       logLine('❌ CryptoPro: ' + (error.message || error));
@@ -1052,6 +1310,10 @@ function esc(?string $value): string
       if (store) {
         try { await store.Close(); } catch (e) { /* ignore */ }
       }
+      signCertSelect.disabled = certs.length === 0;
+      if (!certs.length) {
+        updateCertInfo(-1);
+      }
       if (signButton) {
         signButton.disabled = certs.length === 0;
       }
@@ -1059,6 +1321,14 @@ function esc(?string $value): string
         nkAuthBtn.disabled = certs.length === 0;
       }
     }
+  }
+
+  if (signCertSelect) {
+    signCertSelect.addEventListener('change', (event) => {
+      const value = event.target.value;
+      const index = value === '' ? -1 : Number(value);
+      updateCertInfo(Number.isNaN(index) ? -1 : index);
+    });
   }
 
   if (signButton) {
@@ -1349,6 +1619,11 @@ function esc(?string $value): string
         if (signButton) signButton.disabled = certs.length === 0;
       }
     });
+  }
+
+  if (signModal) {
+    showSignModal();
+    refreshAwaiting({ log: false, autoSelect: true, updateList: true }).catch(() => {});
   }
 })();
 </script>
