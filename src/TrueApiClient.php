@@ -53,7 +53,15 @@ final class TrueApiClient
         ], $details ? ['details' => $details] : []);
 
         $response = trueApiRequest('POST', '/auth/simpleSignIn/' . rawurlencode($omsConnection), [], $payload);
+
         $token = $response['client_token'] ?? ($response['clientToken'] ?? null);
+        if (!is_string($token) || $token === '') {
+            $fallbackToken = $response['token'] ?? null;
+            if (is_string($fallbackToken) && $fallbackToken !== '') {
+                $token = $fallbackToken;
+            }
+        }
+
         if (!is_string($token) || $token === '') {
             $responseDump = json_encode($response, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             if ($responseDump === false) {
