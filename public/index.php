@@ -38,6 +38,7 @@ if ($toDate !== '') {
 }
 
 $nkAuthActive = nkGetAuthTokenMeta() !== null;
+$cryptoProBootstrap = renderCryptoProExtensionBootstrap();
 
 $all    = [];
 $total  = 0;
@@ -609,6 +610,9 @@ function esc(?string $value): string
             table { min-width: 640px; }
         }
     </style>
+    <?php if ($cryptoProBootstrap !== '') {
+        echo $cryptoProBootstrap, "\n";
+    } ?>
     <script src="assets/js/cadesplugin_api.js"></script>
 </head>
 <body>

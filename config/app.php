@@ -11,6 +11,7 @@ date_default_timezone_set('Europe/Moscow');
 define('NK_BASE_URL', 'https://апи.национальный-каталог.рф');
 define('NK_API_KEY',  getenv('NK_API_KEY') ?: '');
 define('TRUE_API_BASE_URL', getenv('TRUE_API_BASE_URL') ?: 'https://markirovka.crpt.ru/api/v3/true-api');
+define('CRYPTO_PRO_PLUGIN_ID', getenv('CRYPTO_PRO_PLUGIN_ID') ?: 'cadesplugin');
 
 define('NK_LOG', getenv('NK_LOG_PATH') ?: dirname(__DIR__) . '/nk_debug.log');
 define('MS_LOG', getenv('MS_LOG_PATH') ?: dirname(__DIR__) . '/ms_debug.log');
@@ -21,6 +22,82 @@ define('MS_TOKEN',    '2fd9212e8b1d4d2a990e319265845f2e70b8cf52');
 define('NK_TOKEN_SESSION_KEY', 'nk_auth_token');
 define('NK_TOKEN_EXP_SAFETY_MARGIN', 60); // секунд
 define('NK_TOKEN_DEFAULT_TTL', 9 * 3600);   // 9 часов по умолчанию
+
+// ---------------------------------------------------------------
+//  НАСТРОЙКИ ПЛАГИНА CRYPTOPRO
+// ---------------------------------------------------------------
+function envList(string $value): array
+{
+    $value = trim($value);
+    if ($value === '') {
+        return [];
+    }
+
+    $parts = preg_split('/[\s,;]+/', $value);
+    if ($parts === false) {
+        return [];
+    }
+
+    $result = [];
+    foreach ($parts as $part) {
+        $candidate = trim($part);
+        if ($candidate === '' || in_array($candidate, $result, true)) {
+            continue;
+        }
+        $result[] = $candidate;
+    }
+
+    return $result;
+}
+
+function cryptoProExtensionConfig(): array
+{
+    static $cache = null;
+    if ($cache !== null) {
+        return $cache;
+    }
+
+    $singleId = trim((string)(getenv('CRYPTO_PRO_EXTENSION_ID') ?: ''));
+    $ids      = envList((string)(getenv('CRYPTO_PRO_EXTENSION_IDS') ?: ''));
+
+    if ($singleId === '' && isset($ids[0])) {
+        $singleId = $ids[0];
+    }
+
+    $cache = [
+        'id'  => $singleId !== '' ? $singleId : null,
+        'ids' => $ids,
+    ];
+
+    return $cache;
+}
+
+function renderCryptoProExtensionBootstrap(): string
+{
+    $config = cryptoProExtensionConfig();
+    $assignments = [];
+
+    if (!empty($config['id'])) {
+        $encoded = json_encode($config['id'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if ($encoded !== false) {
+            $assignments[] = "window.cadespluginExtensionId = {$encoded};";
+            $assignments[] = "window.cadesplugin_extension_id = {$encoded};";
+        }
+    }
+
+    if (!empty($config['ids'])) {
+        $encodedList = json_encode(array_values($config['ids']), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if ($encodedList !== false) {
+            $assignments[] = "window.cadespluginExtensionIds = {$encodedList};";
+        }
+    }
+
+    if (!$assignments) {
+        return '';
+    }
+
+    return "<script>(function(){\n" . implode("\n", $assignments) . "\n})();</script>";
+}
 
 // ---------------------------------------------------------------
 //  ЛОГИРОВАНИЕ

@@ -1,5 +1,8 @@
 <?php
+require_once __DIR__ . '/../bootstrap.php';
+
 $defaultPhrase = "Демонстрационная фраза для подписи через CryptoPro";
+$cryptoProBootstrap = renderCryptoProExtensionBootstrap();
 ?>
 <!DOCTYPE html>
 <html lang="ru">
@@ -7,6 +10,9 @@ $defaultPhrase = "Демонстрационная фраза для подпи�
     <meta charset="utf-8">
     <title>Тест подписи через CryptoPro</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <?php if ($cryptoProBootstrap !== '') {
+        echo $cryptoProBootstrap, "\n";
+    } ?>
     <script src="assets/js/cadesplugin_api.js"></script>
     <style>
         :root {
