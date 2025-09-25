@@ -157,6 +157,16 @@ function esc(?string $value): string
             gap: 1.5rem;
         }
 
+        .page__actions {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .page__actions .button {
+            white-space: nowrap;
+        }
+
         h1 {
             margin: 0;
             font-size: 2rem;
@@ -452,6 +462,35 @@ function esc(?string $value): string
             max-width: 720px;
         }
 
+        .nk-auth-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .nk-auth-panel__header {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .nk-auth-panel__header h2 {
+            margin: 0;
+            font-size: 1.25rem;
+        }
+
+        .nk-auth-panel__intro {
+            margin: 0;
+            color: #4b5563;
+            font-size: 0.9rem;
+        }
+
+        .nk-auth-panel__content {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
         .modal-close {
             position: absolute;
             top: 0.65rem;
@@ -558,6 +597,10 @@ function esc(?string $value): string
             border-radius: 8px;
             border: 1px solid var(--border-color);
             font-size: 0.95rem;
+        }
+
+        .sign-controls--cert select {
+            flex: 1 1 100%;
         }
 
         .nk-auth-block {
@@ -690,6 +733,7 @@ function esc(?string $value): string
         @media (max-width: 768px) {
             .page { padding: 1.5rem; }
             .page__header { flex-direction: column; align-items: stretch; }
+            .page__actions { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
             .table-wrap { overflow-x: auto; }
             table { min-width: 640px; }
         }
@@ -706,13 +750,16 @@ function esc(?string $value): string
             <h1>Карточки Национального каталога</h1>
             <p class="page__meta">Всего карточек: <?= $total ?> • Страница <?= $page ?> из <?= $pages ?></p>
         </div>
-        <button type="button" class="button button--primary" id="openSignModal">Подписание карточек</button>
+        <div class="page__actions">
+            <button type="button" class="button button--ghost" id="openNkAuthModal">Авторизация</button>
+            <button type="button" class="button button--primary" id="openSignModal">Подписание карточек</button>
+        </div>
     </header>
 
     <?php if (!$nkAuthActive): ?>
     <div class="auth-alert" role="alert">
         <strong>Требуется авторизация через True API.</strong>
-        <p>Перед загрузкой карточек получите bearer-токен НК: откройте панель «Подписание карточек» и нажмите «Получить токен» для подписи challenge сертификатом CryptoPro.</p>
+        <p>Перед загрузкой карточек получите bearer-токен НК: нажмите «Авторизация» и выполните подпись challenge сертификатом CryptoPro.</p>
     </div>
     <?php endif; ?>
 
@@ -837,55 +884,71 @@ function esc(?string $value): string
     </div>
 </div>
 
+<div id="nkAuthModal" class="modal-overlay" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal-window">
+        <button type="button" class="modal-close" aria-label="Закрыть окно авторизации">&times;</button>
+        <section class="nk-auth-panel">
+            <header class="nk-auth-panel__header">
+                <h2>Авторизация Национального каталога</h2>
+                <p class="nk-auth-panel__intro">Получите bearer-токен через True API, чтобы загружать карточки и выполнять подпись.</p>
+            </header>
+            <div class="nk-auth-panel__content">
+                <div class="nk-auth-block" id="nkAuthBlock">
+                    <div class="nk-auth-block__info">
+                        <p class="nk-auth-block__title">Авторизация Национального каталога</p>
+                        <p class="nk-auth-block__status" id="nkAuthStatus">Токен не получен.</p>
+                    </div>
+                    <div class="nk-auth-block__actions">
+                        <button type="button" class="button button--ghost" id="nkAuthBtn">Получить токен</button>
+                        <button type="button" class="button button--ghost" id="nkAuthResetBtn">Сбросить токен</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+</div>
+
 <div id="signModal" class="modal-overlay" role="dialog" aria-modal="true" aria-hidden="true">
     <div class="modal-window modal-window--wide">
         <button type="button" class="modal-close" aria-label="Закрыть окно подписи">&times;</button>
         <section class="sign-panel">
             <header class="sign-panel__header">
                 <h2>Подписание карточек</h2>
-                <p class="sign-panel__intro">Пройдите шаги ниже: сначала авторизуйтесь в Национальном каталоге, затем выберите сертификат и отметьте карточки.</p>
+                <p class="sign-panel__intro">Выберите сертификат, подготовьте карточки и отправьте подписи в Национальный каталог.</p>
             </header>
             <div class="sign-steps">
                 <article class="sign-step">
                     <div class="sign-step__header">
                         <span class="sign-step__badge">1</span>
-                        <h3 class="sign-step__title">Получите токен Национального каталога</h3>
+                        <h3 class="sign-step__title">Выберите сертификат для подписи</h3>
                     </div>
-                    <p class="sign-step__hint">Токен нужен для запросов к API. Его получает сотрудник, у которого есть действующий сертификат с правами подписи.</p>
+                    <p class="sign-step__hint">Поддерживаются действующие сертификаты CryptoPro с правами подписи.</p>
                     <div class="sign-step__content">
-                        <div class="nk-auth-block" id="nkAuthBlock">
-                            <div class="nk-auth-block__info">
-                                <p class="nk-auth-block__title">Авторизация Национального каталога</p>
-                                <p class="nk-auth-block__status" id="nkAuthStatus">Токен не получен.</p>
-                            </div>
-                            <div class="nk-auth-block__actions">
-                                <button type="button" class="button button--ghost" id="nkAuthBtn">Получить токен</button>
-                                <button type="button" class="button button--ghost" id="nkAuthResetBtn">Сбросить токен</button>
-                            </div>
+                        <div class="sign-controls sign-controls--cert">
+                            <select id="signCert">
+                                <option value="">Загрузка сертификатов…</option>
+                            </select>
+                        </div>
+                        <div class="sign-cert-info" id="signCertInfo">
+                            <p class="sign-cert-info__title">Сертификат не выбран.</p>
+                            <p class="sign-cert-info__meta">Выберите сертификат, чтобы посмотреть сведения о владельце и сроке действия.</p>
                         </div>
                     </div>
                 </article>
                 <article class="sign-step">
                     <div class="sign-step__header">
                         <span class="sign-step__badge">2</span>
-                        <h3 class="sign-step__title">Выберите сертификат и отметьте карточки</h3>
+                        <h3 class="sign-step__title">Подготовьте карточки к подписи</h3>
                     </div>
-                    <p class="sign-step__hint">Сертификаты отображаются в удобном виде. Можно автоматически отметить карточки, ожидающие подписи.</p>
+                    <p class="sign-step__hint">Отметьте карточки в таблице или автоматически выберите те, что ожидают подписи.</p>
                     <div class="sign-step__content">
                         <div class="sign-selection" id="signSelection" aria-live="polite">
                             <p class="sign-selection__empty">Нет выбранных карточек.</p>
                         </div>
                         <div class="awaiting-list" id="awaitingList" hidden></div>
-                        <div class="sign-controls">
-                            <select id="signCert">
-                                <option value="">Загрузка сертификатов…</option>
-                            </select>
+                        <div class="sign-controls sign-controls--actions">
                             <button type="button" class="button button--secondary" id="loadAwaiting">Отметить ожидающие подписи</button>
                             <button type="button" class="button button--ghost" id="refreshAwaitingList">Обновить список</button>
-                        </div>
-                        <div class="sign-cert-info" id="signCertInfo">
-                            <p class="sign-cert-info__title">Сертификат не выбран.</p>
-                            <p class="sign-cert-info__meta">Выберите сертификат, чтобы посмотреть сведения о владельце и сроке действия.</p>
                         </div>
                     </div>
                 </article>
@@ -903,6 +966,9 @@ function esc(?string $value): string
   const modalClose = modal.querySelector('.modal-close');
   const signModal = document.getElementById('signModal');
   const signClose = signModal.querySelector('.modal-close');
+  const nkAuthModal = document.getElementById('nkAuthModal');
+  const nkAuthClose = nkAuthModal ? nkAuthModal.querySelector('.modal-close') : null;
+  const openNkAuthButton = document.getElementById('openNkAuthModal');
   const openSignButton = document.getElementById('openSignModal');
   const awaitingContainer = document.getElementById('awaitingList');
   const selectionInfo = document.getElementById('signSelection');
@@ -916,6 +982,19 @@ function esc(?string $value): string
   function hideModal() {
     modal.classList.remove('is-visible');
     modal.setAttribute('aria-hidden', 'true');
+  }
+
+  function showNkAuthModal() {
+    if (!nkAuthModal) return;
+    nkAuthModal.classList.add('is-visible');
+    nkAuthModal.setAttribute('aria-hidden', 'false');
+    refreshNkAuthStatus(false).catch(() => {});
+  }
+
+  function hideNkAuthModal() {
+    if (!nkAuthModal) return;
+    nkAuthModal.classList.remove('is-visible');
+    nkAuthModal.setAttribute('aria-hidden', 'true');
   }
 
   function showSignModal() {
@@ -940,12 +1019,29 @@ function esc(?string $value): string
     if (event.target === signModal) hideSignModal();
   });
 
+  if (nkAuthClose) {
+    nkAuthClose.addEventListener('click', hideNkAuthModal);
+  }
+
+  if (nkAuthModal) {
+    nkAuthModal.addEventListener('click', (event) => {
+      if (event.target === nkAuthModal) hideNkAuthModal();
+    });
+  }
+
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
       hideModal();
       hideSignModal();
+      hideNkAuthModal();
     }
   });
+
+  if (openNkAuthButton) {
+    openNkAuthButton.addEventListener('click', () => {
+      showNkAuthModal();
+    });
+  }
 
   if (openSignButton) {
     openSignButton.addEventListener('click', () => {
