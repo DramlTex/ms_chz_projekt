@@ -14,6 +14,10 @@ require_once __DIR__ . '/NkApi.php';
  */
 function nkFetchAwaitingDrafts(?string $fromDate = null, ?string $toDate = null): array
 {
+    if (nkGetAuthToken() === null) {
+        throw new RuntimeException('Отсутствует bearer-токен НК. Получите его через True API перед запросами.');
+    }
+
     $fromDate = $fromDate ?: date('Y-m-d H:i:s', strtotime('-1 year'));
     $toDate   = $toDate   ?: date('Y-m-d H:i:s');
 

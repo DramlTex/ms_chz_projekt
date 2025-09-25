@@ -37,37 +37,48 @@ if ($toDate !== '') {
     $params['to_date'] = $toDate;
 }
 
-$batch  = 1000;
-$offset = 0;
+$nkAuthActive = nkGetAuthTokenMeta() !== null;
+
 $all    = [];
+$total  = 0;
+$pages  = 1;
+$cards  = [];
+$hasMore = false;
+$fulls  = [];
 
-do {
-    $chunk = NkApi::list($params, $batch, $offset);
-    $all   = array_merge($all, $chunk);
-    $offset += $batch;
-} while (count($chunk) === $batch);
+if ($nkAuthActive) {
+    $batch  = 1000;
+    $offset = 0;
 
-if ($search !== '') {
-    $needle = mb_strtolower($search);
-    $all = array_values(array_filter($all, static function (array $row) use ($needle): bool {
-        $name = mb_strtolower((string)($row['good_name'] ?? ''));
-        $code = strtolower(gtin($row));
-        return mb_stripos($name, $needle) !== false || str_contains($code, $needle);
-    }));
-}
+    do {
+        $chunk = NkApi::list($params, $batch, $offset);
+        $all   = array_merge($all, $chunk);
+        $offset += $batch;
+    } while (count($chunk) === $batch);
 
-$total   = count($all);
-$pages   = max(1, (int)ceil($total / $itemsPerPage));
-$page    = min($page, $pages);
-$cards   = array_slice($all, ($page - 1) * $itemsPerPage, $itemsPerPage);
-$hasMore = $page < $pages;
-
-$ids   = array_filter(array_column($cards, 'good_id'));
-$fulls = [];
-foreach (array_chunk($ids, 25) as $chunk) {
-    foreach (NkApi::feedProduct($chunk) as $good) {
-        $fulls[$good['good_id']] = $good;
+    if ($search !== '') {
+        $needle = mb_strtolower($search);
+        $all = array_values(array_filter($all, static function (array $row) use ($needle): bool {
+            $name = mb_strtolower((string)($row['good_name'] ?? ''));
+            $code = strtolower(gtin($row));
+            return mb_stripos($name, $needle) !== false || str_contains($code, $needle);
+        }));
     }
+
+    $total   = count($all);
+    $pages   = max(1, (int)ceil($total / $itemsPerPage));
+    $page    = min($page, $pages);
+    $cards   = array_slice($all, ($page - 1) * $itemsPerPage, $itemsPerPage);
+    $hasMore = $page < $pages;
+
+    $ids = array_filter(array_column($cards, 'good_id'));
+    foreach (array_chunk($ids, 25) as $chunk) {
+        foreach (NkApi::feedProduct($chunk) as $good) {
+            $fulls[$good['good_id']] = $good;
+        }
+    }
+} else {
+    $page = 1;
 }
 
 function attr(array $card, string $name): string
@@ -396,6 +407,21 @@ function esc(?string $value): string
             color: #fff;
         }
 
+        .auth-alert {
+            margin-top: 1.5rem;
+            padding: 1rem 1.25rem;
+            border-radius: 12px;
+            border: 1px solid rgba(183, 107, 0, 0.35);
+            background: #fff7ed;
+            color: #92400e;
+            line-height: 1.5;
+        }
+
+        .auth-alert strong {
+            display: block;
+            margin-bottom: 0.35rem;
+        }
+
         .modal-overlay {
             position: fixed;
             inset: 0;
@@ -594,6 +620,13 @@ function esc(?string $value): string
         </div>
         <button type="button" class="button button--primary" id="openSignModal">Подписание карточек</button>
     </header>
+
+    <?php if (!$nkAuthActive): ?>
+    <div class="auth-alert" role="alert">
+        <strong>Требуется авторизация через True API.</strong>
+        <p>Перед загрузкой карточек получите bearer-токен НК: откройте панель «Подписание карточек» и нажмите «Получить токен» для подписи challenge сертификатом CryptoPro.</p>
+    </div>
+    <?php endif; ?>
 
     <form method="get" class="filters">
         <label>
@@ -1212,6 +1245,8 @@ function esc(?string $value): string
           logLine('ℹ️ Токен действует до ' + expiresAt.toLocaleString());
         }
         await refreshNkAuthStatus(true);
+        logLine('ℹ️ Страница обновится, чтобы загрузить карточки с вашим токеном.');
+        setTimeout(() => window.location.reload(), 800);
       } catch (error) {
         logLine('❌ ' + (error.message || error));
       }
