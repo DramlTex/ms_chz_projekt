@@ -55,6 +55,11 @@ final class TrueApiClient
         $response = trueApiRequest('POST', '/auth/simpleSignIn/' . rawurlencode($omsConnection), [], $payload);
         $token = $response['client_token'] ?? ($response['clientToken'] ?? null);
         if (!is_string($token) || $token === '') {
+            $responseDump = json_encode($response, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            if ($responseDump === false) {
+                $responseDump = var_export($response, true);
+            }
+            ordersLog('suz-auth token exchange response without clientToken: ' . $responseDump);
             throw new RuntimeException('True API не вернул clientToken СУЗ');
         }
 
