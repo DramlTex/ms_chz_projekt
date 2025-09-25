@@ -597,6 +597,14 @@ function esc(?string $value): string
             border-radius: 8px;
             border: 1px solid var(--border-color);
             font-size: 0.95rem;
+            width: 100%;
+            max-width: 100%;
+            min-width: 0;
+        }
+
+        .sign-controls--cert {
+            flex: 1 1 320px;
+            min-width: 0;
         }
 
         .sign-controls--cert select {
@@ -607,12 +615,16 @@ function esc(?string $value): string
             display: flex;
             flex-wrap: wrap;
             gap: 0.75rem;
-            align-items: center;
-            justify-content: space-between;
+            align-items: flex-start;
+            justify-content: flex-start;
             padding: 0.75rem 1rem;
             border-radius: 8px;
             background: #eef2ff;
             border: 1px solid rgba(67, 100, 216, 0.25);
+        }
+
+        .nk-auth-block > * {
+            min-width: 0;
         }
 
         .nk-auth-block__info {
