@@ -898,6 +898,15 @@ function esc(?string $value): string
                         <p class="nk-auth-block__title">Авторизация Национального каталога</p>
                         <p class="nk-auth-block__status" id="nkAuthStatus">Токен не получен.</p>
                     </div>
+                    <div class="sign-controls sign-controls--cert">
+                        <select id="nkAuthCert">
+                            <option value="">Загрузка сертификатов…</option>
+                        </select>
+                    </div>
+                    <div class="sign-cert-info" id="nkAuthCertInfo">
+                        <p class="sign-cert-info__title">Сертификат не выбран.</p>
+                        <p class="sign-cert-info__meta">Выберите сертификат, чтобы получить токен для владельца.</p>
+                    </div>
                     <div class="nk-auth-block__actions">
                         <button type="button" class="button button--ghost" id="nkAuthBtn">Получить токен</button>
                         <button type="button" class="button button--ghost" id="nkAuthResetBtn">Сбросить токен</button>
@@ -961,6 +970,7 @@ function esc(?string $value): string
 
 <script>
 (() => {
+  const nkAuthActive = <?php echo $nkAuthActive ? 'true' : 'false'; ?>;
   const modal = document.getElementById('modal');
   const modalBody = document.getElementById('modal-body');
   const modalClose = modal.querySelector('.modal-close');
@@ -1205,6 +1215,8 @@ function esc(?string $value): string
 
   const signCertSelect = document.getElementById('signCert');
   const signCertInfo = document.getElementById('signCertInfo');
+  const nkAuthCertSelect = document.getElementById('nkAuthCert');
+  const nkAuthCertInfo = document.getElementById('nkAuthCertInfo');
   const signLog = document.getElementById('signLog');
   const signButton = document.getElementById('signSelectedBtn');
   const loadAwaitingBtn = document.getElementById('loadAwaiting');
@@ -1214,6 +1226,12 @@ function esc(?string $value): string
   const nkAuthStatus = document.getElementById('nkAuthStatus');
   let certs = [];
   const certMeta = [];
+  let currentCertIndex = -1;
+
+  const certInfoTargets = [
+    { container: signCertInfo, context: 'sign' },
+    { container: nkAuthCertInfo, context: 'auth' },
+  ];
 
   function logLine(message) {
     if (!signLog) return;
@@ -1258,40 +1276,42 @@ function esc(?string $value): string
 
   const formatThumbprint = (value) => value.replace(/\s+/g, '').toUpperCase().replace(/(.{4})/g, '$1 ').trim();
 
-  function updateCertInfo(index) {
-    if (!signCertInfo) return;
-    signCertInfo.innerHTML = '';
-    signCertInfo.removeAttribute('title');
+  function renderCertInfo(container, index, context) {
+    if (!container) return;
+    container.innerHTML = '';
+    container.removeAttribute('title');
     if (index < 0 || !certMeta[index]) {
       const title = document.createElement('p');
       title.className = 'sign-cert-info__title';
       title.textContent = 'Сертификат не выбран.';
-      signCertInfo.appendChild(title);
+      container.appendChild(title);
       const hint = document.createElement('p');
       hint.className = 'sign-cert-info__meta';
-      hint.textContent = 'Выберите сертификат, чтобы посмотреть сведения о владельце и сроке действия.';
-      signCertInfo.appendChild(hint);
+      hint.textContent = context === 'auth'
+        ? 'Выберите сертификат, чтобы получить токен для владельца.'
+        : 'Выберите сертификат, чтобы посмотреть сведения о владельце и сроке действия.';
+      container.appendChild(hint);
       return;
     }
     const meta = certMeta[index];
     const title = document.createElement('p');
     title.className = 'sign-cert-info__title';
     title.textContent = meta.summary || 'Сертификат';
-    signCertInfo.appendChild(title);
+    container.appendChild(title);
 
     const positionLine = joinTruthy([meta.position, meta.org], ' • ');
     if (positionLine) {
       const line = document.createElement('p');
       line.className = 'sign-cert-info__meta';
       line.textContent = positionLine;
-      signCertInfo.appendChild(line);
+      container.appendChild(line);
     }
 
     if (meta.inn) {
       const innLine = document.createElement('p');
       innLine.className = 'sign-cert-info__meta';
       innLine.textContent = 'ИНН: ' + meta.inn;
-      signCertInfo.appendChild(innLine);
+      container.appendChild(innLine);
     }
 
     if (meta.validFrom || meta.validTo) {
@@ -1300,40 +1320,67 @@ function esc(?string $value): string
       const fromText = meta.validFrom ? meta.validFrom.toLocaleDateString() : '—';
       const toText = meta.validTo ? meta.validTo.toLocaleDateString() : '—';
       period.textContent = 'Срок действия: ' + fromText + ' — ' + toText;
-      signCertInfo.appendChild(period);
+      container.appendChild(period);
     }
 
     if (meta.issuerOrg) {
       const issuerLine = document.createElement('p');
       issuerLine.className = 'sign-cert-info__meta';
       issuerLine.textContent = 'Выдан: ' + meta.issuerOrg;
-      signCertInfo.appendChild(issuerLine);
+      container.appendChild(issuerLine);
     }
 
     if (meta.thumbprint) {
       const thumbLine = document.createElement('p');
       thumbLine.className = 'sign-cert-info__meta';
       thumbLine.textContent = 'Отпечаток: ' + meta.thumbprint;
-      signCertInfo.appendChild(thumbLine);
+      container.appendChild(thumbLine);
     }
 
     if (meta.rawSubject || meta.rawIssuer) {
       let tooltip = '';
       if (meta.rawSubject) tooltip += 'Владелец: ' + meta.rawSubject;
       if (meta.rawIssuer) tooltip += (tooltip ? '\n' : '') + 'Выдан: ' + meta.rawIssuer;
-      if (tooltip) signCertInfo.title = tooltip;
+      if (tooltip) container.title = tooltip;
     }
   }
 
-  updateCertInfo(-1);
+  function setSelectValue(select, value) {
+    if (!select) return;
+    if (value === '') {
+      select.value = '';
+      if (select.value !== '') select.selectedIndex = -1;
+      return;
+    }
+    select.value = value;
+    if (select.value !== value) {
+      select.selectedIndex = -1;
+    }
+  }
+
+  function applyCertSelection(index) {
+    currentCertIndex = index;
+    const value = index >= 0 ? String(index) : '';
+    setSelectValue(signCertSelect, value);
+    setSelectValue(nkAuthCertSelect, value);
+    certInfoTargets.forEach(({ container, context }) => {
+      renderCertInfo(container, index, context);
+    });
+  }
+
+  applyCertSelection(-1);
 
   async function loadCertificates() {
-    if (!signCertSelect) return;
+    const certSelects = [signCertSelect, nkAuthCertSelect].filter(Boolean);
+    if (!certSelects.length) return;
     certs = [];
     certMeta.length = 0;
-    signCertSelect.innerHTML = '';
-    signCertSelect.disabled = true;
-    updateCertInfo(-1);
+    certSelects.forEach((select) => {
+      select.innerHTML = '';
+      select.disabled = true;
+      select.add(new Option('Загрузка сертификатов…', ''));
+    });
+    applyCertSelection(-1);
     let store;
     try {
       store = await cadesplugin.CreateObjectAsync('CAdESCOM.Store');
@@ -1341,6 +1388,7 @@ function esc(?string $value): string
       const collection = await store.Certificates;
       const count = await collection.Count;
       const now = new Date();
+      certSelects.forEach((select) => { select.innerHTML = ''; });
       for (let i = 1; i <= count; i++) {
         const cert = await collection.Item(i);
         const validToRaw = new Date(await cert.ValidToDate);
@@ -1387,28 +1435,39 @@ function esc(?string $value): string
           rawSubject: subjectText,
           rawIssuer: issuerText,
         });
-        const option = new Option(truncateText(optionLabel), String(index));
-        option.title = subjectText;
-        signCertSelect.add(option);
+        certSelects.forEach((select) => {
+          const option = new Option(truncateText(optionLabel), String(index));
+          option.title = subjectText;
+          select.add(option);
+        });
       }
       if (!certs.length) {
-        signCertSelect.add(new Option('Нет действующих сертификатов', ''));
+        certSelects.forEach((select) => {
+          select.add(new Option('Нет действующих сертификатов', ''));
+        });
         logLine('⚠️ Действующих сертификатов не найдено');
       } else {
-        signCertSelect.selectedIndex = 0;
-        updateCertInfo(0);
+        certSelects.forEach((select) => {
+          select.disabled = false;
+        });
+        applyCertSelection(0);
         logLine(`✅ Сертификаты загружены (${certs.length})`);
       }
     } catch (error) {
       logLine('❌ CryptoPro: ' + (error.message || error));
-      signCertSelect.add(new Option('Ошибка загрузки сертификатов', ''));
+      certSelects.forEach((select) => {
+        select.innerHTML = '';
+        select.add(new Option('Ошибка загрузки сертификатов', ''));
+      });
     } finally {
       if (store) {
         try { await store.Close(); } catch (e) { /* ignore */ }
       }
-      signCertSelect.disabled = certs.length === 0;
+      certSelects.forEach((select) => {
+        select.disabled = certs.length === 0;
+      });
       if (!certs.length) {
-        updateCertInfo(-1);
+        applyCertSelection(-1);
       }
       if (signButton) {
         signButton.disabled = certs.length === 0;
@@ -1419,12 +1478,18 @@ function esc(?string $value): string
     }
   }
 
+  function handleCertChange(event) {
+    const value = event.target.value;
+    const index = value === '' ? -1 : Number(value);
+    applyCertSelection(Number.isNaN(index) ? -1 : index);
+  }
+
   if (signCertSelect) {
-    signCertSelect.addEventListener('change', (event) => {
-      const value = event.target.value;
-      const index = value === '' ? -1 : Number(value);
-      updateCertInfo(Number.isNaN(index) ? -1 : index);
-    });
+    signCertSelect.addEventListener('change', handleCertChange);
+  }
+
+  if (nkAuthCertSelect) {
+    nkAuthCertSelect.addEventListener('change', handleCertChange);
   }
 
   if (signButton) {
@@ -1574,8 +1639,7 @@ function esc(?string $value): string
 
   if (nkAuthBtn) {
     nkAuthBtn.addEventListener('click', async () => {
-      const selectedValue = signCertSelect ? signCertSelect.value : '';
-      const idx = selectedValue === '' ? -1 : Number(selectedValue);
+      const idx = currentCertIndex;
       const cert = idx >= 0 ? certs[idx] : undefined;
       if (!cert) {
         logLine('❌ Выберите сертификат для получения токена');
@@ -1643,8 +1707,7 @@ function esc(?string $value): string
     signButton.addEventListener('click', async () => {
       resetLog();
       logLine('=== Новый запуск ===');
-      const selectedValue = signCertSelect ? signCertSelect.value : '';
-      const idx = selectedValue === '' ? -1 : Number(selectedValue);
+      const idx = currentCertIndex;
       const cert = idx >= 0 ? certs[idx] : undefined;
       if (!cert) {
         logLine('❌ Выберите сертификат');
@@ -1717,9 +1780,8 @@ function esc(?string $value): string
     });
   }
 
-  if (signModal) {
-    showSignModal();
-    refreshAwaiting({ log: false, autoSelect: true, updateList: true }).catch(() => {});
+  if (!nkAuthActive && nkAuthModal) {
+    showNkAuthModal();
   }
 })();
 </script>
