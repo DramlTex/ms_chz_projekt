@@ -17,7 +17,7 @@ define('NK_LOG', getenv('NK_LOG_PATH') ?: dirname(__DIR__) . '/nk_debug.log');
 define('MS_LOG', getenv('MS_LOG_PATH') ?: dirname(__DIR__) . '/ms_debug.log');
 
 define('MS_BASE_URL', 'https://api.moysklad.ru/api/remap/1.2');
-define('MS_TOKEN',    '2fd9212e8b1d4d2a990e319265845f2e70b8cf52');
+define('MS_TOKEN',    '');
 
 define('NK_TOKEN_SESSION_KEY', 'nk_auth_token');
 define('NK_TOKEN_EXP_SAFETY_MARGIN', 60); // секунд
