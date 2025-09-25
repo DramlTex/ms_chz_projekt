@@ -15,6 +15,7 @@ if ($gtin !== '' && nkGetAuthTokenMeta() !== null) {
 
 $trueMeta = orderGetTrueApiTokenMeta();
 $suzMeta = orderGetSuzTokenMeta();
+$suzContext = orderGetSuzContext();
 $cryptoProBootstrap = renderCryptoProExtensionBootstrap();
 
 $initialData = [
@@ -27,9 +28,10 @@ $initialData = [
     'suz' => [
         'active'       => $suzMeta !== null,
         'expiresAt'    => $suzMeta['expires_at'] ?? null,
-        'omsId'        => $suzMeta['oms_id'] ?? '',
-        'omsConnection'=> $suzMeta['oms_connect'] ?? '',
+        'omsId'        => $suzMeta['oms_id'] ?? $suzContext['oms_id'] ?? '',
+        'omsConnection'=> $suzMeta['oms_connect'] ?? $suzContext['oms_connect'] ?? '',
     ],
+    'suzContext' => $suzContext,
 ];
 ?>
 <!DOCTYPE html>
@@ -290,6 +292,7 @@ $initialData = [
         </div>
         <nav class="page-nav">
             <a class="button button--ghost" href="../index.php">← К карточкам</a>
+            <a class="button button--ghost" href="settings.php">Настройки OMS</a>
             <button type="button" class="button button--secondary" id="refreshStatus">Обновить статусы</button>
         </nav>
     </header>
