@@ -866,7 +866,12 @@ function esc(?string $value): string
                     <?php endif; ?>
                 </td>
                 <td>
-                    <button class="button button--primary button--small create-single" type="button">Создать</button>
+                    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+                        <button class="button button--primary button--small create-single" type="button">Создать</button>
+                        <?php if ($status === 'published'): ?>
+                        <button class="button button--secondary button--small order-km" type="button">Заказать КМ</button>
+                        <?php endif; ?>
+                    </div>
                 </td>
             </tr>
             <?php endforeach; ?>
@@ -1107,6 +1112,18 @@ function esc(?string $value): string
         showModal('Ошибка: ' + (error.message || error));
       }
       setTimeout(hideModal, 2200);
+    });
+  });
+
+  document.querySelectorAll('.order-km').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      const row = button.closest('tr');
+      if (!row) return;
+      const params = new URLSearchParams();
+      if (row.dataset.gtin) params.set('gtin', row.dataset.gtin);
+      const target = 'orders/create.php' + (params.toString() ? `?${params.toString()}` : '');
+      window.location.href = target;
     });
   });
 

@@ -11,10 +11,12 @@ date_default_timezone_set('Europe/Moscow');
 define('NK_BASE_URL', 'https://апи.национальный-каталог.рф');
 define('NK_API_KEY',  getenv('NK_API_KEY') ?: '');
 define('TRUE_API_BASE_URL', getenv('TRUE_API_BASE_URL') ?: 'https://markirovka.crpt.ru/api/v3/true-api');
+define('SUZ_BASE_URL', getenv('SUZ_BASE_URL') ?: 'https://suzgrid.crpt.ru/api/v3');
 define('CRYPTO_PRO_PLUGIN_ID', getenv('CRYPTO_PRO_PLUGIN_ID') ?: 'cadesplugin');
 
 define('NK_LOG', getenv('NK_LOG_PATH') ?: dirname(__DIR__) . '/nk_debug.log');
 define('MS_LOG', getenv('MS_LOG_PATH') ?: dirname(__DIR__) . '/ms_debug.log');
+define('ORDERS_LOG', getenv('ORDERS_LOG_PATH') ?: dirname(__DIR__) . '/orders_debug.log');
 
 define('MS_BASE_URL', 'https://api.moysklad.ru/api/remap/1.2');
 define('MS_TOKEN',    '');
@@ -131,6 +133,12 @@ function msLog(string $message): void
 {
     $line = '[' . date('c') . "] $message\n";
     writeLogSafe(MS_LOG, $line, 'MS');
+}
+
+function ordersLog(string $message): void
+{
+    $line = '[' . date('c') . "] $message\n";
+    writeLogSafe(ORDERS_LOG, $line, 'ORDERS');
 }
 
 // ---------------------------------------------------------------
@@ -355,6 +363,62 @@ function trueApiRequest(string $method, string $uri, array $headers = [], $body 
         return json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
     } catch (JsonException $e) {
         throw new RuntimeException('True API JSON decode error: ' . $e->getMessage());
+    }
+}
+
+function suzRequest(string $method, string $uri, array $headers = [], $body = null): array
+{
+    $method = strtoupper($method);
+    $url = rtrim(SUZ_BASE_URL, '/') . $uri;
+
+    $payload = null;
+    if ($body !== null) {
+        $payload = is_string($body)
+            ? $body
+            : json_encode($body, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
+    ordersLog(sprintf('SUZ %s %s', $method, $uri));
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CUSTOMREQUEST  => $method,
+        CURLOPT_HTTPHEADER     => array_merge([
+            'Accept: application/json',
+            'Content-Type: application/json; charset=utf-8',
+            'Accept-Encoding: gzip',
+        ], $headers),
+        CURLOPT_TIMEOUT        => 30,
+        CURLOPT_CONNECTTIMEOUT => 5,
+        CURLOPT_ENCODING       => 'gzip',
+    ]);
+    if ($payload !== null) {
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
+    }
+
+    $raw = curl_exec($ch);
+    if ($raw === false) {
+        $error = curl_error($ch);
+        curl_close($ch);
+        throw new RuntimeException('CURL: ' . $error);
+    }
+    $code = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+    curl_close($ch);
+
+    ordersLog(sprintf('SUZ HTTP %d', $code));
+    if ($code >= 400) {
+        throw new RuntimeException("HTTP $code: $raw");
+    }
+
+    if ($raw === '') {
+        return [];
+    }
+
+    try {
+        return json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+    } catch (JsonException $e) {
+        throw new RuntimeException('SUZ JSON decode error: ' . $e->getMessage());
     }
 }
 
