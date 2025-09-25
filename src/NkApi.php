@@ -134,4 +134,35 @@ class NkApi
         $resp = curlRequest('POST', '/v3/feed-product-sign', [], $pack);
         return $resp['result'] ?? [];
     }
+
+    /**
+     * Проверка КИ/GTIN/ТНВЭД через mark-check.
+     * POST /v3/mark-check
+     *
+     * @param array $criteria ['cis'=>[], 'gtins'=>[], 'tnveds'=>[]]
+     * @return array
+     */
+    public static function markCheck(array $criteria): array
+    {
+        $payload = [];
+
+        foreach (['cis', 'gtins', 'tnveds'] as $key) {
+            if (empty($criteria[$key]) || !is_array($criteria[$key])) {
+                continue;
+            }
+            $values = array_values(array_filter(array_map(static function ($value) {
+                $text = trim((string)$value);
+                return $text === '' ? null : $text;
+            }, $criteria[$key])));
+            if ($values) {
+                $payload[$key] = $values;
+            }
+        }
+
+        if (!$payload) {
+            throw new InvalidArgumentException('Не переданы данные для mark-check');
+        }
+
+        return curlRequest('POST', '/v3/mark-check', [], $payload);
+    }
 }
