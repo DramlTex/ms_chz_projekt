@@ -17,17 +17,19 @@
 | `#cis-validation` | block | Ввод списка КИ и проверка `/v3/mark-check` | После выбора товара | CSR | idle, validating, success, error |
 | `#document-upload` | block | Прикрепление файлов (feed, сопроводительные) | Опционально (если требуется обновление) | CSR | empty, uploading, uploaded |
 | `#signature-panel` | block | Выбор сертификата и подпись `data` / `X-Signature` | Когда доступны данные для подписи | CSR | idle, signing, signed, error |
+| `#nkAuthModal` | block | Модалка авторизации НК с селектом `#nkAuthCert` | Показывается при отсутствии токена или по кнопке «Авторизация» | CSR | hidden, open |
 | `#submit-order` | atom | Кнопка отправки заказа | Активна после валидаций и подписей | CSR | enabled, disabled, loading |
 | `#status-timeline` | block | Показывает прогресс документов и заказов | После отправки | CSR | pending, processing, ready, failed |
 | `#websocket-alerts` | atom | Поток уведомлений воркера | После отправки | CSR | empty, info, error |
 
-Критичные состояния: `#cis-validation` должен отображать ошибки с деталями (некорректный КИ, превышение лимита 100). `#signature-panel` содержит fallback «Установите CryptoPro» при отсутствии плагина.【F:docs/reference/national_catalog/extracted/catalog_api.txt†L5467-L5473】【F:docs/reference/true_api/extracted/true_api_quickstart.md†L64-L110】
+Критичные состояния: `#cis-validation` должен отображать ошибки с деталями (некорректный КИ, превышение лимита 100). `#signature-panel` содержит fallback «Установите CryptoPro» при отсутствии плагина, а `#nkAuthModal` синхронизирует выбор сертификата с панелью подписи.【F:docs/reference/national_catalog/extracted/catalog_api.txt†L5467-L5473】【F:docs/reference/true_api/extracted/true_api_quickstart.md†L64-L110】【F:public/index.php†L1216-L1370】
 
 ## 4. Поведение и сценарии (user flows)
 1) `LOAD PAGE` → `fetch_product(gtin)` → `render details` → `user edits` → `cis validate` → `sign data` → `submit order` → `show status timeline`.
 2) Ошибка подписи: `sign data` → `SignatureError` → показать модалку с инструкцией (переподключить сертификат, проверить CryptoPro).
 3) Падение проверки КИ: `mark-check` вернул ошибку → вывести список проблемных КИ, запретить отправку до исправления.
 4) WebSocket уведомление `ORDER_CLOSED` → обновить таймлайн, предложить оформить выбытие.
+5) Нет токена НК → `showNkAuthModal()` → пользователь выбирает сертификат → `signAttachedAuth` → `refreshNkAuthStatus` → страница перезагружается для подтягивания карточек с новым токеном.【F:public/index.php†L997-L1004】【F:public/index.php†L1361-L1455】【F:public/index.php†L1640-L1684】
 
 ## 5. Данные и интеграции (API/контракты)
 - Источники данных: REST бекенд (`/api/catalog/product`, `/api/true-api/auth/key`, `/api/orders`), WebSocket `/ws/orders/:id`.
@@ -93,6 +95,7 @@
 
 ## 14. Исполнительная часть (entrypoints/SSR/фичефлаги)
 - SSR рендерит пустой каркас с базовой информацией о пользователе; данные подтягиваются через CSR запросы.
+- PHP пробрасывает флаг `nkAuthActive`, и фронтенд автоматически открывает `#nkAuthModal`, если токен отсутствует; селект `#nkAuthCert` использует общий список сертификатов с `#signCert`.【F:public/index.php†L972-L979】【F:public/index.php†L1361-L1455】【F:public/index.php†L1783-L1785】
 - Feature flag `enableNKBulkFeed` включает/отключает блок загрузки feed.
 - Вход на страницу требует активной сессии и роли «operator_lp»; deep-link передаёт `gtin`.
 - Статический прототип для UX-согласований лежит в `web/index.html` и обращается к мокам `../servis_CHZ-MS/api/*.php`.【F:web/index.html†L664-L668】
