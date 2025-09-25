@@ -375,6 +375,9 @@ $initial = [
         option.value = '';
         option.textContent = 'Сертификаты не найдены';
         certSelect.appendChild(option);
+      } else {
+        currentCertIndex = 0;
+        certSelect.value = '0';
       }
     } catch (error) {
       console.error('Certificates error', error);
