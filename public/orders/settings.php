@@ -5,7 +5,6 @@ require_once __DIR__ . '/../../bootstrap.php';
 
 $context = orderGetSuzContext();
 $suzMeta = orderGetSuzTokenMeta();
-$cryptoProBootstrap = renderCryptoProExtensionBootstrap();
 
 $initial = [
     'context' => $context,
@@ -224,7 +223,7 @@ $initial = [
             .page { padding: 2rem; }
         }
     </style>
-    <?php if ($cryptoProBootstrap !== '') { echo $cryptoProBootstrap, "\n"; } ?>
+    <script src="../api/crypto-pro-extension-bootstrap.php"></script>
     <script src="../assets/js/cadesplugin_api.js"></script>
 </head>
 <body>
