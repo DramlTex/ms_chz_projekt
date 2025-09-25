@@ -593,13 +593,18 @@ function esc(?string $value): string
 
         .sign-controls select {
             flex: 1 0 240px;
-            padding: 0.65rem 0.75rem;
+            padding: 0.75rem 1rem;
             border-radius: 8px;
             border: 1px solid var(--border-color);
             font-size: 0.95rem;
             width: 100%;
             max-width: 100%;
             min-width: 0;
+        }
+
+        .sign-controls select option {
+            white-space: normal;
+            word-break: break-word;
         }
 
         .sign-controls--cert {
