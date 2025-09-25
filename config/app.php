@@ -74,7 +74,7 @@ function cryptoProExtensionConfig(): array
     return $cache;
 }
 
-function renderCryptoProExtensionBootstrap(): string
+function cryptoProExtensionBootstrapJs(): string
 {
     $config = cryptoProExtensionConfig();
     $assignments = [];
@@ -98,7 +98,17 @@ function renderCryptoProExtensionBootstrap(): string
         return '';
     }
 
-    return "<script>(function(){\n" . implode("\n", $assignments) . "\n})();</script>";
+    return "(function(){\n" . implode("\n", $assignments) . "\n})();";
+}
+
+function renderCryptoProExtensionBootstrap(): string
+{
+    $script = cryptoProExtensionBootstrapJs();
+    if ($script === '') {
+        return '';
+    }
+
+    return "<script>{$script}</script>";
 }
 
 // ---------------------------------------------------------------
