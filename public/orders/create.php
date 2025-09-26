@@ -4,17 +4,18 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../bootstrap.php';
 
 $gtin = trim((string)($_GET['gtin'] ?? ''));
+$normalizedGtin = NkApi::normalizeGtin($gtin);
 $initialCard = null;
-if ($gtin !== '' && nkGetAuthTokenMeta() !== null) {
+if ($normalizedGtin !== '' && nkGetAuthTokenMeta() !== null) {
     try {
-        $initialCard = NkApi::cardByGtin($gtin);
+        $initialCard = NkApi::cardByGtin($normalizedGtin);
     } catch (Throwable $e) {
         $initialCard = null;
     }
 }
 
 $initialData = [
-    'gtin' => $gtin,
+    'gtin' => $normalizedGtin !== '' ? $normalizedGtin : $gtin,
     'card' => $initialCard,
 ];
 ?>
@@ -525,7 +526,8 @@ $initialData = [
     const query = normalized || gtin;
     try {
       const data = await fetchJson(`../api/orders/product.php?gtin=${encodeURIComponent(query)}`);
-      renderProduct(data.card, query);
+      const resultGtin = data?.gtin || query;
+      renderProduct(data.card, resultGtin);
     } catch (error) {
       renderProduct(null, query);
       console.error(error);

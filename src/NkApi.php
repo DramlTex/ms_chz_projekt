@@ -14,6 +14,35 @@ require_once __DIR__ . '/../config/app.php';
 
 class NkApi
 {
+    /**
+     * Нормализовать GTIN до формата, ожидаемого НК (14 цифр с лидирующим нулём).
+     */
+    public static function normalizeGtin(string $value): string
+    {
+        $raw = trim($value);
+        if ($raw === '') {
+            return '';
+        }
+
+        $digits = preg_replace('/\D+/', '', $raw);
+        if ($digits === null) {
+            return $raw;
+        }
+
+        $length = strlen($digits);
+        if ($length === 14) {
+            return $digits;
+        }
+
+        if ($length === 13) {
+            return ($digits[0] ?? '') === '0'
+                ? $digits
+                : '0' . $digits;
+        }
+
+        return $raw;
+    }
+
     /* ============================================================
        СПРАВОЧНЫЕ / ЧТЕНИЕ
        ============================================================ */
@@ -77,11 +106,15 @@ class NkApi
      */
     public static function cardByGtin(string $gtin): array
     {
-        if ($gtin === '') return [];
+        $normalized = self::normalizeGtin($gtin);
+        if ($normalized === '') {
+            return [];
+        }
+
         $resp = curlRequest(
             'GET',
             '/v3/product',
-            ['gtin' => $gtin]
+            ['gtin' => $normalized]
         );
         return $resp['result']['good'] ?? [];
     }

@@ -12,12 +12,19 @@ try {
         throw new InvalidArgumentException('Не указан GTIN');
     }
 
-    $card = NkApi::cardByGtin($gtin);
+    $normalized = NkApi::normalizeGtin($gtin);
+    $lookupGtin = $normalized !== '' ? $normalized : $gtin;
+
+    $card = NkApi::cardByGtin($lookupGtin);
     if (!$card) {
         throw new RuntimeException('Карточка не найдена в НК');
     }
 
-    echo json_encode(['status' => 'ok', 'card' => $card], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    echo json_encode([
+        'status' => 'ok',
+        'card' => $card,
+        'gtin' => $lookupGtin,
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 } catch (InvalidArgumentException $e) {
     http_response_code(400);
     echo json_encode(['error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
