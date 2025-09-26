@@ -128,6 +128,7 @@ class NkApi
 
         foreach ($candidates as $candidate) {
             try {
+                nkLog(sprintf('cardByGtin candidate request: "%s"', $candidate));
                 $resp = curlRequest(
                     'GET',
                     '/v3/product',
@@ -135,6 +136,7 @@ class NkApi
                 );
             } catch (RuntimeException $e) {
                 if (strpos($e->getMessage(), 'HTTP 404') === 0) {
+                    nkLog(sprintf('cardByGtin candidate "%s" → HTTP 404', $candidate));
                     continue;
                 }
                 throw $e;
@@ -142,8 +144,11 @@ class NkApi
 
             $card = $resp['result']['good'] ?? [];
             if ($card) {
+                nkLog(sprintf('cardByGtin candidate "%s" → success (goodId=%s)', $candidate, $card['good_id'] ?? '—'));
                 return $card;
             }
+
+            nkLog(sprintf('cardByGtin candidate "%s" → empty payload', $candidate));
         }
 
         return [];

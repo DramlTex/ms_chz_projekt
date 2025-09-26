@@ -7,7 +7,9 @@ header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 
 try {
-    $gtin = trim((string)($_GET['gtin'] ?? ''));
+    $rawGtinParam = $_GET['gtin'] ?? null;
+    $rawGtinType = gettype($rawGtinParam);
+    $gtin = trim((string)($rawGtinParam ?? ''));
     if ($gtin === '') {
         throw new InvalidArgumentException('Не указан GTIN');
     }
@@ -15,7 +17,19 @@ try {
     $normalized = NkApi::normalizeGtin($gtin);
     $lookupGtin = $normalized !== '' ? $normalized : $gtin;
 
-    ordersLog(sprintf('orders.product lookup requested: raw="%s" normalized="%s"', $gtin, $lookupGtin));
+    $source = isset($_GET['source']) ? (string)$_GET['source'] : 'nk';
+    $hasBearer = nkGetAuthToken() !== null;
+    $hasApiKey = NK_API_KEY !== '';
+
+    ordersLog(sprintf(
+        'orders.product lookup requested: raw="%s" rawType=%s normalized="%s" source="%s" bearer=%s apikey=%s',
+        $gtin,
+        $rawGtinType,
+        $lookupGtin,
+        $source !== '' ? $source : '—',
+        $hasBearer ? 'yes' : 'no',
+        $hasApiKey ? 'yes' : 'no'
+    ));
 
     $card = NkApi::cardByGtin($lookupGtin);
     if (!$card) {

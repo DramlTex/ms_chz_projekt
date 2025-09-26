@@ -524,13 +524,29 @@ $initialData = [
     if (!gtin) return;
     const normalized = normalizeGtin(gtin);
     const query = normalized || gtin;
+    const url = `../api/orders/product.php?gtin=${encodeURIComponent(query)}`;
+    console.debug('[orders:create] product lookup → request', {
+      input: gtin,
+      inputType: typeof gtin,
+      normalized,
+      query,
+      url,
+    });
     try {
-      const data = await fetchJson(`../api/orders/product.php?gtin=${encodeURIComponent(query)}`);
+      const data = await fetchJson(url);
+      console.debug('[orders:create] product lookup ← response', {
+        url,
+        gtin: data?.gtin ?? null,
+        hasCard: Boolean(data?.card),
+      });
       const resultGtin = data?.gtin || query;
       renderProduct(data.card, resultGtin);
     } catch (error) {
+      console.error('[orders:create] product lookup × error', {
+        url,
+        message: error?.message ?? error,
+      });
       renderProduct(null, query);
-      console.error(error);
     }
   }
 
