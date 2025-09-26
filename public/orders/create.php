@@ -200,6 +200,34 @@ $initialData = [
             margin-top: 1rem;
         }
 
+        .product-search {
+            margin-top: 1.25rem;
+            display: grid;
+            gap: 1rem;
+        }
+
+        .product-search__actions {
+            justify-content: flex-end;
+        }
+
+        .product-search__status {
+            margin: 0;
+            font-size: 0.9rem;
+            color: var(--muted);
+        }
+
+        .product-search__status--info {
+            color: var(--accent-dark);
+        }
+
+        .product-search__status--success {
+            color: var(--success);
+        }
+
+        .product-search__status--error {
+            color: var(--danger);
+        }
+
         .log {
             font-family: "Fira Code", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
             font-size: 0.85rem;
@@ -269,6 +297,19 @@ $initialData = [
     <section class="block">
         <h2>Карточка товара</h2>
         <p class="block__meta">GTIN и атрибуты подтягиваются из Национального каталога.</p>
+        <form class="product-search" id="productSearchForm" novalidate>
+            <div class="grid-two">
+                <div class="form-row">
+                    <label for="productSearchGtin">GTIN</label>
+                    <input type="text" id="productSearchGtin" name="gtin" placeholder="Например, 04601234567893">
+                </div>
+                <div class="form-row product-search__actions">
+                    <label aria-hidden="true">&nbsp;</label>
+                    <button type="submit" class="button button--secondary" id="productSearchButton">Найти карточку</button>
+                </div>
+            </div>
+            <p class="product-search__status" id="productSearchStatus">Введите GTIN и нажмите «Найти карточку».</p>
+        </form>
         <div class="grid-two" id="productInfo"></div>
     </section>
 
@@ -373,6 +414,10 @@ $initialData = [
 <script>
 (() => {
   const initial = <?php echo json_encode($initialData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
+  const productSearchForm = document.getElementById('productSearchForm');
+  const productSearchInput = document.getElementById('productSearchGtin');
+  const productSearchStatus = document.getElementById('productSearchStatus');
+  const productSearchButton = document.getElementById('productSearchButton');
   const productInfo = document.getElementById('productInfo');
   const certSelect = document.getElementById('certSelect');
   const certInfoCard = document.getElementById('certInfo');
@@ -417,6 +462,14 @@ $initialData = [
       return digits.startsWith('0') ? digits : `0${digits}`;
     }
     return raw;
+  };
+
+  const searchStatusTones = new Set(['muted', 'info', 'success', 'error']);
+  const setProductSearchStatus = (text, tone = 'muted') => {
+    if (!productSearchStatus) return;
+    const suffix = searchStatusTones.has(tone) ? tone : 'muted';
+    productSearchStatus.className = `product-search__status product-search__status--${suffix}`;
+    productSearchStatus.textContent = text;
   };
 
   const renderCertificateInfo = () => {
@@ -474,7 +527,7 @@ $initialData = [
     productInfo.innerHTML = '';
     if (!card) {
       const gtinText = fallbackGtin || initialGtin || initial.gtin || '';
-      const hint = gtinText ? `Попробуйте ещё раз для GTIN ${gtinText}.` : 'Введите GTIN на предыдущей странице.';
+      const hint = gtinText ? `Попробуйте ещё раз для GTIN ${gtinText}.` : 'Введите GTIN выше и выполните поиск.';
       productInfo.innerHTML = `<div class="info-card"><strong>Карточка не загружена</strong><p class="block__meta">${hint}</p></div>`;
       return;
     }
@@ -521,7 +574,10 @@ $initialData = [
   };
 
   async function loadProduct(gtin) {
-    if (!gtin) return;
+    if (!gtin) {
+      renderProduct(null, '');
+      return { card: null, gtin: '' };
+    }
     const normalized = normalizeGtin(gtin);
     const query = normalized || gtin;
     const url = `../api/orders/product.php?gtin=${encodeURIComponent(query)}`;
@@ -540,19 +596,75 @@ $initialData = [
         hasCard: Boolean(data?.card),
       });
       const resultGtin = data?.gtin || query;
+      if (productSearchInput) {
+        productSearchInput.value = resultGtin;
+      }
       renderProduct(data.card, resultGtin);
+      return { card: data?.card ?? null, gtin: resultGtin };
     } catch (error) {
       console.error('[orders:create] product lookup × error', {
         url,
         message: error?.message ?? error,
       });
       renderProduct(null, query);
+      throw error;
     }
   }
 
-  if (initial.gtin) {
-    loadProduct(initial.gtin);
+  if (productSearchInput) {
+    productSearchInput.value = initial?.gtin ?? '';
   }
+
+  if (productSearchStatus) {
+    setProductSearchStatus('Введите GTIN и нажмите «Найти карточку».');
+  }
+
+  if (initial.gtin) {
+    setProductSearchStatus(`Загружаем карточку для GTIN ${initial.gtin}…`, 'info');
+    loadProduct(initial.gtin)
+      .then((result) => {
+        if (result?.card) {
+          setProductSearchStatus(`Карточка найдена для GTIN ${result.gtin}.`, 'success');
+        } else {
+          setProductSearchStatus(`Карточка для GTIN ${result?.gtin || initial.gtin} не найдена.`, 'error');
+        }
+      })
+      .catch((error) => {
+        const message = (error?.message || 'Неизвестная ошибка').split('\n')[0];
+        setProductSearchStatus(`Ошибка при загрузке карточки: ${message}`, 'error');
+      });
+  }
+
+  productSearchForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const value = productSearchInput?.value ?? '';
+    const trimmed = String(value).trim();
+    if (!trimmed) {
+      setProductSearchStatus('Введите GTIN, чтобы найти карточку.', 'error');
+      return;
+    }
+    const normalized = normalizeGtin(trimmed);
+    const displayGtin = normalized || trimmed;
+    setProductSearchStatus(`Ищем карточку для GTIN ${displayGtin}…`, 'info');
+    if (productSearchButton) {
+      productSearchButton.disabled = true;
+    }
+    try {
+      const result = await loadProduct(trimmed);
+      if (result?.card) {
+        setProductSearchStatus(`Карточка найдена для GTIN ${result.gtin}.`, 'success');
+      } else {
+        setProductSearchStatus(`Карточка для GTIN ${result?.gtin || displayGtin} не найдена в Национальном каталоге.`, 'error');
+      }
+    } catch (error) {
+      const message = (error?.message || 'Неизвестная ошибка').split('\n')[0];
+      setProductSearchStatus(`Ошибка при загрузке карточки: ${message}`, 'error');
+    } finally {
+      if (productSearchButton) {
+        productSearchButton.disabled = false;
+      }
+    }
+  });
 
   const getCodesFromTextarea = (textarea) => textarea.value.split(/\r?\n|[,;\t]+/).map((code) => code.trim()).filter(Boolean);
 
