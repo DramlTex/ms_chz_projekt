@@ -106,17 +106,47 @@ class NkApi
      */
     public static function cardByGtin(string $gtin): array
     {
-        $normalized = self::normalizeGtin($gtin);
-        if ($normalized === '') {
+        $raw = trim($gtin);
+        if ($raw === '') {
             return [];
         }
 
-        $resp = curlRequest(
-            'GET',
-            '/v3/product',
-            ['gtin' => $normalized]
-        );
-        return $resp['result']['good'] ?? [];
+        $candidates = [];
+        $normalized = self::normalizeGtin($raw);
+        if ($normalized !== '' && !in_array($normalized, $candidates, true)) {
+            $candidates[] = $normalized;
+        }
+
+        $digits = preg_replace('/\D+/', '', $raw);
+        if (is_string($digits) && $digits !== '' && !in_array($digits, $candidates, true)) {
+            $candidates[] = $digits;
+        }
+
+        if (!in_array($raw, $candidates, true)) {
+            $candidates[] = $raw;
+        }
+
+        foreach ($candidates as $candidate) {
+            try {
+                $resp = curlRequest(
+                    'GET',
+                    '/v3/product',
+                    ['gtin' => $candidate]
+                );
+            } catch (RuntimeException $e) {
+                if (strpos($e->getMessage(), 'HTTP 404') === 0) {
+                    continue;
+                }
+                throw $e;
+            }
+
+            $card = $resp['result']['good'] ?? [];
+            if ($card) {
+                return $card;
+            }
+        }
+
+        return [];
     }
 
     /* ============================================================
