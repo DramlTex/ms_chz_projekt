@@ -126,29 +126,53 @@ class NkApi
             $candidates[] = $raw;
         }
 
+        $endpoints = [
+            ['uri' => '/v3/product', 'label' => 'product'],
+            ['uri' => '/v3/short-product', 'label' => 'short-product'],
+        ];
+
         foreach ($candidates as $candidate) {
-            try {
-                nkLog(sprintf('cardByGtin candidate request: "%s"', $candidate));
-                $resp = curlRequest(
-                    'GET',
-                    '/v3/product',
-                    ['gtin' => $candidate]
-                );
-            } catch (RuntimeException $e) {
-                if (strpos($e->getMessage(), 'HTTP 404') === 0) {
-                    nkLog(sprintf('cardByGtin candidate "%s" → HTTP 404', $candidate));
-                    continue;
+            foreach ($endpoints as $endpoint) {
+                try {
+                    nkLog(sprintf(
+                        'cardByGtin candidate request: "%s" via %s',
+                        $candidate,
+                        $endpoint['label']
+                    ));
+                    $resp = curlRequest(
+                        'GET',
+                        $endpoint['uri'],
+                        ['gtin' => $candidate]
+                    );
+                } catch (RuntimeException $e) {
+                    if (strpos($e->getMessage(), 'HTTP 404') === 0) {
+                        nkLog(sprintf(
+                            'cardByGtin candidate "%s" via %s → HTTP 404',
+                            $candidate,
+                            $endpoint['label']
+                        ));
+                        continue;
+                    }
+                    throw $e;
                 }
-                throw $e;
-            }
 
-            $card = $resp['result']['good'] ?? [];
-            if ($card) {
-                nkLog(sprintf('cardByGtin candidate "%s" → success (goodId=%s)', $candidate, $card['good_id'] ?? '—'));
-                return $card;
-            }
+                $card = $resp['result']['good'] ?? [];
+                if ($card) {
+                    nkLog(sprintf(
+                        'cardByGtin candidate "%s" via %s → success (goodId=%s)',
+                        $candidate,
+                        $endpoint['label'],
+                        $card['good_id'] ?? '—'
+                    ));
+                    return $card;
+                }
 
-            nkLog(sprintf('cardByGtin candidate "%s" → empty payload', $candidate));
+                nkLog(sprintf(
+                    'cardByGtin candidate "%s" via %s → empty payload',
+                    $candidate,
+                    $endpoint['label']
+                ));
+            }
         }
 
         return [];
