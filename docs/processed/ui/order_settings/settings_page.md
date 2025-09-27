@@ -7,9 +7,9 @@
 Страница теперь служит техническим редиректом: при обращении к `/orders/settings.php` пользователь перенаправляется на `/index.php?suz=1`, где открывается модальное окно `#suzSettingsModal` с формой настроек OMS/СУЗ. В модале можно сохранить параметры подключения, выбрать сертификат, получить/сбросить `clientToken` и просмотреть журнал тестового подключения. Сам редирект не оформляет заказы и не изменяет карточки товаров.【F:public/orders/settings.php†L1-L5】【F:public/index.php†L70-L188】【F:public/index.php†L944-L1090】
 
 ## 2. Информационная архитектура и навигация
-- Входы: кнопка «Настройки OMS и СУЗ» на странице `/orders/create.php`, прямой deeplink `/orders/settings.php` или ручное добавление параметра `?suz=1` на главной странице карточек НК.【F:public/orders/create.php†L256-L306】【F:public/orders/settings.php†L1-L5】【F:public/index.php†L70-L188】
-- Выходы: из модала можно вернуться к списку карточек, перейти к заказу КМ или повторно открыть тестовое подключение; закрытие модала возвращает пользователя к `/index.php` без перезагрузки данных.【F:public/index.php†L70-L188】【F:public/index.php†L118-L188】
-- URL: `/orders/settings.php` выполняет 302-редирект на `/index.php?suz=1`; модал доступен и по хэшу `#suz-settings` для прямой активации.【F:public/orders/settings.php†L1-L5】【F:public/index.php†L70-L188】【F:public/index.php†L118-L188】
+- Входы: кнопка «Настройки OMS и СУЗ» на странице списка карточек НК (`/index.php`), прямой deeplink `/orders/settings.php` или ручное добавление параметра `?suz=1`/хэша `#suz-settings` на главной странице.【F:public/index.php†L912-L920】【F:public/orders/settings.php†L1-L5】【F:public/index.php†L1342-L1345】
+- Выходы: из модала можно вернуться к списку карточек или повторно открыть тестовое подключение; закрытие модала возвращает пользователя к `/index.php` без перезагрузки данных.【F:public/index.php†L1268-L1339】
+- URL: `/orders/settings.php` выполняет 302-редирект на `/index.php?suz=1`; модал доступен и по хэшу `#suz-settings` для прямой активации.【F:public/orders/settings.php†L1-L5】【F:public/index.php†L1342-L1345】
 
 ## 3. Состав страницы (UI-карта и состояния)
 | ID/селектор | Тип | Назначение | Условия показа | SSR/CSR | Варианты |
