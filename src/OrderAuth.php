@@ -79,12 +79,18 @@ function orderStoreTrueApiToken(string $token, ?int $expiresAt = null): void
         return;
     }
 
+    $normalizedToken = normalizeBearerToken($token);
+    if ($normalizedToken === '') {
+        orderForgetTrueApiToken();
+        return;
+    }
+
     if ($expiresAt === null || $expiresAt <= time()) {
-        $expiresAt = nkGuessTokenExpiration($token);
+        $expiresAt = nkGuessTokenExpiration($normalizedToken);
     }
 
     $_SESSION[ORDER_TRUE_API_TOKEN_SESSION_KEY] = [
-        'token'      => $token,
+        'token'      => $normalizedToken,
         'expires_at' => $expiresAt,
     ];
 }
