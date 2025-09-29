@@ -154,9 +154,27 @@ function ordersLog(string $message): void
 // ---------------------------------------------------------------
 //  ХРАНЕНИЕ ТОКЕНА НК (Bearer из True API)
 // ---------------------------------------------------------------
+function normalizeBearerToken(string $token): string
+{
+    $normalized = trim($token);
+    if ($normalized === '') {
+        return '';
+    }
+
+    if (preg_match('/^(?:bearer|token)\s+/i', $normalized)) {
+        $stripped = preg_replace('/^(?:bearer|token)\s+/i', '', $normalized);
+        if (is_string($stripped)) {
+            $normalized = trim($stripped);
+        }
+    }
+
+    return $normalized;
+}
+
 function nkGuessTokenExpiration(string $token): ?int
 {
-    $parts = explode('.', $token);
+    $normalized = normalizeBearerToken($token);
+    $parts = explode('.', $normalized);
     if (count($parts) < 2) {
         return null;
     }
@@ -182,8 +200,17 @@ function nkStoreAuthToken(string $token, ?int $expiresAt = null): void
         return;
     }
 
+    $normalizedToken = normalizeBearerToken($token);
+    if ($normalizedToken === '') {
+        nkForgetAuthToken();
+        return;
+    }
+
     if ($expiresAt === null || $expiresAt <= time()) {
-        $expiresAt = time() + NK_TOKEN_DEFAULT_TTL;
+        $expiresAt = nkGuessTokenExpiration($normalizedToken);
+        if ($expiresAt === null || $expiresAt <= time()) {
+            $expiresAt = time() + NK_TOKEN_DEFAULT_TTL;
+        }
     }
 
     $expiresAt -= NK_TOKEN_EXP_SAFETY_MARGIN;
@@ -192,7 +219,7 @@ function nkStoreAuthToken(string $token, ?int $expiresAt = null): void
     }
 
     $_SESSION[NK_TOKEN_SESSION_KEY] = [
-        'token'      => $token,
+        'token'      => $normalizedToken,
         'expires_at' => $expiresAt,
     ];
 }
