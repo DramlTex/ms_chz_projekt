@@ -271,6 +271,20 @@ $initialData = [
             color: var(--muted);
         }
 
+        .connection-status {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .buttons--compact {
+            gap: 0.5rem;
+        }
+
+        .buttons--compact .button--ghost {
+            padding: 0.45rem 0.9rem;
+        }
+
         @media (max-width: 720px) {
             body { padding: 1rem; }
             main { padding: 1.5rem; }
@@ -298,7 +312,15 @@ $initialData = [
             <dt>clientToken</dt>
             <dd id="suzStatus"></dd>
             <dt>Нац. каталог</dt>
-            <dd id="nkStatus"></dd>
+            <dd>
+                <div class="connection-status">
+                    <span id="nkStatus"></span>
+                    <div class="buttons buttons--compact">
+                        <button type="button" class="button--ghost" id="nkAuthRequestBtn">Получить токен</button>
+                        <button type="button" class="button--ghost" id="nkAuthResetBtn">Сбросить токен</button>
+                    </div>
+                </div>
+            </dd>
         </dl>
     </section>
 
@@ -388,6 +410,8 @@ $initialData = [
     card: null,
     certs: [],
     currentCert: -1,
+    nk: initial.nk ? { ...initial.nk } : {},
+    suz: initial.suz ? { ...initial.suz } : {},
   };
 
   const gtinInput = $('#gtinInput');
@@ -410,6 +434,8 @@ $initialData = [
   const omsIdEl = $('#omsId');
   const suzStatusEl = $('#suzStatus');
   const nkStatusEl = $('#nkStatus');
+  const nkAuthRequestBtn = $('#nkAuthRequestBtn');
+  const nkAuthResetBtn = $('#nkAuthResetBtn');
 
   function formatExpiry(expiresAt) {
     if (!expiresAt) return '';
@@ -418,7 +444,7 @@ $initialData = [
   }
 
   function renderConnections() {
-    const suz = initial.suz || {};
+    const suz = state.suz || {};
     omsConnectionEl.textContent = suz.omsConnection || '—';
     omsIdEl.textContent = suz.omsId || '—';
     if (suz.active) {
@@ -429,15 +455,25 @@ $initialData = [
       suzStatusEl.textContent = 'clientToken отсутствует';
       suzStatusEl.style.color = 'var(--danger)';
     }
-    const nk = initial.nk || {};
-    if (nk.active) {
-      const tail = nk.expiresAt ? ' до ' + formatExpiry(nk.expiresAt) : '';
-      nkStatusEl.textContent = 'Токен активен' + tail;
-      nkStatusEl.style.color = 'var(--success)';
-    } else {
-      nkStatusEl.textContent = 'Токен отсутствует';
-      nkStatusEl.style.color = 'var(--danger)';
+    const nk = state.nk || {};
+    if (nkStatusEl) {
+      if (nk.active) {
+        const tail = nk.expiresAt ? ' до ' + formatExpiry(nk.expiresAt) : '';
+        nkStatusEl.textContent = 'Токен активен' + tail;
+        nkStatusEl.style.color = 'var(--success)';
+      } else {
+        nkStatusEl.textContent = 'Токен отсутствует';
+        nkStatusEl.style.color = 'var(--danger)';
+      }
     }
+  }
+
+  function setNkStatus(status) {
+    state.nk = Object.assign({}, state.nk, status || {});
+    if (!state.nk.active) {
+      state.nk.expiresAt = null;
+    }
+    renderConnections();
   }
 
   function populateProductGroups() {
@@ -605,6 +641,7 @@ $initialData = [
     certSelect.disabled = true;
     certInfo.querySelector('.card-info__title').textContent = 'Сертификат не выбран.';
     certInfo.querySelector('.hint').textContent = 'Подключите CryptoPro и нажмите «Загрузить сертификаты».';
+    if (nkAuthRequestBtn) nkAuthRequestBtn.disabled = true;
   }
 
   async function loadCertificates() {
@@ -650,6 +687,7 @@ $initialData = [
       certSelect.value = '0';
       await applyCertSelection(0);
       log('✅ Сертификаты загружены');
+      if (nkAuthRequestBtn) nkAuthRequestBtn.disabled = false;
     } catch (error) {
       clearCertificates();
       log('❌ Ошибка загрузки сертификатов: ' + (error.message || error));
@@ -689,6 +727,39 @@ $initialData = [
     return sd.SignCades(signer, cadesplugin.CADESCOM_CADES_BES, true);
   }
 
+  async function signAttachedAuth(value, cert) {
+    const signer = await cadesplugin.CreateObjectAsync('CAdESCOM.CPSigner');
+    await signer.propset_Certificate(cert);
+    const sd = await cadesplugin.CreateObjectAsync('CAdESCOM.CadesSignedData');
+    if (typeof sd.propset_ContentEncoding === 'function' && typeof cadesplugin.CADESCOM_STRING_TO_UCS2LE !== 'undefined') {
+      try {
+        await sd.propset_ContentEncoding(cadesplugin.CADESCOM_STRING_TO_UCS2LE);
+      } catch (_) {
+        // старые версии плагина могут не поддерживать установку кодировки
+      }
+    }
+    await sd.propset_Content(value);
+    return sd.SignCades(signer, cadesplugin.CADESCOM_CADES_BES);
+  }
+
+  async function refreshNkStatus(logStatus = false) {
+    if (!nkStatusEl) return;
+    try {
+      const data = await fetchJson('../api/nk-auth.php?mode=status', { cache: 'no-store' });
+      setNkStatus({
+        active: Boolean(data.active),
+        expiresAt: typeof data.expiresAt === 'number' ? data.expiresAt : null,
+      });
+      if (logStatus) {
+        log('ℹ️ Статус токена НК обновлён');
+      }
+    } catch (error) {
+      if (logStatus) {
+        log('❌ Статус токена НК: ' + (error.message || error));
+      }
+    }
+  }
+
   async function sendOrder() {
     resetLog();
     try {
@@ -711,6 +782,42 @@ $initialData = [
     }
   }
 
+  async function requestNkToken() {
+    if (!nkAuthRequestBtn) return;
+    let cert;
+    try {
+      cert = getCurrentCert();
+    } catch (error) {
+      log('❌ ' + (error.message || error));
+      return;
+    }
+    nkAuthRequestBtn.disabled = true;
+    try {
+      log('🔐 Запрашиваем challenge True API…');
+      const challenge = await fetchJson('../api/nk-auth.php');
+      if (!challenge.uuid || !challenge.data) {
+        throw new Error('Некорректный ответ True API');
+      }
+      log('✍️ Подписываем challenge сертификатом…');
+      const signature = await signAttachedAuth(challenge.data, cert);
+      log('📨 Отправляем подпись для получения токена…');
+      const response = await fetchJson('../api/nk-auth.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uuid: challenge.uuid, signature }),
+      });
+      log('✅ Токен НК получен');
+      if (response.expiresAt) {
+        log('ℹ️ Токен действует до ' + formatExpiry(response.expiresAt));
+      }
+      setNkStatus({ active: true, expiresAt: response.expiresAt || null });
+    } catch (error) {
+      log('❌ Авторизация НК: ' + (error.message || error));
+    } finally {
+      nkAuthRequestBtn.disabled = false;
+    }
+  }
+
   certSelect?.addEventListener('change', (event) => {
     const index = Number(event.target.value);
     if (!Number.isInteger(index) || index < 0) {
@@ -724,9 +831,23 @@ $initialData = [
   loadCertsBtn?.addEventListener('click', loadCertificates);
   previewBtn?.addEventListener('click', showPreview);
   sendOrderBtn?.addEventListener('click', sendOrder);
+  nkAuthRequestBtn?.addEventListener('click', () => { requestNkToken(); });
+  nkAuthResetBtn?.addEventListener('click', async () => {
+    nkAuthResetBtn.disabled = true;
+    try {
+      await fetchJson('../api/nk-auth.php', { method: 'DELETE' });
+      log('ℹ️ Токен НК сброшен');
+      setNkStatus({ active: false, expiresAt: null });
+    } catch (error) {
+      log('❌ Сброс токена НК: ' + (error.message || error));
+    } finally {
+      nkAuthResetBtn.disabled = false;
+    }
+  });
 
   populateProductGroups();
   renderConnections();
+  refreshNkStatus(false);
 })();
 </script>
 </body>
