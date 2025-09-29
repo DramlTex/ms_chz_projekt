@@ -108,8 +108,32 @@ try {
     http_response_code(400);
     echo json_encode(['error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
 } catch (RuntimeException $e) {
+    $message = $e->getMessage();
+    if (preg_match('/^HTTP\s+(\d{3})/i', $message, $matches)) {
+        $status = (int)$matches[1];
+
+        if (in_array($status, [401, 403], true)) {
+            nkForgetAuthToken();
+            http_response_code(401);
+            echo json_encode([
+                'error'   => 'Авторизация в Национальном каталоге недействительна или истекла. Пожалуйста, получите токен заново.',
+                'details' => $message,
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            return;
+        }
+
+        if ($status >= 400 && $status < 600) {
+            http_response_code($status);
+            echo json_encode([
+                'error'   => 'Национальный каталог вернул ошибку ' . $status,
+                'details' => $message,
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            return;
+        }
+    }
+
     http_response_code(502);
-    echo json_encode(['error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+    echo json_encode(['error' => $message], JSON_UNESCAPED_UNICODE);
 } catch (Throwable $e) {
     http_response_code(500);
     echo json_encode(['error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
