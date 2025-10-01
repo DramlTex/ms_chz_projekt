@@ -177,7 +177,25 @@
             white-space: pre-wrap;
             margin-top: 1rem;
         }
-        
+
+        .mini-log {
+            background: #f7fafc;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 1rem;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            white-space: pre-wrap;
+            overflow-x: auto;
+            min-height: 160px;
+        }
+
+        .hint {
+            font-size: 0.8rem;
+            color: #a0aec0;
+            margin-top: 0.25rem;
+        }
+
         .grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -256,7 +274,7 @@
     <!-- Шаг 3: Заказ -->
     <div class="step">
         <h2>Шаг 3: Параметры заказа</h2>
-        
+
         <div class="grid">
             <div class="form-group">
                 <label>Товарная группа</label>
@@ -283,10 +301,83 @@
                 <option value="REMAINS">Маркировка остатков</option>
             </select>
         </div>
-        
+
         <button class="btn btn-primary" id="createOrderBtn" disabled>Создать заказ</button>
     </div>
-    
+
+    <!-- Шаг 4: Статус заказа -->
+    <div class="step">
+        <h2>Шаг 4: Проверить статус заказа</h2>
+
+        <div class="form-group">
+            <label>ID заказа</label>
+            <input type="text" id="orderIdInput" placeholder="UUID заказа">
+            <p class="hint">После создания заказа идентификатор подставится автоматически.</p>
+        </div>
+
+        <div class="btn-group">
+            <button class="btn btn-secondary" id="statusBtn" disabled>Обновить статус</button>
+            <button class="btn btn-secondary" id="listOrdersBtn" disabled>Показать последние заказы</button>
+        </div>
+
+        <div class="card-info" style="margin-top: 1rem;">
+            <h3>Статусы заказов</h3>
+            <pre class="mini-log" id="statusOutput">Статус заказа появится здесь после запроса.</pre>
+        </div>
+    </div>
+
+    <!-- Шаг 5: Получить КМ -->
+    <div class="step">
+        <h2>Шаг 5: Получить массивы КМ</h2>
+
+        <div class="form-group">
+            <label>Буфер</label>
+            <select id="bufferSelect" disabled>
+                <option>Буферы не найдены</option>
+            </select>
+            <p class="hint">Запрос статуса заполнит список активных буферов заказа.</p>
+        </div>
+
+        <div class="grid">
+            <div class="form-group">
+                <label>Формат файла</label>
+                <select id="codeFormat">
+                    <option value="CSV">CSV</option>
+                    <option value="JSON">JSON</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Количество КМ за запрос</label>
+                <input type="number" id="codeCount" value="1000" min="1" max="5000">
+            </div>
+        </div>
+
+        <div class="btn-group">
+            <button class="btn btn-primary" id="downloadCodesBtn" disabled>Скачать КМ</button>
+            <a class="btn btn-secondary" id="downloadLink" style="display: none;" download>Скачать файл</a>
+        </div>
+    </div>
+
+    <!-- Шаг 6: Ввод в оборот -->
+    <div class="step">
+        <h2>Шаг 6: Отчёт о нанесении (ввод в оборот)</h2>
+        <p class="hint">Используйте полные КМ (sntins) из буфера. Максимум 30 000 КМ за запрос.</p>
+
+        <textarea id="utilisationPayload">{
+  "productGroup": "",
+  "utilisationType": "UTILISATION",
+  "sntins": [
+    ""
+  ],
+  "attributes": {}
+}</textarea>
+
+        <div class="btn-group" style="margin-top: 1rem;">
+            <button class="btn btn-primary" id="sendUtilisationBtn" disabled>Отправить отчёт</button>
+        </div>
+    </div>
+
     <!-- Лог -->
     <div class="log" id="log">Готов к работе...</div>
 </div>
@@ -297,10 +388,12 @@ const state = {
     currentCert: null,
     card: null,
     nkActive: false,
-    suzActive: false
+    suzActive: false,
+    omsSaved: false,
+    lastOrderId: '',
+    buffers: [],
+    downloadUrl: null
 };
-
-state.omsSaved = false;
 
 const $ = id => document.getElementById(id);
 
@@ -309,9 +402,47 @@ function log(msg) {
     $('log').scrollTop = $('log').scrollHeight;
 }
 
+function updateBufferOptions() {
+    const select = $('bufferSelect');
+    if (!select) return;
+
+    const previous = select.value;
+    select.innerHTML = '';
+
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = state.buffers.length ? 'Автовыбор буфера' : 'Буферы не найдены';
+    select.appendChild(placeholder);
+
+    state.buffers.forEach((buffer, index) => {
+        const option = document.createElement('option');
+        option.value = String(index);
+        option.dataset.key = buffer.bufferId || buffer.id || buffer.buffer_id || buffer.uuid || '';
+        option.dataset.orderId = buffer.orderId || state.lastOrderId;
+
+        const pieces = [];
+        if (buffer.gtin) pieces.push(`GTIN ${buffer.gtin}`);
+        if (buffer.templateId) pieces.push(`template ${buffer.templateId}`);
+        const left = buffer.leftInBuffer ?? buffer.left ?? buffer.totalCodes ?? null;
+        if (left !== null) pieces.push(`доступно ${left}`);
+
+        const label = pieces.length ? pieces.join(' • ') : 'без подробностей';
+        option.textContent = `${option.dataset.key || 'Буфер ' + (index + 1)} • ${label}`;
+        select.appendChild(option);
+    });
+
+    select.disabled = state.buffers.length === 0;
+
+    if (previous && [...select.options].some(opt => opt.value === previous)) {
+        select.value = previous;
+    } else {
+        select.value = '';
+    }
+}
+
 function updateStatus() {
     $('nkStatus').className = 'status ' + (state.nkActive ? 'active' : 'inactive');
-    $('nkStatus').innerHTML = state.nkActive 
+    $('nkStatus').innerHTML = state.nkActive
         ? '<span>✅</span><span>Токен НК: активен</span>'
         : '<span>🔴</span><span>Токен НК: не получен</span>';
     
@@ -324,11 +455,38 @@ function updateStatus() {
     $('omsStatus').innerHTML = state.omsSaved
         ? '<span>✅</span><span>OMS настройки: сохранены</span>'
         : '<span>🔴</span><span>OMS настройки: не сохранены</span>';
-    
+
     const canOrder = state.nkActive && state.suzActive && state.omsSaved && state.card;
-    $('createOrderBtn').disabled = !canOrder;
-    
-    $('authSuzBtn').disabled = !state.currentCert || !state.omsSaved;
+    const createBtn = $('createOrderBtn');
+    if (createBtn) createBtn.disabled = !canOrder;
+
+    const statusBtn = $('statusBtn');
+    if (statusBtn) statusBtn.disabled = !(state.suzActive && state.omsSaved);
+
+    const listOrdersBtn = $('listOrdersBtn');
+    if (listOrdersBtn) listOrdersBtn.disabled = !(state.suzActive && state.omsSaved);
+
+    const downloadBtn = $('downloadCodesBtn');
+    if (downloadBtn) {
+        const orderInput = $('orderIdInput');
+        const hasOrderId = !!(state.lastOrderId || (orderInput && orderInput.value));
+        downloadBtn.disabled = !(state.suzActive && state.omsSaved && hasOrderId);
+    }
+
+    const utilBtn = $('sendUtilisationBtn');
+    if (utilBtn) utilBtn.disabled = !(state.suzActive && state.currentCert && state.omsSaved);
+
+    const authSuzBtn = $('authSuzBtn');
+    if (authSuzBtn) authSuzBtn.disabled = !state.currentCert || !state.omsSaved;
+
+    if (state.lastOrderId) {
+        const orderInput = $('orderIdInput');
+        if (orderInput && !orderInput.value) {
+            orderInput.value = state.lastOrderId;
+        }
+    }
+
+    updateBufferOptions();
 }
 
 async function req(url, options = {}) {
@@ -372,6 +530,7 @@ $('loadCertsBtn').onclick = async () => {
             $('authNkBtn').disabled = false;
             $('authSuzBtn').disabled = false;
             log('✅ Загружено сертификатов: ' + state.certs.length);
+            updateStatus();
         } else {
             log('❌ Действующие сертификаты не найдены');
         }
@@ -382,6 +541,7 @@ $('loadCertsBtn').onclick = async () => {
 
 $('certSelect').onchange = (e) => {
     state.currentCert = state.certs[e.target.value];
+    updateStatus();
 };
 
 // Подпись attached (для авторизации)
@@ -580,22 +740,226 @@ $('createOrderBtn').onclick = async () => {
             }
         };
         
-        const orderJson = JSON.stringify(order);
-        
+        const payload = JSON.stringify(order);
+
         log('✍️ Подпись заказа...');
-        const signature = await signDetached(orderJson, state.currentCert);
-        
+        const signature = await signDetached(payload, state.currentCert);
+
         log('📤 Отправка в СУЗ...');
         const result = await req('order.php', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({order, signature})
+            body: JSON.stringify({payload, signature})
         });
-        
+
         log('✅ Заказ создан! Ответ СУЗ:');
         log(JSON.stringify(result.response, null, 2));
+
+        const createdOrder = result.response || {};
+        const orderId = createdOrder.orderId || createdOrder.id || createdOrder.uuid || createdOrder.order_id || '';
+        if (orderId) {
+            state.lastOrderId = orderId;
+            const orderInput = $('orderIdInput');
+            if (orderInput) orderInput.value = orderId;
+            log('🆔 ID заказа: ' + orderId);
+        }
+
+        state.buffers = [];
+        updateBufferOptions();
+        updateStatus();
     } catch (e) {
         log('❌ ' + e.message);
+    }
+};
+
+function extractOrderInfos(payload) {
+    if (!payload) return [];
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload.orderInfos)) return payload.orderInfos;
+    if (Array.isArray(payload.orders)) return payload.orders;
+    return [];
+}
+
+function base64ToBlob(base64, contentType) {
+    const binary = atob(base64);
+    const length = binary.length;
+    const bytes = new Uint8Array(length);
+    for (let i = 0; i < length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+    }
+    return new Blob([bytes], {type: contentType || 'application/octet-stream'});
+}
+
+function applyOrderInfo(orderPayload, fallbackId) {
+    const infos = extractOrderInfos(orderPayload);
+    const buffers = [];
+    infos.forEach(info => {
+        const orderId = info.orderId || info.id || info.uuid || fallbackId || '';
+        if (!state.lastOrderId && orderId) {
+            state.lastOrderId = orderId;
+            const orderInput = $('orderIdInput');
+            if (orderInput) orderInput.value = orderId;
+        }
+
+        (info.buffers || []).forEach(buffer => {
+            buffers.push({
+                ...buffer,
+                orderId,
+                bufferId: buffer.bufferId || buffer.id || buffer.buffer_id || buffer.uuid || '',
+            });
+        });
+    });
+
+    state.buffers = buffers;
+    updateBufferOptions();
+    updateStatus();
+}
+
+$('statusBtn').onclick = async () => {
+    const orderInput = $('orderIdInput');
+    const orderId = (orderInput ? orderInput.value.trim() : '') || state.lastOrderId;
+
+    if (!orderId) {
+        log('❌ Укажите ID заказа');
+        return;
+    }
+
+    try {
+        log('🔄 Запрос статуса заказа...');
+        const data = await req('order_status.php?orderId=' + encodeURIComponent(orderId));
+        const ordersPayload = data.orders || {};
+        const output = $('statusOutput');
+        if (output) output.textContent = JSON.stringify(ordersPayload, null, 2);
+
+        state.lastOrderId = orderId;
+        applyOrderInfo(ordersPayload, orderId);
+        log('✅ Статус заказа обновлён');
+    } catch (e) {
+        log('❌ ' + e.message);
+    }
+};
+
+$('listOrdersBtn').onclick = async () => {
+    try {
+        log('📋 Запрос списка заказов...');
+        const data = await req('order_status.php?limit=5');
+        const ordersPayload = data.orders || {};
+        const output = $('statusOutput');
+        if (output) output.textContent = JSON.stringify(ordersPayload, null, 2);
+
+        const infos = extractOrderInfos(ordersPayload);
+        if (infos.length) {
+            const firstId = infos[0].orderId || infos[0].id || infos[0].uuid || '';
+            if (firstId) {
+                state.lastOrderId = firstId;
+                const orderInput = $('orderIdInput');
+                if (orderInput) orderInput.value = firstId;
+            }
+        }
+
+        applyOrderInfo(ordersPayload);
+        log('✅ Получены последние заказы');
+    } catch (e) {
+        log('❌ ' + e.message);
+    }
+};
+
+$('downloadCodesBtn').onclick = async () => {
+    const orderInput = $('orderIdInput');
+    const orderId = (orderInput ? orderInput.value.trim() : '') || state.lastOrderId;
+
+    if (!orderId) {
+        log('❌ Укажите ID заказа');
+        return;
+    }
+
+    const bufferSelect = $('bufferSelect');
+    let effectiveOrderId = orderId;
+    let bufferId = '';
+    if (bufferSelect && bufferSelect.value !== '') {
+        const option = bufferSelect.options[bufferSelect.selectedIndex];
+        if (option) {
+            bufferId = option.dataset.key || '';
+            if (option.dataset.orderId) {
+                effectiveOrderId = option.dataset.orderId;
+            }
+        }
+    }
+    const format = $('codeFormat') ? $('codeFormat').value : 'CSV';
+    const count = parseInt($('codeCount') ? $('codeCount').value : '1000', 10) || 1000;
+
+    try {
+        log('📦 Запрос кодов маркировки...');
+        const params = new URLSearchParams({
+            orderId: effectiveOrderId,
+            count: String(count),
+            format,
+        });
+        if (bufferId) params.set('bufferId', bufferId);
+
+        const result = await req('codes.php?' + params.toString());
+        const payload = result.data || {};
+
+        if (!payload.base64) {
+            throw new Error('Пустой ответ от сервиса кодов');
+        }
+
+        if (state.downloadUrl) {
+            URL.revokeObjectURL(state.downloadUrl);
+        }
+
+        const blob = base64ToBlob(payload.base64, payload.contentType);
+        const url = URL.createObjectURL(blob);
+        state.downloadUrl = url;
+
+        const link = $('downloadLink');
+        if (link) {
+            const ext = format.toLowerCase() === 'json' ? 'json' : 'csv';
+            link.href = url;
+            link.download = `codes_${orderId}.${ext}`;
+            link.style.display = 'inline-block';
+        }
+
+        log('✅ Массив КМ готов к скачиванию');
+    } catch (e) {
+        log('❌ ' + e.message);
+    }
+};
+
+$('sendUtilisationBtn').onclick = async () => {
+    if (!state.currentCert) {
+        log('❌ Выберите сертификат');
+        return;
+    }
+
+    const textarea = $('utilisationPayload');
+    if (!textarea || !textarea.value.trim()) {
+        log('❌ Заполните тело отчёта о нанесении');
+        return;
+    }
+
+    try {
+        const parsed = JSON.parse(textarea.value);
+        const payload = JSON.stringify(parsed);
+
+        log('✍️ Подпись отчёта...');
+        const signature = await signDetached(payload, state.currentCert);
+
+        log('📤 Отправка отчёта...');
+        const result = await req('utilisation.php', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({payload, signature})
+        });
+
+        log('✅ Отчёт принят:');
+        log(JSON.stringify(result.response, null, 2));
+    } catch (e) {
+        if (e instanceof SyntaxError) {
+            log('❌ Некорректный JSON отчёта: ' + e.message);
+        } else {
+            log('❌ ' + e.message);
+        }
     }
 };
 
@@ -611,7 +975,7 @@ $('createOrderBtn').onclick = async () => {
             $('omsId').value = status.oms.id;
             state.omsSaved = true;
         }
-        
+
         updateStatus();
         if (state.nkActive || state.suzActive || state.omsSaved) {
             log('ℹ️ Данные восстановлены из сессии');
@@ -620,6 +984,12 @@ $('createOrderBtn').onclick = async () => {
         console.error(e);
     }
 })();
+
+window.addEventListener('beforeunload', () => {
+    if (state.downloadUrl) {
+        URL.revokeObjectURL(state.downloadUrl);
+    }
+});
 </script>
 
 </body>
