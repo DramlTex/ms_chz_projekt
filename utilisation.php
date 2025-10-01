@@ -5,7 +5,7 @@ header('Content-Type: application/json');
 
 try {
     $input = json_decode(file_get_contents('php://input'), true);
-    
+
     if (empty($input['payload']) || empty($input['signature'])) {
         throw new Exception('Не указаны payload или signature');
     }
@@ -15,19 +15,18 @@ try {
         http_response_code(401);
         throw new Exception('clientToken отсутствует');
     }
-    
-    // Получаем OMS ID из сессии
+
     $oms = getOmsSettings();
-    if (!$oms['id']) {
+    if (empty($oms['id'])) {
         throw new Exception('OMS ID не сохранен. Заполните и сохраните настройки OMS.');
     }
-    
-    // Отправка заказа в СУЗ
+
     $response = apiRequest(
-        SUZ_API_URL . '/orders?omsId=' . urlencode($oms['id']),
+        SUZ_API_URL . '/utilisation?omsId=' . urlencode($oms['id']),
         'POST',
         [
             'Content-Type: application/json',
+            'Accept: application/json',
             'clientToken: ' . $token,
             'X-Signature: ' . $input['signature'],
         ],
@@ -35,7 +34,8 @@ try {
     );
 
     echo json_encode(['ok' => true, 'response' => $response]);
-    
+
 } catch (Exception $e) {
+    http_response_code(500);
     echo json_encode(['error' => $e->getMessage()]);
 }
