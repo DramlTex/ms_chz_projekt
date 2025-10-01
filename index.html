@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Заказ КМ</title>
+    <script src="cadesplugin_api.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 2rem;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 2.5rem;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            color: #1a202c;
+        }
+        
+        .subtitle {
+            color: #718096;
+            margin-bottom: 2rem;
+            font-size: 0.95rem;
+        }
+        
+        .step {
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .step h2 {
+            font-size: 1.3rem;
+            margin-bottom: 1rem;
+            color: #2d3748;
+        }
+        
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+        }
+        
+        .status.inactive {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+        
+        .status.active {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+        
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 0.4rem;
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: #4a5568;
+        }
+        
+        input, select, textarea {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-family: inherit;
+        }
+        
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.15s, box-shadow 0.15s;
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 4px 14px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.5);
+        }
+        
+        .btn-secondary {
+            background: #edf2f7;
+            color: #2d3748;
+        }
+        
+        .btn-secondary:hover:not(:disabled) {
+            background: #e2e8f0;
+        }
+        
+        .btn-group {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+        
+        .card-info {
+            background: #f7fafc;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1rem;
+        }
+        
+        .card-info h3 {
+            margin-bottom: 0.5rem;
+            color: #2d3748;
+        }
+        
+        .card-info .pill {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 999px;
+            font-size: 0.85rem;
+            margin-right: 0.5rem;
+        }
+        
+        .log {
+            background: #1a202c;
+            color: #e2e8f0;
+            padding: 1rem;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            max-height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            margin-top: 1rem;
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🎯 Заказ кодов маркировки</h1>
+    <p class="subtitle">Простой способ создать заказ в СУЗ через True API</p>
+    
+    <!-- Шаг 1: Авторизация -->
+    <div class="step">
+    <h2>Шаг 1: Авторизация</h2>
+    
+    <div class="status" id="nkStatus">
+        <span>🔴</span>
+        <span>Токен НК: не получен</span>
+    </div>
+    
+    <div class="status" id="suzStatus">
+        <span>🔴</span>
+        <span>Токен СУЗ: не получен</span>
+    </div>
+    
+    <div class="status" id="omsStatus">
+        <span>🔴</span>
+        <span>OMS настройки: не сохранены</span>
+    </div>
+    
+    <div class="form-group">
+        <label>Сертификат УКЭП</label>
+        <select id="certSelect" disabled>
+            <option>Загрузите сертификаты...</option>
+        </select>
+    </div>
+    
+    <div class="form-group">
+        <label>OMS Connection (GUID подключения)</label>
+        <input type="text" id="omsConnection" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+    </div>
+    
+    <div class="form-group">
+        <label>OMS ID (UUID идентификатор)</label>
+        <input type="text" id="omsId" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+    </div>
+    
+    <div class="btn-group">
+        <button class="btn btn-secondary" id="loadCertsBtn">Загрузить сертификаты</button>
+        <button class="btn btn-secondary" id="saveOmsBtn">Сохранить настройки OMS</button>
+        <button class="btn btn-primary" id="authNkBtn" disabled>Получить токен НК</button>
+        <button class="btn btn-primary" id="authSuzBtn" disabled>Получить токен СУЗ</button>
+    </div>
+</div>
+    
+    <!-- Шаг 2: Карточка -->
+    <div class="step">
+        <h2>Шаг 2: Найти карточку товара</h2>
+        
+        <div class="form-group">
+            <label>GTIN товара</label>
+            <input type="text" id="gtinInput" placeholder="04601234567890">
+        </div>
+        
+        <button class="btn btn-secondary" id="findCardBtn">Найти карточку</button>
+        
+        <div class="card-info" id="cardInfo" style="display: none;">
+            <h3 id="cardName"></h3>
+            <div id="cardPills"></div>
+            <p id="cardDetails" style="margin-top: 0.5rem; color: #718096;"></p>
+        </div>
+    </div>
+    
+    <!-- Шаг 3: Заказ -->
+    <div class="step">
+        <h2>Шаг 3: Параметры заказа</h2>
+        
+        <div class="grid">
+            <div class="form-group">
+                <label>Товарная группа</label>
+                <select id="productGroup">
+                    <option value="">Выберите группу</option>
+                    <option value="lp">Легкая промышленность</option>
+                    <option value="shoes">Обувь</option>
+                    <option value="tobacco">Табак</option>
+                    <option value="pharma">Лекарства</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>Количество КМ</label>
+                <input type="number" id="quantity" value="1" min="1">
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <label>Способ выпуска</label>
+            <select id="releaseMethod">
+                <option value="PRODUCTION">Произведено в РФ</option>
+                <option value="IMPORT">Импорт</option>
+                <option value="REMAINS">Маркировка остатков</option>
+            </select>
+        </div>
+        
+        <button class="btn btn-primary" id="createOrderBtn" disabled>Создать заказ</button>
+    </div>
+    
+    <!-- Лог -->
+    <div class="log" id="log">Готов к работе...</div>
+</div>
+
+<script>
+const state = {
+    certs: [],
+    currentCert: null,
+    card: null,
+    nkActive: false,
+    suzActive: false
+};
+
+state.omsSaved = false;
+
+const $ = id => document.getElementById(id);
+
+function log(msg) {
+    $('log').textContent += '\n' + msg;
+    $('log').scrollTop = $('log').scrollHeight;
+}
+
+function updateStatus() {
+    $('nkStatus').className = 'status ' + (state.nkActive ? 'active' : 'inactive');
+    $('nkStatus').innerHTML = state.nkActive 
+        ? '<span>✅</span><span>Токен НК: активен</span>'
+        : '<span>🔴</span><span>Токен НК: не получен</span>';
+    
+    $('suzStatus').className = 'status ' + (state.suzActive ? 'active' : 'inactive');
+    $('suzStatus').innerHTML = state.suzActive
+        ? '<span>✅</span><span>Токен СУЗ: активен</span>'
+        : '<span>🔴</span><span>Токен СУЗ: не получен</span>';
+    
+    $('omsStatus').className = 'status ' + (state.omsSaved ? 'active' : 'inactive');
+    $('omsStatus').innerHTML = state.omsSaved
+        ? '<span>✅</span><span>OMS настройки: сохранены</span>'
+        : '<span>🔴</span><span>OMS настройки: не сохранены</span>';
+    
+    const canOrder = state.nkActive && state.suzActive && state.omsSaved && state.card;
+    $('createOrderBtn').disabled = !canOrder;
+    
+    $('authSuzBtn').disabled = !state.currentCert || !state.omsSaved;
+}
+
+async function req(url, options = {}) {
+    const resp = await fetch(url, options);
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+    return data;
+}
+
+// Загрузка сертификатов
+$('loadCertsBtn').onclick = async () => {
+    try {
+        await cadesplugin;
+        const store = await cadesplugin.CreateObjectAsync('CAdESCOM.Store');
+        await store.Open(2, 'My', 2);
+        
+        const certs = await store.Certificates;
+        const count = await certs.Count;
+        
+        state.certs = [];
+        $('certSelect').innerHTML = '';
+        
+        for (let i = 1; i <= count; i++) {
+            const cert = await certs.Item(i);
+            const validTo = new Date(await cert.ValidToDate);
+            if (validTo < new Date()) continue;
+            
+            state.certs.push(cert);
+            const option = document.createElement('option');
+            option.value = state.certs.length - 1;
+            option.textContent = await cert.SubjectName;
+            $('certSelect').appendChild(option);
+        }
+        
+        await store.Close();
+        
+        if (state.certs.length) {
+            $('certSelect').disabled = false;
+            $('certSelect').value = '0';
+            state.currentCert = state.certs[0];
+            $('authNkBtn').disabled = false;
+            $('authSuzBtn').disabled = false;
+            log('✅ Загружено сертификатов: ' + state.certs.length);
+        } else {
+            log('❌ Действующие сертификаты не найдены');
+        }
+    } catch (e) {
+        log('❌ Ошибка загрузки сертификатов: ' + e.message);
+    }
+};
+
+$('certSelect').onchange = (e) => {
+    state.currentCert = state.certs[e.target.value];
+};
+
+// Подпись attached (для авторизации)
+async function signAttached(data, cert) {
+    const signer = await cadesplugin.CreateObjectAsync('CAdESCOM.CPSigner');
+    await signer.propset_Certificate(cert);
+    
+    const sd = await cadesplugin.CreateObjectAsync('CAdESCOM.CadesSignedData');
+    if (typeof sd.propset_ContentEncoding === 'function') {
+        try {
+            await sd.propset_ContentEncoding(cadesplugin.CADESCOM_STRING_TO_UCS2LE);
+        } catch (_) {}
+    }
+    await sd.propset_Content(data);
+    
+    return sd.SignCades(signer, cadesplugin.CADESCOM_CADES_BES);
+}
+
+// Подпись detached (для заказа)
+async function signDetached(data, cert) {
+    const signer = await cadesplugin.CreateObjectAsync('CAdESCOM.CPSigner');
+    await signer.propset_Certificate(cert);
+    
+    const sd = await cadesplugin.CreateObjectAsync('CAdESCOM.CadesSignedData');
+    await sd.propset_Content(data);
+    
+    return sd.SignCades(signer, cadesplugin.CADESCOM_CADES_BES, true);
+}
+
+
+// Сохранение OMS настроек
+$('saveOmsBtn').onclick = async () => {
+    const omsConnection = $('omsConnection').value.trim();
+    const omsId = $('omsId').value.trim();
+    
+    if (!omsConnection || !omsId) {
+        log('❌ Заполните OMS Connection и OMS ID');
+        return;
+    }
+    
+    try {
+        await req('auth.php?action=save-oms', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({omsConnection, omsId})
+        });
+        
+        state.omsSaved = true;
+        updateStatus();
+        log('✅ Настройки OMS сохранены');
+    } catch (e) {
+        log('❌ ' + e.message);
+    }
+};
+
+// Авторизация НК
+$('authNkBtn').onclick = async () => {
+    if (!state.currentCert) {
+        log('❌ Выберите сертификат');
+        return;
+    }
+    
+    try {
+        log('🔐 Запрос challenge НК...');
+        const challenge = await req('auth.php?action=nk-challenge');
+        
+        log('✍️ Подпись challenge...');
+        const signature = await signAttached(challenge.data, state.currentCert);
+        
+        log('📤 Обмен на токен...');
+        await req('auth.php?action=nk-signin', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({uuid: challenge.uuid, signature})
+        });
+        
+        state.nkActive = true;
+        updateStatus();
+        log('✅ Токен НК получен');
+    } catch (e) {
+        log('❌ ' + e.message);
+    }
+};
+
+// Авторизация СУЗ
+$('authSuzBtn').onclick = async () => {
+    if (!state.currentCert) {
+        log('❌ Выберите сертификат');
+        return;
+    }
+    
+    const omsConnection = $('omsConnection').value.trim();
+    const omsId = $('omsId').value.trim();
+    
+    if (!omsConnection || !omsId) {
+        log('❌ Заполните OMS Connection и OMS ID');
+        return;
+    }
+    
+    try {
+        log('🔐 Запрос challenge СУЗ...');
+        const challenge = await req('auth.php?action=suz-challenge');
+        
+        log('✍️ Подпись challenge...');
+        const signature = await signAttached(challenge.data, state.currentCert);
+        
+        log('📤 Обмен на clientToken...');
+        await req('auth.php?action=suz-signin', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({uuid: challenge.uuid, signature, omsConnection, omsId})
+        });
+        
+        state.suzActive = true;
+        updateStatus();
+        log('✅ Токен СУЗ получен');
+    } catch (e) {
+        log('❌ ' + e.message);
+    }
+};
+
+// Поиск карточки
+$('findCardBtn').onclick = async () => {
+    const gtin = $('gtinInput').value.trim();
+    if (!gtin) {
+        log('❌ Укажите GTIN');
+        return;
+    }
+    
+    if (!state.nkActive) {
+        log('❌ Сначала получите токен НК');
+        return;
+    }
+    
+    try {
+        log('🔍 Поиск карточки...');
+        state.card = await req('card.php?gtin=' + encodeURIComponent(gtin));
+        
+        $('cardInfo').style.display = 'block';
+        $('cardName').textContent = state.card.name || 'Без названия';
+        
+        const pills = [];
+        if (state.card.goodId) pills.push(`<span class="pill">ID: ${state.card.goodId}</span>`);
+        if (state.card.gtin) pills.push(`<span class="pill">GTIN: ${state.card.gtin}</span>`);
+        $('cardPills').innerHTML = pills.join('');
+        
+        $('cardDetails').textContent = 
+            (state.card.tnved ? `ТН ВЭД: ${state.card.tnved}` : '') +
+            (state.card.productGroup ? ` • Группа: ${state.card.productGroup}` : '');
+        
+        if (state.card.productGroup) {
+            $('productGroup').value = state.card.productGroup;
+        }
+        
+        updateStatus();
+        log('✅ Карточка найдена');
+    } catch (e) {
+        log('❌ ' + e.message);
+        state.card = null;
+        $('cardInfo').style.display = 'none';
+        updateStatus();
+    }
+};
+
+// Создание заказа
+$('createOrderBtn').onclick = async () => {
+    if (!state.currentCert) {
+        log('❌ Выберите сертификат');
+        return;
+    }
+    
+    if (!state.card) {
+        log('❌ Сначала найдите карточку');
+        return;
+    }
+    
+    const productGroup = $('productGroup').value;
+    const quantity = parseInt($('quantity').value);
+    const releaseMethod = $('releaseMethod').value;
+    
+    if (!productGroup || !quantity || !releaseMethod) {
+        log('❌ Заполните все поля заказа');
+        return;
+    }
+    
+    try {
+        const order = {
+            productGroup,
+            products: [{
+                gtin: state.card.gtin,
+                quantity,
+                ...(state.card.templateId && {templateId: state.card.templateId})
+            }],
+            attributes: {
+                releaseMethodType: releaseMethod
+            }
+        };
+        
+        const orderJson = JSON.stringify(order);
+        
+        log('✍️ Подпись заказа...');
+        const signature = await signDetached(orderJson, state.currentCert);
+        
+        log('📤 Отправка в СУЗ...');
+        const result = await req('order.php', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({order, signature})
+        });
+        
+        log('✅ Заказ создан! Ответ СУЗ:');
+        log(JSON.stringify(result.response, null, 2));
+    } catch (e) {
+        log('❌ ' + e.message);
+    }
+};
+
+// Проверка статуса при загрузке
+(async () => {
+    try {
+        const status = await req('auth.php?action=status');
+        state.nkActive = status.nk.active;
+        state.suzActive = status.suz.active;
+        
+        if (status.oms.connection && status.oms.id) {
+            $('omsConnection').value = status.oms.connection;
+            $('omsId').value = status.oms.id;
+            state.omsSaved = true;
+        }
+        
+        updateStatus();
+        if (state.nkActive || state.suzActive || state.omsSaved) {
+            log('ℹ️ Данные восстановлены из сессии');
+        }
+    } catch (e) {
+        console.error(e);
+    }
+})();
+</script>
+
+</body>
+</html>
