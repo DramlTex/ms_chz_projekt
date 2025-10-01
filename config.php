@@ -80,6 +80,7 @@ function trimResponse(string $response, int $limit = 2048): string {
     return substr($response, 0, $limit) . '...';
 }
 
+
 function collectDnsRecords(string $host): array {
     if (!function_exists('dns_get_record')) {
         return [];
@@ -147,6 +148,7 @@ function buildCurlResolveTargets(string $host, string $url, array $ips): array {
     }, $ips);
 }
 
+
 /**
  * Выполнить HTTP-запрос и вернуть «сырой» ответ.
  */
@@ -165,7 +167,11 @@ function apiRequestRaw(string $url, string $method = 'GET', ?array $headers = nu
     $preparedHeaders = $headers ?: $defaultHeaders;
     $bodyPayload = null;
 
+
     $curlOptions = [
+
+    curl_setopt_array($ch, [
+
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_CUSTOMREQUEST => $method,
         CURLOPT_HTTPHEADER => $preparedHeaders,
@@ -190,6 +196,23 @@ function apiRequestRaw(string $url, string $method = 'GET', ?array $headers = nu
         $info = curl_getinfo($ch);
         curl_close($ch);
 
+
+        $host = parse_url($url, PHP_URL_HOST) ?: null;
+        $dnsInfo = null;
+
+        if ($host && function_exists('dns_get_record')) {
+            $dnsRecords = @dns_get_record($host, DNS_A + DNS_AAAA);
+            if ($dnsRecords !== false) {
+                $dnsInfo = array_map(static function (array $record): array {
+                    return array_filter([
+                        'type' => $record['type'] ?? null,
+                        'ip' => $record['ip'] ?? ($record['ipv6'] ?? null),
+                    ]);
+                }, $dnsRecords);
+            }
+        }
+
+
         appLog('HTTP request failed', [
             'url' => $url,
             'method' => $method,
@@ -201,14 +224,21 @@ function apiRequestRaw(string $url, string $method = 'GET', ?array $headers = nu
             'dns' => $dnsRecords,
             'resolvedIps' => $resolvedIps,
             'curlResolve' => $resolveTargets,
+
+            'dns' => $dnsInfo,
+
             'curl_info' => $info,
         ]);
 
         if ($errno === CURLE_COULDNT_RESOLVE_HOST && $host) {
+
             $error .= sprintf(
                 ' (не удалось разрешить хост %s. Проверьте DNS/сетевые настройки, содержимое /etc/resolv.conf и доступность указанного DNS-сервера)',
                 $host
             );
+
+            $error .= sprintf(' (не удалось разрешить хост %s. Проверьте DNS или сетевые настройки сервера)', $host);
+
         }
 
         throw new Exception('Ошибка запроса: ' . $error);
