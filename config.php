@@ -80,11 +80,84 @@ function trimResponse(string $response, int $limit = 2048): string {
     return substr($response, 0, $limit) . '...';
 }
 
+
+function collectDnsRecords(string $host): array {
+    if (!function_exists('dns_get_record')) {
+        return [];
+    }
+
+    $queryTypes = DNS_A;
+    if (defined('DNS_AAAA')) {
+        $queryTypes |= DNS_AAAA;
+    }
+
+    $records = @dns_get_record($host, $queryTypes);
+    if ($records === false) {
+        return [];
+    }
+
+    return array_values(array_filter(array_map(static function (array $record): ?array {
+        $type = $record['type'] ?? null;
+        $ip = $record['ip'] ?? ($record['ipv6'] ?? null);
+
+        if (!$type || !$ip) {
+            return null;
+        }
+
+        return [
+            'type' => $type,
+            'ip' => $ip,
+        ];
+    }, $records)));
+}
+
+function resolveHostIps(string $host, array $dnsRecords = []): array {
+    $ips = [];
+
+    foreach ($dnsRecords as $record) {
+        if (!empty($record['ip'])) {
+            $ips[] = $record['ip'];
+        }
+    }
+
+    if (empty($ips) && function_exists('gethostbynamel')) {
+        $resolved = @gethostbynamel($host);
+        if (is_array($resolved)) {
+            $ips = array_merge($ips, $resolved);
+        }
+    }
+
+    return array_values(array_unique($ips));
+}
+
+function buildCurlResolveTargets(string $host, string $url, array $ips): array {
+    if (empty($ips)) {
+        return [];
+    }
+
+    $port = parse_url($url, PHP_URL_PORT);
+    if (!$port) {
+        $scheme = parse_url($url, PHP_URL_SCHEME) ?: 'http';
+        $port = $scheme === 'https' ? 443 : 80;
+    }
+
+    return array_map(static function (string $ip) use ($host, $port): string {
+        $formattedIp = strpos($ip, ':') !== false ? '[' . $ip . ']' : $ip;
+
+        return sprintf('%s:%d:%s', $host, $port, $formattedIp);
+    }, $ips);
+}
+
+
 /**
  * Выполнить HTTP-запрос и вернуть «сырой» ответ.
  */
 function apiRequestRaw(string $url, string $method = 'GET', ?array $headers = null, $body = null): array {
     $ch = curl_init($url);
+    $host = parse_url($url, PHP_URL_HOST) ?: null;
+    $dnsRecords = $host ? collectDnsRecords($host) : [];
+    $resolvedIps = $host ? resolveHostIps($host, $dnsRecords) : [];
+    $resolveTargets = $host ? buildCurlResolveTargets($host, $url, $resolvedIps) : [];
 
     $defaultHeaders = [
         'Content-Type: application/json',
@@ -94,12 +167,22 @@ function apiRequestRaw(string $url, string $method = 'GET', ?array $headers = nu
     $preparedHeaders = $headers ?: $defaultHeaders;
     $bodyPayload = null;
 
+
+    $curlOptions = [
+
     curl_setopt_array($ch, [
+
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_CUSTOMREQUEST => $method,
         CURLOPT_HTTPHEADER => $preparedHeaders,
         CURLOPT_TIMEOUT => 60,
-    ]);
+    ];
+
+    if (!empty($resolveTargets)) {
+        $curlOptions[CURLOPT_RESOLVE] = $resolveTargets;
+    }
+
+    curl_setopt_array($ch, $curlOptions);
 
     if ($body !== null) {
         $bodyPayload = is_string($body) ? $body : json_encode($body, JSON_UNESCAPED_UNICODE);
@@ -112,6 +195,7 @@ function apiRequestRaw(string $url, string $method = 'GET', ?array $headers = nu
         $error = curl_error($ch);
         $info = curl_getinfo($ch);
         curl_close($ch);
+
 
         $host = parse_url($url, PHP_URL_HOST) ?: null;
         $dnsInfo = null;
@@ -128,6 +212,7 @@ function apiRequestRaw(string $url, string $method = 'GET', ?array $headers = nu
             }
         }
 
+
         appLog('HTTP request failed', [
             'url' => $url,
             'method' => $method,
@@ -136,12 +221,24 @@ function apiRequestRaw(string $url, string $method = 'GET', ?array $headers = nu
             'curl_errno' => $errno,
             'curl_error' => $error,
             'host' => $host,
+            'dns' => $dnsRecords,
+            'resolvedIps' => $resolvedIps,
+            'curlResolve' => $resolveTargets,
+
             'dns' => $dnsInfo,
+
             'curl_info' => $info,
         ]);
 
         if ($errno === CURLE_COULDNT_RESOLVE_HOST && $host) {
+
+            $error .= sprintf(
+                ' (не удалось разрешить хост %s. Проверьте DNS/сетевые настройки, содержимое /etc/resolv.conf и доступность указанного DNS-сервера)',
+                $host
+            );
+
             $error .= sprintf(' (не удалось разрешить хост %s. Проверьте DNS или сетевые настройки сервера)', $host);
+
         }
 
         throw new Exception('Ошибка запроса: ' . $error);
