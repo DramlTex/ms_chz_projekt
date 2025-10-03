@@ -566,18 +566,33 @@ async function signAttached(data, cert) {
     return sd.SignCades(signer, cadesplugin.CADESCOM_CADES_BES);
 }
 
+function encodeBase64Utf8(data) {
+    const utf8 = new TextEncoder().encode(data);
+    let binary = '';
+    for (const byte of utf8) {
+        binary += String.fromCharCode(byte);
+    }
+    return btoa(binary);
+}
+
 // Подпись detached (для заказа)
 // Подпись detached (для заказа) - CMS формат
 async function signDetached(data, cert) {
     const signer = await cadesplugin.CreateObjectAsync('CAdESCOM.CPSigner');
     await signer.propset_Certificate(cert);
-    
+
     const sd = await cadesplugin.CreateObjectAsync('CAdESCOM.CadesSignedData');
-    await sd.propset_Content(data);
-    
+
+    // ВАЖНО: подписываем байты HTTP-тела → кодируем JSON в base64 и говорим плагину, что это бинарь
+    const base64Payload = encodeBase64Utf8(data);
+    if (typeof sd.propset_ContentEncoding === 'function') {
+        await sd.propset_ContentEncoding(cadesplugin.CADESCOM_BASE64_TO_BINARY);
+    }
+    await sd.propset_Content(base64Payload);
+
     // ВАЖНО: detached = true, БЕЗ кодирования контента
     const signature = await sd.SignCades(signer, cadesplugin.CADESCOM_CADES_BES, true);
-    
+
     // Удаляем ВСЕ переносы и пробелы
     return signature.replace(/[\r\n\s]/g, '');
 }
