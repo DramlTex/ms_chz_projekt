@@ -20,47 +20,55 @@ try {
         throw new Exception('Не указан orderId');
     }
 
-    $bufferId = trim($_GET['bufferId'] ?? '');
-    $count = isset($_GET['count']) ? (int)$_GET['count'] : 1000;
-    if ($count <= 0) {
-        $count = 1000;
+    $quantity = isset($_GET['quantity']) ? (int)$_GET['quantity'] : 1000;
+    if ($quantity <= 0) {
+        throw new Exception('Количество КМ должно быть положительным числом');
     }
-    $count = min($count, 5000);
+    $quantity = min($quantity, 150000);
 
-    $format = strtoupper(trim($_GET['format'] ?? 'CSV'));
-    $allowedFormats = ['CSV', 'JSON'];
-    if (!in_array($format, $allowedFormats, true)) {
-        $format = 'CSV';
+    $gtin = preg_replace('/\s+/', '', $_GET['gtin'] ?? '');
+    if ($gtin === '') {
+        throw new Exception('Не указан GTIN');
+    }
+
+    if (!preg_match('/^\d{8,14}$/', $gtin)) {
+        throw new Exception('GTIN должен содержать только цифры (8-14 знаков)');
+    }
+
+    if (strlen($gtin) < 14) {
+        $gtin = str_pad($gtin, 14, '0', STR_PAD_LEFT);
+    }
+
+    if (!preg_match('/^\d{14}$/', $gtin)) {
+        throw new Exception('GTIN должен содержать 14 цифр после нормализации');
     }
 
     $params = [
         'omsId' => $oms['id'],
-        'count' => $count,
-        'documentFormat' => $format,
+        'orderId' => $orderId,
+        'quantity' => $quantity,
+        'gtin' => $gtin,
     ];
-
-    if ($bufferId !== '') {
-        $params['bufferId'] = $bufferId;
-    }
 
     $query = http_build_query($params, '', '&', PHP_QUERY_RFC3986);
 
-    // ИСПРАВЛЕНО: Используем /order (единственное число)
-    $result = apiRequestRaw(
-        SUZ_API_URL . '/order/' . rawurlencode($orderId) . '/codes?' . $query,
+    $result = apiRequest(
+        SUZ_API_URL . '/codes?' . $query,
         'GET',
         [
             'clientToken: ' . $token,
-            'Accept: application/octet-stream',
+            'Accept: application/json',
         ]
     );
 
     echo json_encode([
         'ok' => true,
         'data' => [
-            'contentType' => $result['contentType'],
-            'base64' => base64_encode($result['body']),
-            'size' => strlen($result['body']),
+            'omsId' => $result['omsId'] ?? null,
+            'codes' => $result['codes'] ?? [],
+            'blockId' => $result['blockId'] ?? null,
+            'requestedQuantity' => $quantity,
+            'receivedQuantity' => isset($result['codes']) && is_array($result['codes']) ? count($result['codes']) : 0,
         ],
     ]);
 
