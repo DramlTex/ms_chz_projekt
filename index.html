@@ -340,16 +340,23 @@
 
         <div class="grid">
             <div class="form-group">
+                <label>GTIN для получения КМ</label>
+                <input type="text" id="codeGtin" placeholder="04601234567890" maxlength="14">
+                <p class="hint">Используйте GTIN из карточки товара. Формат — 14 цифр.</p>
+            </div>
+
+            <div class="form-group">
+                <label>Количество КМ за запрос</label>
+                <input type="number" id="codeQuantity" value="1000" min="1" max="150000">
+                <p class="hint">Максимально допустимое значение — 150 000 КМ.</p>
+            </div>
+
+            <div class="form-group">
                 <label>Формат файла</label>
                 <select id="codeFormat">
                     <option value="CSV">CSV</option>
                     <option value="JSON">JSON</option>
                 </select>
-            </div>
-
-            <div class="form-group">
-                <label>Количество КМ за запрос</label>
-                <input type="number" id="codeCount" value="1000" min="1" max="5000">
             </div>
         </div>
 
@@ -469,8 +476,10 @@ function updateStatus() {
     const downloadBtn = $('downloadCodesBtn');
     if (downloadBtn) {
         const orderInput = $('orderIdInput');
+        const gtinInput = $('codeGtin');
         const hasOrderId = !!(state.lastOrderId || (orderInput && orderInput.value));
-        downloadBtn.disabled = !(state.suzActive && state.omsSaved && hasOrderId);
+        const hasGtin = !!(gtinInput && gtinInput.value.trim());
+        downloadBtn.disabled = !(state.suzActive && state.omsSaved && hasOrderId && hasGtin);
     }
 
     const utilBtn = $('sendUtilisationBtn');
@@ -488,6 +497,13 @@ function updateStatus() {
 
     updateBufferOptions();
 }
+
+['orderIdInput', 'codeGtin'].forEach(id => {
+    const element = $(id);
+    if (element) {
+        element.addEventListener('input', () => updateStatus());
+    }
+});
 
 async function req(url, options = {}) {
     const resp = await fetch(url, options);
@@ -719,7 +735,24 @@ $('findCardBtn').onclick = async () => {
         if (state.card.productGroup) {
             $('productGroup').value = state.card.productGroup;
         }
-        
+
+        const codeGtinInput = $('codeGtin');
+        if (codeGtinInput && state.card.gtin) {
+            let normalized = String(state.card.gtin).replace(/\s+/g, '');
+            if (/^\d+$/.test(normalized)) {
+                if (normalized.length < 14) {
+                    normalized = normalized.padStart(14, '0');
+                }
+                if (normalized.length === 14) {
+                    codeGtinInput.value = normalized;
+                } else {
+                    codeGtinInput.value = state.card.gtin;
+                }
+            } else {
+                codeGtinInput.value = state.card.gtin;
+            }
+        }
+
         updateStatus();
         log('✅ Карточка найдена');
     } catch (e) {
@@ -829,16 +862,6 @@ function extractOrderInfos(payload) {
     return [];
 }
 
-function base64ToBlob(base64, contentType) {
-    const binary = atob(base64);
-    const length = binary.length;
-    const bytes = new Uint8Array(length);
-    for (let i = 0; i < length; i++) {
-        bytes[i] = binary.charCodeAt(i);
-    }
-    return new Blob([bytes], {type: contentType || 'application/octet-stream'});
-}
-
 function applyOrderInfo(orderPayload, fallbackId) {
     const infos = extractOrderInfos(orderPayload);
     const buffers = [];
@@ -861,6 +884,22 @@ function applyOrderInfo(orderPayload, fallbackId) {
 
     state.buffers = buffers;
     updateBufferOptions();
+
+    const gtinInput = $('codeGtin');
+    if (gtinInput && !gtinInput.value) {
+        const bufferWithGtin = buffers.find(buffer => buffer.gtin);
+        if (bufferWithGtin && bufferWithGtin.gtin) {
+            let normalized = String(bufferWithGtin.gtin).replace(/\s+/g, '');
+            if (/^\d+$/.test(normalized)) {
+                if (normalized.length < 14) {
+                    normalized = normalized.padStart(14, '0');
+                }
+                if (normalized.length === 14) {
+                    gtinInput.value = normalized;
+                }
+            }
+        }
+    }
     updateStatus();
 }
 
@@ -924,52 +963,114 @@ $('downloadCodesBtn').onclick = async () => {
 
     const bufferSelect = $('bufferSelect');
     let effectiveOrderId = orderId;
-    let bufferId = '';
     if (bufferSelect && bufferSelect.value !== '') {
         const option = bufferSelect.options[bufferSelect.selectedIndex];
-        if (option) {
-            bufferId = option.dataset.key || '';
-            if (option.dataset.orderId) {
-                effectiveOrderId = option.dataset.orderId;
-            }
+        if (option && option.dataset.orderId) {
+            effectiveOrderId = option.dataset.orderId;
         }
     }
-    const format = $('codeFormat') ? $('codeFormat').value : 'CSV';
-    const count = parseInt($('codeCount') ? $('codeCount').value : '1000', 10) || 1000;
+
+    const formatSelect = $('codeFormat');
+    const format = formatSelect ? formatSelect.value : 'CSV';
+
+    const quantityInput = $('codeQuantity');
+    let quantity = parseInt(quantityInput ? quantityInput.value : '1000', 10);
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+        log('❌ Количество КМ должно быть положительным числом');
+        return;
+    }
+    if (quantity > 150000) {
+        quantity = 150000;
+        if (quantityInput) {
+            quantityInput.value = '150000';
+        }
+        log('ℹ️ Количество ограничено значением 150 000 КМ');
+    }
+
+    const gtinInput = $('codeGtin');
+    let gtin = gtinInput ? gtinInput.value.trim() : '';
+    if (!gtin && state.card && state.card.gtin) {
+        gtin = String(state.card.gtin);
+    }
+    gtin = gtin.replace(/\s+/g, '');
+
+    if (!gtin) {
+        log('❌ Укажите GTIN товара');
+        return;
+    }
+
+    if (!/^\d+$/.test(gtin)) {
+        log('❌ GTIN должен состоять только из цифр');
+        return;
+    }
+
+    if (gtin.length < 14) {
+        gtin = gtin.padStart(14, '0');
+    }
+
+    if (gtin.length !== 14) {
+        log('❌ GTIN должен содержать 14 цифр');
+        return;
+    }
+
+    if (gtinInput) {
+        gtinInput.value = gtin;
+    }
 
     try {
         log('📦 Запрос кодов маркировки...');
         const params = new URLSearchParams({
             orderId: effectiveOrderId,
-            count: String(count),
-            format,
+            gtin,
+            quantity: String(quantity),
         });
-        if (bufferId) params.set('bufferId', bufferId);
 
         const result = await req('codes.php?' + params.toString());
         const payload = result.data || {};
 
-        if (!payload.base64) {
-            throw new Error('Пустой ответ от сервиса кодов');
+        const codes = Array.isArray(payload.codes) ? payload.codes : [];
+        if (!codes.length) {
+            throw new Error('Сервис вернул пустой массив КМ');
         }
 
         if (state.downloadUrl) {
             URL.revokeObjectURL(state.downloadUrl);
         }
 
-        const blob = base64ToBlob(payload.base64, payload.contentType);
+        let blobContent = '';
+        let contentType = 'text/plain';
+        let ext = 'txt';
+
+        if ((format || '').toUpperCase() === 'JSON') {
+            blobContent = JSON.stringify(codes, null, 2);
+            contentType = 'application/json';
+            ext = 'json';
+        } else {
+            blobContent = codes.join('\n');
+            contentType = 'text/csv';
+            ext = 'csv';
+        }
+
+        const blob = new Blob([blobContent], {type: contentType});
         const url = URL.createObjectURL(blob);
         state.downloadUrl = url;
 
         const link = $('downloadLink');
         if (link) {
-            const ext = format.toLowerCase() === 'json' ? 'json' : 'csv';
             link.href = url;
-            link.download = `codes_${orderId}.${ext}`;
+            const blockSuffix = payload.blockId ? `_block_${payload.blockId}` : '';
+            link.download = `codes_${orderId}${blockSuffix}.${ext}`;
             link.style.display = 'inline-block';
+            link.textContent = 'Скачать файл';
         }
 
-        log('✅ Массив КМ готов к скачиванию');
+        const received = typeof payload.receivedQuantity === 'number' ? payload.receivedQuantity : codes.length;
+        const infoParts = [`${received} КМ`];
+        if (payload.blockId) {
+            infoParts.push(`blockId ${payload.blockId}`);
+        }
+
+        log('✅ Получено ' + infoParts.join(', '));
     } catch (e) {
         log('❌ ' + e.message);
     }
