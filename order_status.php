@@ -12,7 +12,7 @@ try {
 
     $oms = getOmsSettings();
     if (empty($oms['id'])) {
-        throw new Exception('OMS ID не сохранен. Заполните и сохраните настройки OMS.');
+        throw new Exception('OMS ID не сохранен');
     }
 
     $params = [
@@ -21,18 +21,19 @@ try {
 
     $orderId = trim($_GET['orderId'] ?? '');
     if ($orderId !== '') {
-        $params['orderIds'] = $orderId;
+        $params['orderId'] = $orderId;
     }
 
-    $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : null;
-    if ($limit !== null && $limit > 0) {
-        $params['limit'] = min($limit, 100);
+    $gtin = trim($_GET['gtin'] ?? '');
+    if ($gtin !== '') {
+        $params['gtin'] = $gtin;
     }
 
     $query = http_build_query($params, '', '&', PHP_QUERY_RFC3986);
 
+    // ИСПРАВЛЕНО: /order/status (не просто /order)
     $response = apiRequest(
-        SUZ_API_URL . '/orders?' . $query,
+        SUZ_API_URL . '/order/status?' . $query,
         'GET',
         [
             'Accept: application/json',

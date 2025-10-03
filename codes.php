@@ -45,8 +45,9 @@ try {
 
     $query = http_build_query($params, '', '&', PHP_QUERY_RFC3986);
 
+    // ИСПРАВЛЕНО: Используем /order (единственное число)
     $result = apiRequestRaw(
-        SUZ_API_URL . '/orders/' . rawurlencode($orderId) . '/codes?' . $query,
+        SUZ_API_URL . '/order/' . rawurlencode($orderId) . '/codes?' . $query,
         'GET',
         [
             'clientToken: ' . $token,

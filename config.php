@@ -4,7 +4,8 @@ session_start();
 // API endpoints
 define('TRUE_API_URL', 'https://markirovka.crpt.ru/api/v3/true-api');
 define('NK_API_URL', 'https://xn--80ajghhoc2aj1c8b.xn--p1ai');
-define('SUZ_API_URL', 'https://suzcloud.crpt.ru/api/v3');
+define('SUZ_API_URL', 'https://suzgrid.crpt.ru/api/v3');
+
 
 /**
  * Сервисный лог приложения.
@@ -94,17 +95,37 @@ function apiRequestRaw(string $url, string $method = 'GET', ?array $headers = nu
     $preparedHeaders = $headers ?: $defaultHeaders;
     $bodyPayload = null;
 
-    curl_setopt_array($ch, [
+    $curlOptions = [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_CUSTOMREQUEST => $method,
         CURLOPT_HTTPHEADER => $preparedHeaders,
         CURLOPT_TIMEOUT => 60,
-    ]);
+        CURLOPT_CONNECTTIMEOUT => 30,
+        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_SSL_VERIFYHOST => 2,
+        CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+        CURLOPT_SSLVERSION => CURL_SSLVERSION_TLSv1_2,
+    ];
+
+ 
+
+    // НОВОЕ: Увеличенный таймаут DNS
+    if (defined('CURLOPT_DNS_CACHE_TIMEOUT')) {
+        $curlOptions[CURLOPT_DNS_CACHE_TIMEOUT] = 300; // 5 минут
+    }
+
+    curl_setopt_array($ch, $curlOptions);
 
     if ($body !== null) {
-        $bodyPayload = is_string($body) ? $body : json_encode($body, JSON_UNESCAPED_UNICODE);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $bodyPayload);
-    }
+    $bodyPayload = is_string($body) ? $body : json_encode($body, JSON_UNESCAPED_UNICODE);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $bodyPayload);
+    
+    // ДОБАВИТЬ: логирование для отладки
+    appLog('Sending request body', [
+        'length' => strlen($bodyPayload),
+        'preview' => substr($bodyPayload, 0, 500)
+    ]);
+}
 
     $response = curl_exec($ch);
     if ($response === false) {
@@ -116,15 +137,18 @@ function apiRequestRaw(string $url, string $method = 'GET', ?array $headers = nu
         $host = parse_url($url, PHP_URL_HOST) ?: null;
         $dnsInfo = null;
 
+        // Попытка получить DNS-информацию
         if ($host && function_exists('dns_get_record')) {
             $dnsRecords = @dns_get_record($host, DNS_A + DNS_AAAA);
-            if ($dnsRecords !== false) {
+            if ($dnsRecords !== false && !empty($dnsRecords)) {
                 $dnsInfo = array_map(static function (array $record): array {
                     return array_filter([
                         'type' => $record['type'] ?? null,
                         'ip' => $record['ip'] ?? ($record['ipv6'] ?? null),
                     ]);
                 }, $dnsRecords);
+            } else {
+                $dnsInfo = ['error' => 'DNS resolution failed'];
             }
         }
 
@@ -141,7 +165,13 @@ function apiRequestRaw(string $url, string $method = 'GET', ?array $headers = nu
         ]);
 
         if ($errno === CURLE_COULDNT_RESOLVE_HOST && $host) {
-            $error .= sprintf(' (не удалось разрешить хост %s. Проверьте DNS или сетевые настройки сервера)', $host);
+            $suggestions = "Решения:\n";
+            $suggestions .= "1. Проверьте DNS на сервере: cat /etc/resolv.conf\n";
+            $suggestions .= "2. Добавьте в /etc/resolv.conf:\n   nameserver 8.8.8.8\n   nameserver 8.8.4.4\n";
+            $suggestions .= "3. Или используйте прямой IP в /etc/hosts:\n   $(dig +short $host) $host\n";
+            $suggestions .= "4. Раскомментируйте USE_CUSTOM_DNS в config.php";
+            
+            $error .= sprintf("\n\nНе удалось разрешить хост %s.\n%s", $host, $suggestions);
         }
 
         throw new Exception('Ошибка запроса: ' . $error);

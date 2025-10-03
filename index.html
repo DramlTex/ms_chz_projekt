@@ -545,22 +545,29 @@ $('certSelect').onchange = (e) => {
 };
 
 // Подпись attached (для авторизации)
+// Подпись attached (для авторизации)
 async function signAttached(data, cert) {
     const signer = await cadesplugin.CreateObjectAsync('CAdESCOM.CPSigner');
     await signer.propset_Certificate(cert);
     
     const sd = await cadesplugin.CreateObjectAsync('CAdESCOM.CadesSignedData');
+    
+    // Попробуйте явно указать кодировку
     if (typeof sd.propset_ContentEncoding === 'function') {
         try {
             await sd.propset_ContentEncoding(cadesplugin.CADESCOM_STRING_TO_UCS2LE);
-        } catch (_) {}
+        } catch (e) {
+            console.log('ContentEncoding не установлена');
+        }
     }
-    await sd.propset_Content(data);
+    
+    await sd.propset_Content(data);  // ← ИСПРАВЛЕНО: было payload, стало data
     
     return sd.SignCades(signer, cadesplugin.CADESCOM_CADES_BES);
 }
 
 // Подпись detached (для заказа)
+// Подпись detached (для заказа) - CMS формат
 async function signDetached(data, cert) {
     const signer = await cadesplugin.CreateObjectAsync('CAdESCOM.CPSigner');
     await signer.propset_Certificate(cert);
@@ -568,10 +575,12 @@ async function signDetached(data, cert) {
     const sd = await cadesplugin.CreateObjectAsync('CAdESCOM.CadesSignedData');
     await sd.propset_Content(data);
     
-    return sd.SignCades(signer, cadesplugin.CADESCOM_CADES_BES, true);
+    // ВАЖНО: detached = true, БЕЗ кодирования контента
+    const signature = await sd.SignCades(signer, cadesplugin.CADESCOM_CADES_BES, true);
+    
+    // Удаляем ВСЕ переносы и пробелы
+    return signature.replace(/[\r\n\s]/g, '');
 }
-
-
 // Сохранение OMS настроек
 $('saveOmsBtn').onclick = async () => {
     const omsConnection = $('omsConnection').value.trim();
@@ -728,23 +737,47 @@ $('createOrderBtn').onclick = async () => {
     }
     
     try {
+        let gtin = state.card.gtin;
+        if (gtin.length < 14) {
+            gtin = gtin.padStart(14, '0');
+        }
+        
         const order = {
             productGroup,
             products: [{
-                gtin: state.card.gtin,
+                gtin: gtin,
                 quantity,
-                ...(state.card.templateId && {templateId: state.card.templateId})
+                serialNumberType: "OPERATOR",
+                cisType: "UNIT",
+                templateId: state.card.templateId || 10
             }],
             attributes: {
-                releaseMethodType: releaseMethod
+                releaseMethodType: releaseMethod,
+                createMethodType: "SELF_MADE"
             }
         };
         
         const payload = JSON.stringify(order);
-
+        
+        console.log('=== PAYLOAD ===');
+        console.log('Length:', payload.length);
+        console.log('Content:', payload);
+        
         log('✍️ Подпись заказа...');
-        const signature = await signDetached(payload, state.currentCert);
-
+        const rawSignature = await signDetached(payload, state.currentCert);
+        
+        console.log('=== SIGNATURE ===');
+        console.log('Raw length:', rawSignature.length);
+        console.log('Has newlines:', /[\r\n]/.test(rawSignature));
+        console.log('Has spaces:', /\s/.test(rawSignature));
+        console.log('First 100 chars:', rawSignature.substring(0, 100));
+        
+        // Убедитесь что подпись очищена
+        const signature = rawSignature.replace(/[\r\n\s]/g, '');
+        
+        console.log('Cleaned length:', signature.length);
+        log('🔐 Длина подписи: ' + signature.length + ' символов');
+        
         log('📤 Отправка в СУЗ...');
         const result = await req('order.php', {
             method: 'POST',
@@ -768,6 +801,7 @@ $('createOrderBtn').onclick = async () => {
         updateBufferOptions();
         updateStatus();
     } catch (e) {
+        console.error('Full error:', e);
         log('❌ ' + e.message);
     }
 };
