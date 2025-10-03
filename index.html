@@ -89,6 +89,12 @@
             font-size: 1rem;
             font-family: inherit;
         }
+
+        input[type="checkbox"] {
+            width: auto;
+            height: auto;
+            margin: 0;
+        }
         
         input:focus, select:focus, textarea:focus {
             outline: none;
@@ -201,6 +207,22 @@
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
             gap: 1rem;
         }
+
+        .grid.grid-small {
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        }
+
+        label.checkbox {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-weight: 600;
+            margin-bottom: 0;
+            color: #4a5568;
+        }
     </style>
 </head>
 <body>
@@ -300,6 +322,24 @@
                 <option value="IMPORT">Импорт</option>
                 <option value="REMAINS">Маркировка остатков</option>
             </select>
+        </div>
+
+        <div class="form-group" id="lpAttributes" style="display: none;">
+            <label>Параметры оплаты для одежды</label>
+            <div class="grid grid-small">
+                <label class="checkbox">
+                    <input type="checkbox" id="lpFreeCode">
+                    КМ не подлежит оплате (freeCode)
+                </label>
+                <div>
+                    <label for="lpPaymentType">Тип оплаты</label>
+                    <select id="lpPaymentType">
+                        <option value="1">Оплата по эмиссии</option>
+                        <option value="2" selected>Оплата по нанесению</option>
+                    </select>
+                    <p class="hint">Значение отправляется только для текущей товарной группы одежды.</p>
+                </div>
+            </div>
         </div>
 
         <button class="btn btn-primary" id="createOrderBtn" disabled>Создать заказ</button>
@@ -498,12 +538,30 @@ function updateStatus() {
     updateBufferOptions();
 }
 
+function updateClothingVisibility() {
+    const block = $('lpAttributes');
+    const select = $('productGroup');
+    if (!block || !select) return;
+
+    const isClothing = select.value === 'lp';
+    block.style.display = isClothing ? 'block' : 'none';
+}
+
 ['orderIdInput', 'codeGtin'].forEach(id => {
     const element = $(id);
     if (element) {
         element.addEventListener('input', () => updateStatus());
     }
 });
+
+const productGroupSelect = $('productGroup');
+if (productGroupSelect) {
+    productGroupSelect.addEventListener('change', () => {
+        updateClothingVisibility();
+    });
+}
+
+updateClothingVisibility();
 
 async function req(url, options = {}) {
     const resp = await fetch(url, options);
@@ -734,6 +792,7 @@ $('findCardBtn').onclick = async () => {
         
         if (state.card.productGroup) {
             $('productGroup').value = state.card.productGroup;
+            updatePharmaVisibility();
         }
 
         const codeGtinInput = $('codeGtin');
@@ -804,7 +863,16 @@ $('createOrderBtn').onclick = async () => {
                 createMethodType: "SELF_MADE"
             }
         };
-        
+
+        if (productGroup === 'lp') {
+            const paymentTypeInput = $('lpPaymentType');
+            const paymentTypeValue = paymentTypeInput ? parseInt(paymentTypeInput.value, 10) : 2;
+            const paymentType = Number.isFinite(paymentTypeValue) ? paymentTypeValue : 2;
+
+            order.attributes.freeCode = $('lpFreeCode').checked;
+            order.attributes.paymentType = paymentType;
+        }
+
         const payload = JSON.stringify(order);
         
         console.log('=== PAYLOAD ===');
