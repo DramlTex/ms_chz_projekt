@@ -199,12 +199,12 @@
             padding: 1rem;
             margin-top: 1rem;
         }
-        
+
         .card-info h3 {
             margin-bottom: 0.5rem;
             color: #2d3748;
         }
-        
+
         .card-info .pill {
             display: inline-block;
             background: #667eea;
@@ -213,6 +213,94 @@
             border-radius: 999px;
             font-size: 0.85rem;
             margin-right: 0.5rem;
+        }
+
+        .card-actions {
+            margin-top: 1rem;
+            display: flex;
+            align-items: flex-end;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .card-actions .form-group {
+            margin-bottom: 0;
+            min-width: 160px;
+        }
+
+        #cardQuantity {
+            max-width: 160px;
+        }
+
+        .order-items {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            margin-top: 0.75rem;
+        }
+
+        .order-item {
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 0.75rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            justify-content: space-between;
+            align-items: flex-start;
+            background: #ffffff;
+        }
+
+        .order-item-info {
+            flex: 1 1 220px;
+        }
+
+        .order-item-title {
+            font-weight: 600;
+            margin-bottom: 0.35rem;
+            color: #2d3748;
+        }
+
+        .order-item-pills {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .order-item-controls {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .order-item-quantity-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+            min-width: 120px;
+        }
+
+        .order-item-quantity-wrapper label {
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: #4a5568;
+        }
+
+        .order-item-quantity {
+            width: 120px;
+        }
+
+        .order-item-remove {
+            white-space: nowrap;
+        }
+
+        .order-items-summary {
+            margin-top: 0.5rem;
+            display: none;
+            justify-content: flex-end;
+            font-weight: 600;
+            color: #2d3748;
         }
 
         .log {
@@ -391,12 +479,28 @@
             <h3 id="cardName"></h3>
             <div id="cardPills"></div>
             <p id="cardDetails" style="margin-top: 0.5rem; color: #718096;"></p>
+            <div class="card-actions">
+                <div class="form-group">
+                    <label for="cardQuantity">Количество КМ для заказа</label>
+                    <input type="number" id="cardQuantity" value="1" min="1">
+                </div>
+                <button class="btn btn-secondary" id="addCardBtn" type="button">Добавить карточку в заказ</button>
+            </div>
         </div>
     </div>
 
     <!-- Шаг 2: Заказ -->
     <div class="step">
         <h2>Шаг 2: Параметры заказа</h2>
+
+        <div class="form-group">
+            <label>Карточки в заказе</label>
+            <p class="hint" id="orderItemsEmpty">Добавьте карточки на Шаге 1 и укажите количество для массового заказа.</p>
+            <div class="order-items" id="orderItemsList"></div>
+            <div class="order-items-summary" id="orderItemsSummary">
+                <span id="orderItemsTotal">Всего КМ: 0</span>
+            </div>
+        </div>
 
         <div class="grid">
             <div class="form-group">
@@ -409,20 +513,15 @@
                     <option value="pharma">Лекарства</option>
                 </select>
             </div>
-            
+
             <div class="form-group">
-                <label>Количество КМ</label>
-                <input type="number" id="quantity" value="1" min="1">
+                <label>Способ выпуска</label>
+                <select id="releaseMethod">
+                    <option value="PRODUCTION">Произведено в РФ</option>
+                    <option value="IMPORT">Импорт</option>
+                    <option value="REMAINS">Маркировка остатков</option>
+                </select>
             </div>
-        </div>
-        
-        <div class="form-group">
-            <label>Способ выпуска</label>
-            <select id="releaseMethod">
-                <option value="PRODUCTION">Произведено в РФ</option>
-                <option value="IMPORT">Импорт</option>
-                <option value="REMAINS">Маркировка остатков</option>
-            </select>
         </div>
 
         <div class="form-group" id="lpAttributes" style="display: none;">
@@ -593,6 +692,7 @@ const state = {
     certs: [],
     currentCert: null,
     card: null,
+    orderItems: [],
     nkActive: false,
     suzActive: false,
     omsSaved: false,
@@ -666,6 +766,156 @@ let omsRestoreInProgress = false;
 function log(msg) {
     $('log').textContent += '\n' + msg;
     $('log').scrollTop = $('log').scrollHeight;
+}
+
+function normalizeGtin(rawGtin) {
+    if (!rawGtin && rawGtin !== 0) return '';
+    const digits = String(rawGtin).replace(/\D+/g, '');
+    if (!digits) return '';
+    if (digits.length < 14) {
+        return digits.padStart(14, '0');
+    }
+    if (digits.length === 14) {
+        return digits;
+    }
+    return '';
+}
+
+function updateOrderItemsSummary() {
+    const summary = $('orderItemsSummary');
+    const totalEl = $('orderItemsTotal');
+    if (!summary || !totalEl) return;
+
+    const total = (state.orderItems || []).reduce((acc, item) => {
+        const value = parseInt(item.quantity, 10);
+        return acc + (Number.isFinite(value) ? value : 0);
+    }, 0);
+
+    totalEl.textContent = 'Всего КМ: ' + total;
+    summary.style.display = state.orderItems.length ? 'flex' : 'none';
+}
+
+function renderOrderItems() {
+    const list = $('orderItemsList');
+    const emptyHint = $('orderItemsEmpty');
+    if (!list || !emptyHint) return;
+
+    list.innerHTML = '';
+
+    if (!state.orderItems.length) {
+        emptyHint.style.display = 'block';
+        updateOrderItemsSummary();
+        return;
+    }
+
+    emptyHint.style.display = 'none';
+
+    state.orderItems.forEach((item, index) => {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'order-item';
+
+        const info = document.createElement('div');
+        info.className = 'order-item-info';
+
+        const title = document.createElement('div');
+        title.className = 'order-item-title';
+        title.textContent = item.name || 'Без названия';
+        info.appendChild(title);
+
+        const pills = document.createElement('div');
+        pills.className = 'order-item-pills';
+
+        const gtinPill = document.createElement('span');
+        gtinPill.className = 'pill';
+        gtinPill.textContent = 'GTIN: ' + item.gtin;
+        pills.appendChild(gtinPill);
+
+        if (item.goodId) {
+            const goodPill = document.createElement('span');
+            goodPill.className = 'pill';
+            goodPill.textContent = 'ID: ' + item.goodId;
+            pills.appendChild(goodPill);
+        }
+
+        if (item.templateId) {
+            const templatePill = document.createElement('span');
+            templatePill.className = 'pill';
+            templatePill.textContent = 'template ' + item.templateId;
+            pills.appendChild(templatePill);
+        }
+
+        if (item.productGroup) {
+            const groupPill = document.createElement('span');
+            groupPill.className = 'pill';
+            groupPill.textContent = 'группа ' + item.productGroup;
+            pills.appendChild(groupPill);
+        }
+
+        info.appendChild(pills);
+        wrapper.appendChild(info);
+
+        const controls = document.createElement('div');
+        controls.className = 'order-item-controls';
+
+        const quantityWrapper = document.createElement('div');
+        quantityWrapper.className = 'order-item-quantity-wrapper';
+
+        const quantityId = `orderItemQuantity${index}`;
+        const quantityLabel = document.createElement('label');
+        quantityLabel.className = 'order-item-quantity-label';
+        quantityLabel.setAttribute('for', quantityId);
+        quantityLabel.textContent = 'Количество';
+
+        const quantityInput = document.createElement('input');
+        quantityInput.type = 'number';
+        quantityInput.min = '1';
+        quantityInput.id = quantityId;
+        quantityInput.value = String(item.quantity || 1);
+        quantityInput.className = 'order-item-quantity';
+        quantityInput.addEventListener('input', () => {
+            const value = parseInt(quantityInput.value, 10);
+            if (!Number.isFinite(value) || value <= 0) {
+                state.orderItems[index].quantity = 0;
+            } else {
+                state.orderItems[index].quantity = value;
+            }
+            updateOrderItemsSummary();
+            updateStatus();
+        });
+        quantityInput.addEventListener('blur', () => {
+            let value = parseInt(quantityInput.value, 10);
+            if (!Number.isFinite(value) || value <= 0) {
+                value = 1;
+            }
+            quantityInput.value = String(value);
+            state.orderItems[index].quantity = value;
+            updateOrderItemsSummary();
+            updateStatus();
+        });
+
+        quantityWrapper.appendChild(quantityLabel);
+        quantityWrapper.appendChild(quantityInput);
+        controls.appendChild(quantityWrapper);
+
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'btn btn-secondary order-item-remove';
+        removeBtn.textContent = 'Удалить';
+        removeBtn.addEventListener('click', () => {
+            const removed = state.orderItems.splice(index, 1)[0];
+            renderOrderItems();
+            updateStatus();
+            if (removed) {
+                log(`➖ Карточка ${removed.gtin} удалена из заказа`);
+            }
+        });
+        controls.appendChild(removeBtn);
+
+        wrapper.appendChild(controls);
+        list.appendChild(wrapper);
+    });
+
+    updateOrderItemsSummary();
 }
 
 function updateBufferOptions() {
@@ -786,7 +1036,12 @@ function updateStatus() {
     }
 
 
-    const canOrder = state.nkActive && state.suzActive && state.omsSaved && state.card;
+    const hasValidItems = Array.isArray(state.orderItems)
+        && state.orderItems.some(item => {
+            const value = parseInt(item.quantity, 10);
+            return Number.isFinite(value) && value > 0;
+        });
+    const canOrder = state.nkActive && state.suzActive && state.omsSaved && hasValidItems;
     const createBtn = $('createOrderBtn');
     if (createBtn) createBtn.disabled = !canOrder;
 
@@ -848,6 +1103,8 @@ if (productGroupSelect) {
 }
 
 updateClothingVisibility();
+renderOrderItems();
+updateStatus();
 
 async function req(url, options = {}) {
     const resp = await fetch(url, options);
@@ -1249,10 +1506,15 @@ $('findCardBtn').onclick = async () => {
         if (state.card.gtin) pills.push(`<span class="pill">GTIN: ${state.card.gtin}</span>`);
         $('cardPills').innerHTML = pills.join('');
         
-        $('cardDetails').textContent = 
+        $('cardDetails').textContent =
             (state.card.tnved ? `ТН ВЭД: ${state.card.tnved}` : '') +
             (state.card.productGroup ? ` • Группа: ${state.card.productGroup}` : '');
-        
+
+        const cardQuantityInput = $('cardQuantity');
+        if (cardQuantityInput) {
+            cardQuantityInput.value = '1';
+        }
+
         if (state.card.productGroup) {
             $('productGroup').value = state.card.productGroup;
             updatePharmaVisibility();
@@ -1285,42 +1547,141 @@ $('findCardBtn').onclick = async () => {
     }
 };
 
+$('addCardBtn').onclick = () => {
+    if (!state.card) {
+        log('❌ Сначала найдите карточку');
+        return;
+    }
+
+    const quantityInput = $('cardQuantity');
+    let quantity = parseInt(quantityInput ? quantityInput.value : '0', 10);
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+        log('❌ Количество должно быть положительным числом');
+        if (quantityInput) {
+            quantityInput.focus();
+        }
+        return;
+    }
+
+    const gtin = normalizeGtin(state.card.gtin);
+    if (!gtin) {
+        log('❌ У карточки отсутствует корректный GTIN для заказа');
+        return;
+    }
+
+    const productGroupSelect = $('productGroup');
+    const selectedGroup = productGroupSelect ? productGroupSelect.value : '';
+    const cardGroup = state.card.productGroup || '';
+
+    if (selectedGroup && cardGroup && selectedGroup !== cardGroup) {
+        log('❌ Товарная группа карточки не совпадает с выбранной в заказе');
+        return;
+    }
+
+    const groupToUse = selectedGroup || cardGroup || '';
+
+    if (!selectedGroup && productGroupSelect && groupToUse) {
+        productGroupSelect.value = groupToUse;
+        updateClothingVisibility();
+    }
+
+    const existing = state.orderItems.find(item => item.gtin === gtin);
+    if (existing) {
+        const baseQuantity = parseInt(existing.quantity, 10) || 0;
+        existing.quantity = baseQuantity + quantity;
+        existing.name = state.card.name || existing.name;
+        existing.templateId = state.card.templateId || existing.templateId;
+        existing.productGroup = groupToUse || existing.productGroup;
+        existing.goodId = state.card.goodId || existing.goodId;
+        log(`➕ Количество для GTIN ${gtin} увеличено до ${existing.quantity}`);
+    } else {
+        state.orderItems.push({
+            gtin,
+            quantity,
+            name: state.card.name || 'Без названия',
+            templateId: state.card.templateId || 10,
+            productGroup: groupToUse,
+            goodId: state.card.goodId || ''
+        });
+        log(`➕ Карточка с GTIN ${gtin} добавлена в заказ (количество ${quantity})`);
+    }
+
+    if (quantityInput) {
+        quantityInput.value = '1';
+        quantityInput.focus();
+    }
+
+    renderOrderItems();
+    updateStatus();
+};
+
 // Создание заказа
 $('createOrderBtn').onclick = async () => {
     if (!state.currentCert) {
         log('❌ Выберите сертификат');
         return;
     }
-    
-    if (!state.card) {
-        log('❌ Сначала найдите карточку');
+
+    if (!state.orderItems.length) {
+        log('❌ Добавьте хотя бы одну карточку в заказ');
         return;
     }
-    
-    const productGroup = $('productGroup').value;
-    const quantity = parseInt($('quantity').value);
-    const releaseMethod = $('releaseMethod').value;
-    
-    if (!productGroup || !quantity || !releaseMethod) {
-        log('❌ Заполните все поля заказа');
-        return;
-    }
-    
-    try {
-        let gtin = state.card.gtin;
-        if (gtin.length < 14) {
-            gtin = gtin.padStart(14, '0');
+
+    const productGroupSelect = $('productGroup');
+    let productGroup = productGroupSelect ? productGroupSelect.value : '';
+    if (!productGroup) {
+        const firstWithGroup = state.orderItems.find(item => item.productGroup);
+        if (firstWithGroup) {
+            productGroup = firstWithGroup.productGroup;
+            if (productGroupSelect) {
+                productGroupSelect.value = productGroup;
+                updateClothingVisibility();
+            }
         }
-        
+    }
+
+    if (!productGroup) {
+        log('❌ Укажите товарную группу');
+        return;
+    }
+
+    const inconsistentItem = state.orderItems.find(item => item.productGroup && item.productGroup !== productGroup);
+    if (inconsistentItem) {
+        log(`❌ Карточка с GTIN ${inconsistentItem.gtin} относится к другой товарной группе`);
+        return;
+    }
+
+    const releaseMethodSelect = $('releaseMethod');
+    const releaseMethod = releaseMethodSelect ? releaseMethodSelect.value : '';
+
+    if (!releaseMethod) {
+        log('❌ Укажите способ выпуска');
+        return;
+    }
+
+    const invalidQuantityItem = state.orderItems.find(item => {
+        const value = parseInt(item.quantity, 10);
+        return !Number.isFinite(value) || value <= 0;
+    });
+    if (invalidQuantityItem) {
+        log(`❌ Укажите корректное количество для GTIN ${invalidQuantityItem.gtin}`);
+        return;
+    }
+
+    try {
+        const products = state.orderItems.map(item => ({
+            gtin: item.gtin,
+            quantity: parseInt(item.quantity, 10),
+            serialNumberType: "OPERATOR",
+            cisType: "UNIT",
+            templateId: item.templateId || 10
+        }));
+
+        const totalQuantity = products.reduce((sum, item) => sum + (Number.isFinite(item.quantity) ? item.quantity : 0), 0);
+
         const order = {
             productGroup,
-            products: [{
-                gtin: gtin,
-                quantity,
-                serialNumberType: "OPERATOR",
-                cisType: "UNIT",
-                templateId: state.card.templateId || 10
-            }],
+            products,
             attributes: {
                 releaseMethodType: releaseMethod,
                 createMethodType: "SELF_MADE"
@@ -1337,11 +1698,12 @@ $('createOrderBtn').onclick = async () => {
         }
 
         const payload = JSON.stringify(order);
-        
+
         console.log('=== PAYLOAD ===');
         console.log('Length:', payload.length);
         console.log('Content:', payload);
-        
+
+        log(`📦 В заказе ${products.length} карточ${products.length === 1 ? 'ка' : products.length < 5 ? 'ки' : 'ек'} на ${totalQuantity} КМ`);
         log('✍️ Подпись заказа...');
         const rawSignature = await signDetached(payload, state.currentCert);
         
@@ -1520,8 +1882,12 @@ $('downloadCodesBtn').onclick = async () => {
 
     const gtinInput = $('codeGtin');
     let gtin = gtinInput ? gtinInput.value.trim() : '';
-    if (!gtin && state.card && state.card.gtin) {
-        gtin = String(state.card.gtin);
+    if (!gtin) {
+        if (state.orderItems.length) {
+            gtin = String(state.orderItems[0].gtin || '');
+        } else if (state.card && state.card.gtin) {
+            gtin = String(state.card.gtin);
+        }
     }
     gtin = gtin.replace(/\s+/g, '');
 
