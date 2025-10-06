@@ -36,10 +36,40 @@
             font-size: 0.95rem;
         }
 
-        .toolbar {
+        .connection-toolbar {
             display: flex;
-            justify-content: flex-end;
+            align-items: center;
+            gap: 1rem;
+            justify-content: flex-start;
+            flex-wrap: wrap;
             margin-bottom: 1.5rem;
+        }
+
+        .connection-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .connection-status .status-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 1.8rem;
+            height: 1.8rem;
+            border-radius: 999px;
+            border: 2px solid currentColor;
+            font-size: 1rem;
+        }
+
+        .connection-status.connected {
+            color: #2f855a;
+        }
+
+        .connection-status.disconnected {
+            color: #c53030;
         }
         
         .step {
@@ -177,30 +207,6 @@
             margin-right: 0.5rem;
         }
 
-        .auth-summary {
-            display: flex;
-            flex-direction: column;
-            gap: 0.75rem;
-        }
-
-        .summary-list {
-            list-style: none;
-            display: grid;
-            gap: 0.35rem;
-            padding: 0;
-            margin: 0;
-        }
-
-        .summary-list li {
-            font-weight: 600;
-            color: #4a5568;
-        }
-
-        .summary-note {
-            font-size: 0.85rem;
-            color: #718096;
-        }
-        
         .log {
             background: #1a202c;
             color: #e2e8f0;
@@ -354,18 +360,12 @@
 
         <h2>Шаг 1: Авторизация</h2>
 
-        <div class="card-info auth-summary">
-            <h3>Текущий статус</h3>
-            <ul class="summary-list">
-                <li id="nkSummary">🔴 Токен НК не получен</li>
-                <li id="suzSummary">🔴 Токен СУЗ не получен</li>
-                <li id="omsSummary">🔴 OMS настройки не сохранены</li>
-            </ul>
-            <p class="summary-note" id="certSummary">Сертификат: не выбран</p>
-        </div>
-
-        <div class="toolbar">
+        <div class="connection-toolbar">
             <button class="btn btn-primary" id="openSettingsBtn" type="button">Настройки соединения</button>
+            <div class="connection-status disconnected" id="connectionStatus">
+                <span class="status-icon" id="connectionStatusIcon">✖</span>
+                <span id="connectionStatusText">Нет соединения</span>
+            </div>
         </div>
 
         <p class="hint" style="margin-bottom: 0;">
@@ -680,6 +680,16 @@ function updateStatus() {
         omsStatus.innerHTML = state.omsSaved
             ? `<span>✅</span><span>${omsDescription}</span>`
             : '<span>🔴</span><span>OMS настройки: не сохранены</span>';
+    }
+
+    const connectionIndicator = $('connectionStatus');
+    const connectionIcon = $('connectionStatusIcon');
+    const connectionText = $('connectionStatusText');
+    if (connectionIndicator && connectionIcon && connectionText) {
+        const connected = state.nkActive && state.suzActive && state.omsSaved;
+        connectionIndicator.className = 'connection-status ' + (connected ? 'connected' : 'disconnected');
+        connectionIcon.textContent = connected ? '✔' : '✖';
+        connectionText.textContent = connected ? 'Соединение установлено' : 'Нет соединения';
     }
 
     const summaryNk = $('nkSummary');
