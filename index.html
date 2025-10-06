@@ -202,6 +202,83 @@
             margin-top: 0.25rem;
         }
 
+        body.modal-open {
+            overflow: hidden;
+        }
+
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.55);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1.5rem;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease, visibility 0.2s ease;
+            z-index: 1000;
+        }
+
+        .modal-backdrop.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .modal {
+            background: #ffffff;
+            border-radius: 16px;
+            width: 100%;
+            max-width: 520px;
+            padding: 2rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.45);
+            transform: translateY(20px);
+            transition: transform 0.2s ease;
+        }
+
+        .modal-backdrop.active .modal {
+            transform: translateY(0);
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1.5rem;
+        }
+
+        .modal-header h2 {
+            margin-bottom: 0;
+            font-size: 1.4rem;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            line-height: 1;
+            cursor: pointer;
+            color: #a0aec0;
+            transition: color 0.2s ease;
+        }
+
+        .modal-close:hover {
+            color: #4a5568;
+        }
+
+        .modal-body {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .modal-actions {
+            margin-top: 1.5rem;
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.75rem;
+        }
+
         .grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -257,19 +334,9 @@
         </select>
     </div>
     
-    <div class="form-group">
-        <label>OMS Connection (GUID подключения)</label>
-        <input type="text" id="omsConnection" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
-    </div>
-    
-    <div class="form-group">
-        <label>OMS ID (UUID идентификатор)</label>
-        <input type="text" id="omsId" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
-    </div>
-    
     <div class="btn-group">
-        <button class="btn btn-secondary" id="loadCertsBtn">Загрузить сертификаты</button>
-        <button class="btn btn-secondary" id="saveOmsBtn">Сохранить настройки OMS</button>
+        <button class="btn btn-secondary" id="loadCertsBtn">Обновить сертификаты</button>
+        <button class="btn btn-secondary" id="openSettingsBtn">Настройки OMS</button>
         <button class="btn btn-primary" id="authNkBtn" disabled>Получить токен НК</button>
         <button class="btn btn-primary" id="authSuzBtn" disabled>Получить токен СУЗ</button>
     </div>
@@ -429,6 +496,30 @@
     <div class="log" id="log">Готов к работе...</div>
 </div>
 
+<div class="modal-backdrop" id="settingsModal" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+        <div class="modal-header">
+            <h2 id="settingsTitle">Настройки OMS</h2>
+            <button class="modal-close" id="closeSettingsBtn" aria-label="Закрыть">×</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label for="omsConnection">Идентификатор соединения</label>
+                <input type="text" id="omsConnection" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off">
+                <p class="hint">Используйте GUID из личного кабинета ОМС.</p>
+            </div>
+            <div class="form-group">
+                <label for="omsId">OMS ID (UUID идентификатор)</label>
+                <input type="text" id="omsId" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off">
+            </div>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-secondary" id="cancelSettingsBtn" type="button">Отмена</button>
+            <button class="btn btn-primary" id="saveOmsBtn" type="button">Сохранить</button>
+        </div>
+    </div>
+</div>
+
 <script>
 const state = {
     certs: [],
@@ -437,6 +528,8 @@ const state = {
     nkActive: false,
     suzActive: false,
     omsSaved: false,
+    omsConnection: '',
+    omsId: '',
     lastOrderId: '',
     buffers: [],
     downloadUrl: null
@@ -497,10 +590,18 @@ function updateStatus() {
     $('suzStatus').innerHTML = state.suzActive
         ? '<span>✅</span><span>Токен СУЗ: активен</span>'
         : '<span>🔴</span><span>Токен СУЗ: не получен</span>';
-    
+
     $('omsStatus').className = 'status ' + (state.omsSaved ? 'active' : 'inactive');
+    const shortConnection = state.omsConnection
+        ? `${state.omsConnection.slice(0, 8)}…${state.omsConnection.slice(-4)}`
+        : '';
+    const omsDescription = state.omsSaved
+        ? shortConnection
+            ? `OMS настройки: сохранены (${shortConnection})`
+            : 'OMS настройки: сохранены'
+        : 'OMS настройки: не сохранены';
     $('omsStatus').innerHTML = state.omsSaved
-        ? '<span>✅</span><span>OMS настройки: сохранены</span>'
+        ? `<span>✅</span><span>${omsDescription}</span>`
         : '<span>🔴</span><span>OMS настройки: не сохранены</span>';
 
     const canOrder = state.nkActive && state.suzActive && state.omsSaved && state.card;
@@ -524,6 +625,9 @@ function updateStatus() {
 
     const utilBtn = $('sendUtilisationBtn');
     if (utilBtn) utilBtn.disabled = !(state.suzActive && state.currentCert && state.omsSaved);
+
+    const authNkBtn = $('authNkBtn');
+    if (authNkBtn) authNkBtn.disabled = !state.currentCert;
 
     const authSuzBtn = $('authSuzBtn');
     if (authSuzBtn) authSuzBtn.disabled = !state.currentCert || !state.omsSaved;
@@ -570,47 +674,133 @@ async function req(url, options = {}) {
     return data;
 }
 
-// Загрузка сертификатов
-$('loadCertsBtn').onclick = async () => {
+function setModalVisibility(visible) {
+    const modal = $('settingsModal');
+    if (!modal) return;
+
+    if (visible) {
+        modal.classList.add('active');
+        modal.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('modal-open');
+
+        const connectionInput = $('omsConnection');
+        if (connectionInput) {
+            connectionInput.value = state.omsConnection || '';
+            connectionInput.focus();
+            connectionInput.select();
+        }
+
+        const idInput = $('omsId');
+        if (idInput) {
+            idInput.value = state.omsId || '';
+        }
+    } else {
+        modal.classList.remove('active');
+        modal.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('modal-open');
+        const trigger = $('openSettingsBtn');
+        if (trigger) {
+            trigger.focus();
+        }
+    }
+}
+
+const openSettingsBtn = $('openSettingsBtn');
+if (openSettingsBtn) {
+    openSettingsBtn.addEventListener('click', () => setModalVisibility(true));
+}
+
+['closeSettingsBtn', 'cancelSettingsBtn'].forEach(id => {
+    const btn = $(id);
+    if (btn) {
+        btn.addEventListener('click', () => setModalVisibility(false));
+    }
+});
+
+const settingsBackdrop = $('settingsModal');
+if (settingsBackdrop) {
+    settingsBackdrop.addEventListener('click', (event) => {
+        if (event.target === settingsBackdrop) {
+            setModalVisibility(false);
+        }
+    });
+}
+
+document.addEventListener('keydown', (event) => {
+    const modal = $('settingsModal');
+    if (event.key === 'Escape' && modal && modal.classList.contains('active')) {
+        setModalVisibility(false);
+    }
+});
+
+async function loadCertificates(isAuto = false) {
     try {
+        log(isAuto ? '🔄 Автозагрузка сертификатов...' : '🔄 Обновление списка сертификатов...');
+
         await cadesplugin;
         const store = await cadesplugin.CreateObjectAsync('CAdESCOM.Store');
         await store.Open(2, 'My', 2);
-        
+
         const certs = await store.Certificates;
         const count = await certs.Count;
-        
+
+        const select = $('certSelect');
         state.certs = [];
-        $('certSelect').innerHTML = '';
-        
+        state.currentCert = null;
+        if (select) {
+            select.innerHTML = '';
+            select.disabled = true;
+        }
+
         for (let i = 1; i <= count; i++) {
             const cert = await certs.Item(i);
             const validTo = new Date(await cert.ValidToDate);
             if (validTo < new Date()) continue;
-            
+
             state.certs.push(cert);
             const option = document.createElement('option');
             option.value = state.certs.length - 1;
             option.textContent = await cert.SubjectName;
-            $('certSelect').appendChild(option);
+            if (select) {
+                select.appendChild(option);
+            }
         }
-        
+
         await store.Close();
-        
+
         if (state.certs.length) {
-            $('certSelect').disabled = false;
-            $('certSelect').value = '0';
+            if (select) {
+                select.disabled = false;
+                select.value = '0';
+            }
             state.currentCert = state.certs[0];
             $('authNkBtn').disabled = false;
             $('authSuzBtn').disabled = false;
-            log('✅ Загружено сертификатов: ' + state.certs.length);
-            updateStatus();
+            log(`✅ Сертификаты ${isAuto ? 'загружены автоматически' : 'обновлены'}: ` + state.certs.length);
         } else {
             log('❌ Действующие сертификаты не найдены');
+            $('authNkBtn').disabled = true;
+            $('authSuzBtn').disabled = true;
+            if (select) {
+                const placeholder = document.createElement('option');
+                placeholder.textContent = 'Сертификаты не найдены';
+                placeholder.disabled = true;
+                placeholder.selected = true;
+                select.appendChild(placeholder);
+            }
         }
+
+        updateStatus();
     } catch (e) {
-        log('❌ Ошибка загрузки сертификатов: ' + e.message);
+        state.certs = [];
+        state.currentCert = null;
+        updateStatus();
+        log(`❌ ${isAuto ? 'Не удалось автоматически загрузить сертификаты' : 'Ошибка загрузки сертификатов'}: ` + e.message);
     }
+}
+
+$('loadCertsBtn').onclick = async () => {
+    await loadCertificates(false);
 };
 
 $('certSelect').onchange = (e) => {
@@ -674,22 +864,25 @@ async function signDetached(data, cert) {
 $('saveOmsBtn').onclick = async () => {
     const omsConnection = $('omsConnection').value.trim();
     const omsId = $('omsId').value.trim();
-    
+
     if (!omsConnection || !omsId) {
-        log('❌ Заполните OMS Connection и OMS ID');
+        log('❌ Заполните идентификатор соединения и OMS ID');
         return;
     }
-    
+
     try {
         await req('auth.php?action=save-oms', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({omsConnection, omsId})
         });
-        
+
         state.omsSaved = true;
+        state.omsConnection = omsConnection;
+        state.omsId = omsId;
         updateStatus();
         log('✅ Настройки OMS сохранены');
+        setModalVisibility(false);
     } catch (e) {
         log('❌ ' + e.message);
     }
@@ -731,11 +924,12 @@ $('authSuzBtn').onclick = async () => {
         return;
     }
     
-    const omsConnection = $('omsConnection').value.trim();
-    const omsId = $('omsId').value.trim();
-    
+    const omsConnection = state.omsConnection || $('omsConnection').value.trim();
+    const omsId = state.omsId || $('omsId').value.trim();
+
     if (!omsConnection || !omsId) {
-        log('❌ Заполните OMS Connection и OMS ID');
+        log('❌ Заполните идентификатор соединения и OMS ID');
+        setModalVisibility(true);
         return;
     }
     
@@ -1187,11 +1381,19 @@ $('sendUtilisationBtn').onclick = async () => {
         const status = await req('auth.php?action=status');
         state.nkActive = status.nk.active;
         state.suzActive = status.suz.active;
-        
-        if (status.oms.connection && status.oms.id) {
-            $('omsConnection').value = status.oms.connection;
-            $('omsId').value = status.oms.id;
+
+        const oms = status.oms || {};
+
+        if (oms.connection && oms.id) {
+            state.omsConnection = oms.connection;
+            state.omsId = oms.id;
             state.omsSaved = true;
+            $('omsConnection').value = oms.connection;
+            $('omsId').value = oms.id;
+        } else {
+            state.omsSaved = false;
+            state.omsConnection = '';
+            state.omsId = '';
         }
 
         updateStatus();
@@ -1207,6 +1409,10 @@ window.addEventListener('beforeunload', () => {
     if (state.downloadUrl) {
         URL.revokeObjectURL(state.downloadUrl);
     }
+});
+
+window.addEventListener('load', () => {
+    loadCertificates(true);
 });
 </script>
 
