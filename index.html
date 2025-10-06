@@ -296,7 +296,7 @@
             gap: 1rem;
         }
 
-        .modal-section {
+
             display: flex;
             flex-direction: column;
             gap: 0.75rem;
@@ -345,6 +345,7 @@
     
     <!-- Шаг 1: Авторизация -->
     <div class="step">
+
         <h2>Шаг 1: Авторизация</h2>
 
         <div class="card-info auth-summary">
@@ -360,6 +361,37 @@
         <div class="btn-group">
             <button class="btn btn-primary" id="openSettingsBtn" type="button">Открыть настройки авторизации</button>
         </div>
+
+    <h2>Шаг 1: Авторизация</h2>
+    
+    <div class="status" id="nkStatus">
+        <span>🔴</span>
+        <span>Токен НК: не получен</span>
+    </div>
+    
+    <div class="status" id="suzStatus">
+        <span>🔴</span>
+        <span>Токен СУЗ: не получен</span>
+    </div>
+    
+    <div class="status" id="omsStatus">
+        <span>🔴</span>
+        <span>OMS настройки: не сохранены</span>
+    </div>
+    
+    <div class="form-group">
+        <label>Сертификат УКЭП</label>
+        <select id="certSelect" disabled>
+            <option>Загрузите сертификаты...</option>
+        </select>
+    </div>
+    
+    <div class="btn-group">
+        <button class="btn btn-secondary" id="loadCertsBtn">Обновить сертификаты</button>
+        <button class="btn btn-secondary" id="openSettingsBtn">Настройки OMS</button>
+        <button class="btn btn-primary" id="authNkBtn" disabled>Получить токен НК</button>
+        <button class="btn btn-primary" id="authSuzBtn" disabled>Получить токен СУЗ</button>
+
     </div>
     
     <!-- Шаг 2: Карточка -->
@@ -519,6 +551,7 @@
 <div class="modal-backdrop" id="settingsModal" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
         <div class="modal-header">
+
             <h2 id="settingsTitle">Авторизация и настройки OMS</h2>
             <button class="modal-close" id="closeSettingsBtn" aria-label="Закрыть">×</button>
         </div>
@@ -565,6 +598,20 @@
                     <label for="omsId">OMS ID (UUID идентификатор)</label>
                     <input type="text" id="omsId" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off">
                 </div>
+
+            <h2 id="settingsTitle">Настройки OMS</h2>
+            <button class="modal-close" id="closeSettingsBtn" aria-label="Закрыть">×</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label for="omsConnection">Идентификатор соединения</label>
+                <input type="text" id="omsConnection" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off">
+                <p class="hint">Используйте GUID из личного кабинета ОМС.</p>
+            </div>
+            <div class="form-group">
+                <label for="omsId">OMS ID (UUID идентификатор)</label>
+                <input type="text" id="omsId" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off">
+
             </div>
         </div>
         <div class="modal-actions">
@@ -635,6 +682,7 @@ function updateBufferOptions() {
 }
 
 function updateStatus() {
+
     const nkStatus = $('nkStatus');
     if (nkStatus) {
         nkStatus.className = 'status ' + (state.nkActive ? 'active' : 'inactive');
@@ -652,6 +700,19 @@ function updateStatus() {
     }
 
     const omsStatus = $('omsStatus');
+
+    $('nkStatus').className = 'status ' + (state.nkActive ? 'active' : 'inactive');
+    $('nkStatus').innerHTML = state.nkActive
+        ? '<span>✅</span><span>Токен НК: активен</span>'
+        : '<span>🔴</span><span>Токен НК: не получен</span>';
+    
+    $('suzStatus').className = 'status ' + (state.suzActive ? 'active' : 'inactive');
+    $('suzStatus').innerHTML = state.suzActive
+        ? '<span>✅</span><span>Токен СУЗ: активен</span>'
+        : '<span>🔴</span><span>Токен СУЗ: не получен</span>';
+
+    $('omsStatus').className = 'status ' + (state.omsSaved ? 'active' : 'inactive');
+
     const shortConnection = state.omsConnection
         ? `${state.omsConnection.slice(0, 8)}…${state.omsConnection.slice(-4)}`
         : '';
@@ -660,6 +721,7 @@ function updateStatus() {
             ? `OMS настройки: сохранены (${shortConnection})`
             : 'OMS настройки: сохранены'
         : 'OMS настройки: не сохранены';
+
     if (omsStatus) {
         omsStatus.className = 'status ' + (state.omsSaved ? 'active' : 'inactive');
         omsStatus.innerHTML = state.omsSaved
@@ -699,6 +761,11 @@ function updateStatus() {
             certSummary.textContent = 'Сертификат: не выбран';
         }
     }
+
+    $('omsStatus').innerHTML = state.omsSaved
+        ? `<span>✅</span><span>${omsDescription}</span>`
+        : '<span>🔴</span><span>OMS настройки: не сохранены</span>';
+
 
     const canOrder = state.nkActive && state.suzActive && state.omsSaved && state.card;
     const createBtn = $('createOrderBtn');
