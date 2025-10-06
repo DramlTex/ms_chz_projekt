@@ -605,6 +605,64 @@ const state = {
 
 const $ = id => document.getElementById(id);
 
+const STORAGE_KEYS = {
+    omsConnection: 'ms_chz_oms_connection',
+    omsId: 'ms_chz_oms_id'
+};
+
+function loadStoredOmsSettings() {
+    try {
+        return {
+            connection: localStorage.getItem(STORAGE_KEYS.omsConnection) || '',
+            id: localStorage.getItem(STORAGE_KEYS.omsId) || ''
+        };
+    } catch (e) {
+        console.warn('Не удалось загрузить OMS из localStorage', e);
+        return {connection: '', id: ''};
+    }
+}
+
+function persistOmsSettings(connection, id) {
+    try {
+        if (connection) {
+            localStorage.setItem(STORAGE_KEYS.omsConnection, connection);
+        } else {
+            localStorage.removeItem(STORAGE_KEYS.omsConnection);
+        }
+
+        if (id) {
+            localStorage.setItem(STORAGE_KEYS.omsId, id);
+        } else {
+            localStorage.removeItem(STORAGE_KEYS.omsId);
+        }
+    } catch (e) {
+        console.warn('Не удалось сохранить OMS в localStorage', e);
+    }
+}
+
+function applyOmsInputs(connection, id) {
+    const connectionInput = $('omsConnection');
+    if (connectionInput) {
+        connectionInput.value = connection || '';
+    }
+
+    const idInput = $('omsId');
+    if (idInput) {
+        idInput.value = id || '';
+    }
+}
+
+const storedOms = loadStoredOmsSettings();
+if (storedOms.connection || storedOms.id) {
+    state.omsConnection = storedOms.connection || state.omsConnection;
+    state.omsId = storedOms.id || state.omsId;
+    applyOmsInputs(state.omsConnection, state.omsId);
+}
+
+let nkAuthInProgress = false;
+let suzAuthInProgress = false;
+let omsRestoreInProgress = false;
+
 function log(msg) {
     $('log').textContent += '\n' + msg;
     $('log').scrollTop = $('log').scrollHeight;
@@ -798,6 +856,39 @@ async function req(url, options = {}) {
     return data;
 }
 
+async function autoRestoreOmsSettingsFromStorage() {
+    if (omsRestoreInProgress) return false;
+
+    const stored = loadStoredOmsSettings();
+    if (!stored.connection || !stored.id) {
+        return false;
+    }
+
+    omsRestoreInProgress = true;
+    try {
+        log('🤖 Автовосстановление настроек OMS...');
+        await req('auth.php?action=save-oms', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({omsConnection: stored.connection, omsId: stored.id})
+        });
+
+        state.omsSaved = true;
+        state.omsConnection = stored.connection;
+        state.omsId = stored.id;
+        applyOmsInputs(stored.connection, stored.id);
+        persistOmsSettings(stored.connection, stored.id);
+        updateStatus();
+        log('🤖 ✅ Настройки OMS восстановлены автоматически');
+        return true;
+    } catch (e) {
+        log('⚠️ Не удалось автоматически восстановить настройки OMS: ' + e.message);
+        return false;
+    } finally {
+        omsRestoreInProgress = false;
+    }
+}
+
 function setModalVisibility(visible) {
     const modal = $('settingsModal');
     if (!modal) return;
@@ -915,11 +1006,13 @@ async function loadCertificates(isAuto = false) {
         }
 
         updateStatus();
+        return state.certs.length;
     } catch (e) {
         state.certs = [];
         state.currentCert = null;
         updateStatus();
         log(`❌ ${isAuto ? 'Не удалось автоматически загрузить сертификаты' : 'Ошибка загрузки сертификатов'}: ` + e.message);
+        return 0;
     }
 }
 
@@ -984,6 +1077,111 @@ async function signDetached(data, cert) {
     // Удаляем ВСЕ переносы и пробелы
     return signature.replace(/[\r\n\s]/g, '');
 }
+
+async function authorizeNk({auto = false} = {}) {
+    if (nkAuthInProgress) return false;
+
+    if (!state.currentCert) {
+        if (auto) {
+            log('ℹ️ Выберите сертификат для автоматического получения токена НК');
+        } else {
+            log('❌ Выберите сертификат');
+        }
+        return false;
+    }
+
+    if (auto && state.nkActive) {
+        log('ℹ️ Токен НК уже активен, автоматическое обновление не требуется');
+        return true;
+    }
+
+    nkAuthInProgress = true;
+    const prefix = auto ? '🤖 ' : '';
+
+    try {
+        log(`${prefix}🔐 Запрос challenge НК...`);
+        const challenge = await req('auth.php?action=nk-challenge');
+
+        log(`${prefix}✍️ Подпись challenge...`);
+        const signature = await signAttached(challenge.data, state.currentCert);
+
+        log(`${prefix}📤 Обмен на токен...`);
+        await req('auth.php?action=nk-signin', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({uuid: challenge.uuid, signature})
+        });
+
+        state.nkActive = true;
+        updateStatus();
+        log(`${prefix}✅ Токен НК ${auto ? 'получен автоматически' : 'получен'}`);
+        return true;
+    } catch (e) {
+        log(`${auto ? '⚠️ Не удалось автоматически получить токен НК: ' : '❌ '}` + e.message);
+        return false;
+    } finally {
+        nkAuthInProgress = false;
+    }
+}
+
+async function authorizeSuz({auto = false} = {}) {
+    if (suzAuthInProgress) return false;
+
+    if (!state.currentCert) {
+        if (auto) {
+            log('ℹ️ Выберите сертификат для автоматического получения токена СУЗ');
+        } else {
+            log('❌ Выберите сертификат');
+        }
+        return false;
+    }
+
+    const omsConnection = state.omsConnection || $('omsConnection').value.trim();
+    const omsId = state.omsId || $('omsId').value.trim();
+
+    if (!omsConnection || !omsId) {
+        if (auto) {
+            log('ℹ️ Для автоматического получения токена СУЗ заполните и сохраните настройки OMS');
+        } else {
+            log('❌ Заполните идентификатор соединения и OMS ID');
+            setModalVisibility(true);
+        }
+        return false;
+    }
+
+    suzAuthInProgress = true;
+    const prefix = auto ? '🤖 ' : '';
+
+    try {
+        log(`${prefix}🔐 Запрос challenge СУЗ...`);
+        const challenge = await req('auth.php?action=suz-challenge');
+
+        log(`${prefix}✍️ Подпись challenge...`);
+        const signature = await signAttached(challenge.data, state.currentCert);
+
+        log(`${prefix}📤 Обмен на clientToken...`);
+        await req('auth.php?action=suz-signin', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({uuid: challenge.uuid, signature, omsConnection, omsId})
+        });
+
+        state.suzActive = true;
+        state.omsConnection = omsConnection;
+        state.omsId = omsId;
+        state.omsSaved = true;
+        persistOmsSettings(omsConnection, omsId);
+        applyOmsInputs(omsConnection, omsId);
+        updateStatus();
+        log(`${prefix}✅ Токен СУЗ ${auto ? 'получен автоматически' : 'получен'}`);
+        return true;
+    } catch (e) {
+        log(`${auto ? '⚠️ Не удалось автоматически получить токен СУЗ: ' : '❌ '}` + e.message);
+        return false;
+    } finally {
+        suzAuthInProgress = false;
+    }
+}
 // Сохранение OMS настроек
 $('saveOmsBtn').onclick = async () => {
     const omsConnection = $('omsConnection').value.trim();
@@ -1004,9 +1202,13 @@ $('saveOmsBtn').onclick = async () => {
         state.omsSaved = true;
         state.omsConnection = omsConnection;
         state.omsId = omsId;
+        persistOmsSettings(omsConnection, omsId);
+        applyOmsInputs(omsConnection, omsId);
         updateStatus();
         log('✅ Настройки OMS сохранены');
         setModalVisibility(false);
+
+        await authorizeSuz({auto: true});
     } catch (e) {
         log('❌ ' + e.message);
     }
@@ -1014,69 +1216,12 @@ $('saveOmsBtn').onclick = async () => {
 
 // Авторизация НК
 $('authNkBtn').onclick = async () => {
-    if (!state.currentCert) {
-        log('❌ Выберите сертификат');
-        return;
-    }
-    
-    try {
-        log('🔐 Запрос challenge НК...');
-        const challenge = await req('auth.php?action=nk-challenge');
-        
-        log('✍️ Подпись challenge...');
-        const signature = await signAttached(challenge.data, state.currentCert);
-        
-        log('📤 Обмен на токен...');
-        await req('auth.php?action=nk-signin', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({uuid: challenge.uuid, signature})
-        });
-        
-        state.nkActive = true;
-        updateStatus();
-        log('✅ Токен НК получен');
-    } catch (e) {
-        log('❌ ' + e.message);
-    }
+    await authorizeNk();
 };
 
 // Авторизация СУЗ
 $('authSuzBtn').onclick = async () => {
-    if (!state.currentCert) {
-        log('❌ Выберите сертификат');
-        return;
-    }
-    
-    const omsConnection = state.omsConnection || $('omsConnection').value.trim();
-    const omsId = state.omsId || $('omsId').value.trim();
-
-    if (!omsConnection || !omsId) {
-        log('❌ Заполните идентификатор соединения и OMS ID');
-        setModalVisibility(true);
-        return;
-    }
-    
-    try {
-        log('🔐 Запрос challenge СУЗ...');
-        const challenge = await req('auth.php?action=suz-challenge');
-        
-        log('✍️ Подпись challenge...');
-        const signature = await signAttached(challenge.data, state.currentCert);
-        
-        log('📤 Обмен на clientToken...');
-        await req('auth.php?action=suz-signin', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({uuid: challenge.uuid, signature, omsConnection, omsId})
-        });
-        
-        state.suzActive = true;
-        updateStatus();
-        log('✅ Токен СУЗ получен');
-    } catch (e) {
-        log('❌ ' + e.message);
-    }
+    await authorizeSuz();
 };
 
 // Поиск карточки
@@ -1512,17 +1657,20 @@ $('sendUtilisationBtn').onclick = async () => {
             state.omsConnection = oms.connection;
             state.omsId = oms.id;
             state.omsSaved = true;
-            $('omsConnection').value = oms.connection;
-            $('omsId').value = oms.id;
+            applyOmsInputs(oms.connection, oms.id);
+            persistOmsSettings(oms.connection, oms.id);
         } else {
             state.omsSaved = false;
-            state.omsConnection = '';
-            state.omsId = '';
+            if (state.omsConnection || state.omsId) {
+                applyOmsInputs(state.omsConnection, state.omsId);
+            }
         }
 
         updateStatus();
         if (state.nkActive || state.suzActive || state.omsSaved) {
             log('ℹ️ Данные восстановлены из сессии');
+        } else if (state.omsConnection && state.omsId) {
+            await autoRestoreOmsSettingsFromStorage();
         }
     } catch (e) {
         console.error(e);
@@ -1535,8 +1683,11 @@ window.addEventListener('beforeunload', () => {
     }
 });
 
-window.addEventListener('load', () => {
-    loadCertificates(true);
+window.addEventListener('load', async () => {
+    const certCount = await loadCertificates(true);
+    if (certCount > 0) {
+        await authorizeNk({auto: true});
+    }
 });
 </script>
 
