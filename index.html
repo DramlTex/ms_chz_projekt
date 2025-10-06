@@ -50,7 +50,7 @@
             gap: 1rem;
             justify-content: flex-start;
             flex-wrap: wrap;
-            margin-bottom: 1.5rem;
+            margin-bottom: 0;
         }
 
         .connection-status {
@@ -362,9 +362,19 @@
 <div class="container">
     <div class="page-header">
         <h1>🎯 Заказ кодов маркировки</h1>
-        <button class="btn btn-primary" id="openSettingsBtn" type="button">Настройки соединения</button>
+        <div class="connection-toolbar">
+            <button class="btn btn-primary" id="openSettingsBtn" type="button">Настройки соединения</button>
+            <div class="connection-status disconnected" id="connectionStatus">
+                <span class="status-icon" id="connectionStatusIcon">✖</span>
+                <span id="connectionStatusText">Нет соединения</span>
+            </div>
+        </div>
     </div>
     <p class="subtitle">Простой способ создать заказ в СУЗ через True API</p>
+    <p class="hint" style="margin-bottom: 1.5rem;">
+        Для управления сертификатами, получения токенов и сохранения настроек OMS используйте кнопку
+        «Настройки соединения».
+    </p>
 
     <!-- Шаг 1: Карточка -->
     <div class="step">
@@ -384,27 +394,9 @@
         </div>
     </div>
 
-    <!-- Шаг 2: Авторизация -->
+    <!-- Шаг 2: Заказ -->
     <div class="step">
-
-        <h2>Шаг 2: Авторизация</h2>
-
-        <div class="connection-toolbar">
-            <div class="connection-status disconnected" id="connectionStatus">
-                <span class="status-icon" id="connectionStatusIcon">✖</span>
-                <span id="connectionStatusText">Нет соединения</span>
-            </div>
-        </div>
-
-        <p class="hint" style="margin-bottom: 0;">
-            Для управления сертификатами, получения токенов и сохранения настроек OMS используйте кнопку
-            «Настройки соединения» вверху страницы.
-        </p>
-    </div>
-
-    <!-- Шаг 3: Заказ -->
-    <div class="step">
-        <h2>Шаг 3: Параметры заказа</h2>
+        <h2>Шаг 2: Параметры заказа</h2>
 
         <div class="grid">
             <div class="form-group">
@@ -454,9 +446,9 @@
         <button class="btn btn-primary" id="createOrderBtn" disabled>Создать заказ</button>
     </div>
 
-    <!-- Шаг 4: Статус заказа -->
+    <!-- Шаг 3: Статус заказа -->
     <div class="step">
-        <h2>Шаг 4: Проверить статус заказа</h2>
+        <h2>Шаг 3: Проверить статус заказа</h2>
 
         <div class="form-group">
             <label>ID заказа</label>
@@ -475,9 +467,9 @@
         </div>
     </div>
 
-    <!-- Шаг 5: Получить КМ -->
+    <!-- Шаг 4: Получить КМ -->
     <div class="step">
-        <h2>Шаг 5: Получить массивы КМ</h2>
+        <h2>Шаг 4: Получить массивы КМ</h2>
 
         <div class="form-group">
             <label>Буфер</label>
@@ -515,9 +507,9 @@
         </div>
     </div>
 
-    <!-- Шаг 6: Ввод в оборот -->
+    <!-- Шаг 5: Ввод в оборот -->
     <div class="step">
-        <h2>Шаг 6: Отчёт о нанесении (ввод в оборот)</h2>
+        <h2>Шаг 5: Отчёт о нанесении (ввод в оборот)</h2>
         <p class="hint">Используйте полные КМ (sntins) из буфера. Максимум 30 000 КМ за запрос.</p>
 
         <textarea id="utilisationPayload">{
