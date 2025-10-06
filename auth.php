@@ -113,11 +113,11 @@ try {
         $id = trim($input['omsId'] ?? '');
         
         if (!$connection || !$id) {
-            throw new Exception('Заполните OMS Connection и OMS ID');
+            throw new Exception('Заполните идентификатор соединения и OMS ID');
         }
         
         if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $connection)) {
-            throw new Exception('OMS Connection должен быть в формате GUID');
+            throw new Exception('Идентификатор соединения должен быть в формате GUID');
         }
         
         if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $id)) {
