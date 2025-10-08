@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Заказ КМ</title>
     <script src="cadesplugin_api.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         
@@ -612,6 +613,7 @@
                 <select id="codeFormat">
                     <option value="CSV">CSV</option>
                     <option value="JSON">JSON</option>
+                    <option value="PDF">PDF</option>
                 </select>
             </div>
         </div>
@@ -783,6 +785,102 @@ function log(msg) {
     $('log').textContent += '\n' + msg;
     $('log').scrollTop = $('log').scrollHeight;
     console.log('[MS_CHZ]', msg);
+}
+
+function ensureJsPdf() {
+    if (!window.jspdf || !window.jspdf.jsPDF) {
+        throw new Error('Библиотека для формирования PDF (jsPDF) не загружена');
+    }
+    return window.jspdf.jsPDF;
+}
+
+function splitCodeForLabel(code) {
+    const cleaned = String(code || '').trim();
+    if (!cleaned) return [''];
+    const chunkSize = 24;
+    const result = [];
+    for (let i = 0; i < cleaned.length; i += chunkSize) {
+        result.push(cleaned.slice(i, i + chunkSize));
+    }
+    return result;
+}
+
+function generatePdfDocumentFromCodes(codes, metadata = {}) {
+    const JsPDF = ensureJsPdf();
+    const doc = new JsPDF({orientation: 'portrait', unit: 'mm', format: 'a4'});
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+
+    const marginX = 10;
+    const marginY = 12;
+    const labelWidth = 60;
+    const labelHeight = 36;
+    const columns = Math.max(1, Math.floor((pageWidth - marginX * 2) / labelWidth));
+    const rows = Math.max(1, Math.floor((pageHeight - marginY * 2) / labelHeight));
+    const labelsPerPage = columns * rows;
+
+    doc.setFont('helvetica', 'normal');
+
+    codes.forEach((code, index) => {
+        if (index && index % labelsPerPage === 0) {
+            doc.addPage();
+        }
+
+        const pageIndex = index % labelsPerPage;
+        const column = pageIndex % columns;
+        const row = Math.floor(pageIndex / columns);
+
+        const x = marginX + column * labelWidth;
+        const y = marginY + row * labelHeight;
+
+        doc.setDrawColor(180, 180, 180);
+        doc.rect(x, y, labelWidth - 2, labelHeight - 2);
+
+        const labelPaddingX = 4;
+        const labelPaddingY = 6;
+        let cursorY = y + labelPaddingY;
+
+        doc.setTextColor(60, 60, 60);
+        doc.setFontSize(9);
+        doc.text('Код маркировки', x + labelPaddingX, cursorY, {baseline: 'top'});
+
+        cursorY += 6;
+
+        doc.setFontSize(10);
+        const lines = splitCodeForLabel(code);
+        lines.forEach(line => {
+            doc.text(line, x + labelPaddingX, cursorY, {baseline: 'top'});
+            cursorY += 5.2;
+        });
+
+        if (metadata.gtin) {
+            cursorY += 1.5;
+            doc.setFontSize(8);
+            doc.setTextColor(100, 100, 100);
+            doc.text('GTIN: ' + metadata.gtin, x + labelPaddingX, cursorY, {baseline: 'top'});
+            cursorY += 4.5;
+        }
+
+        if (metadata.orderId) {
+            doc.setFontSize(7.5);
+            doc.setTextColor(130, 130, 130);
+            doc.text('Заказ: ' + metadata.orderId, x + labelPaddingX, cursorY, {baseline: 'top'});
+        }
+    });
+
+    return doc;
+}
+
+async function createPdfBlobFromCodes(codes, metadata = {}) {
+    const doc = generatePdfDocumentFromCodes(codes, metadata);
+    const output = doc.output('blob');
+    if (output instanceof Blob) {
+        return output;
+    }
+    if (output && typeof output.then === 'function') {
+        return await output;
+    }
+    return new Blob([doc.output('arraybuffer')], {type: 'application/pdf'});
 }
 
 function clearErrorState() {
@@ -2226,22 +2324,30 @@ $('downloadCodesBtn').onclick = async () => {
             URL.revokeObjectURL(state.downloadUrl);
         }
 
-        let blobContent = '';
+        let blob;
         let contentType = 'text/plain';
         let ext = 'txt';
+        const normalizedFormat = (format || '').toUpperCase();
 
-        if ((format || '').toUpperCase() === 'JSON') {
-            blobContent = JSON.stringify(codes, null, 2);
+        if (normalizedFormat === 'JSON') {
+            const blobContent = JSON.stringify(codes, null, 2);
             contentType = 'application/json';
             ext = 'json';
+            blob = new Blob([blobContent], {type: contentType});
+        } else if (normalizedFormat === 'PDF') {
+            log('🧾 Формирование PDF с этикетками...');
+            blob = await createPdfBlobFromCodes(codes, {gtin, orderId: effectiveOrderId});
+            contentType = 'application/pdf';
+            ext = 'pdf';
         } else {
-            blobContent = codes.join('\n');
+            const blobContent = codes.join('\n');
             contentType = 'text/csv';
             ext = 'csv';
+            blob = new Blob([blobContent], {type: contentType});
         }
 
-        const blob = new Blob([blobContent], {type: contentType});
-        const url = URL.createObjectURL(blob);
+        const blobToUse = blob instanceof Blob ? blob : new Blob([blob], {type: contentType});
+        const url = URL.createObjectURL(blobToUse);
         state.downloadUrl = url;
 
         const link = $('downloadLink');
