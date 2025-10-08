@@ -1619,7 +1619,11 @@ $('excelFileInput').onchange = async (event) => {
         // Парсим Excel
         const workbook = XLSXLib.read(arrayBuffer);
         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-        const data = XLSXLib.utils.sheet_to_json(firstSheet, { header: 1 });
+        const data = XLSXLib.utils.sheet_to_json(firstSheet, {
+            header: 1,
+            raw: false,
+            defval: ''
+        });
 
         if (!data || data.length === 0) {
             throw new Error('Файл пуст');
