@@ -404,7 +404,7 @@
             gap: 1rem;
         }
 
-
+        .modal-section {
             display: flex;
             flex-direction: column;
             gap: 0.75rem;
@@ -473,7 +473,23 @@
             <input type="text" id="gtinInput" placeholder="04601234567890">
         </div>
 
-        <button class="btn btn-secondary" id="findCardBtn">Найти карточку</button>
+        <div class="btn-group">
+            <button class="btn btn-secondary" id="findCardBtn">Найти карточку</button>
+            <label class="btn btn-secondary" style="cursor: pointer; margin: 0;">
+                📁 Загрузить Excel с GTIN
+                <input type="file" id="excelFileInput" accept=".xlsx,.xls" style="display: none;">
+            </label>
+        </div>
+
+        <div class="card-info" id="excelProgress" style="display: none; margin-top: 1rem;">
+            <h3>Обработка файла</h3>
+            <div style="margin-top: 0.5rem;">
+                <div style="background: #e2e8f0; height: 8px; border-radius: 4px; overflow: hidden;">
+                    <div id="excelProgressBar" style="background: #667eea; height: 100%; width: 0%; transition: width 0.3s;"></div>
+                </div>
+                <p id="excelProgressText" style="margin-top: 0.5rem; color: #4a5568; font-size: 0.9rem;"></p>
+            </div>
+        </div>
         
         <div class="card-info" id="cardInfo" style="display: none;">
             <h3 id="cardName"></h3>
@@ -588,7 +604,7 @@
             <div class="form-group">
                 <label>Количество КМ за запрос</label>
                 <input type="number" id="codeQuantity" value="1000" min="1" max="150000">
-                <p class="hint">Максимально допустимое значение — 150 000 КМ.</p>
+                <p class="hint">Максимально допустимое значение — 150 000 КМ.</p>
             </div>
 
             <div class="form-group">
@@ -766,6 +782,11 @@ let omsRestoreInProgress = false;
 function log(msg) {
     $('log').textContent += '\n' + msg;
     $('log').scrollTop = $('log').scrollHeight;
+    console.log('[MS_CHZ]', msg);
+}
+
+function clearErrorState() {
+    console.log('[MS_CHZ] Clearing error state');
 }
 
 function normalizeGtin(rawGtin) {
@@ -957,7 +978,6 @@ function updateBufferOptions() {
 }
 
 function updateStatus() {
-
     const nkStatus = $('nkStatus');
     if (nkStatus) {
         nkStatus.className = 'status ' + (state.nkActive ? 'active' : 'inactive');
@@ -975,7 +995,6 @@ function updateStatus() {
     }
 
     const omsStatus = $('omsStatus');
-
     const shortConnection = state.omsConnection
         ? `${state.omsConnection.slice(0, 8)}…${state.omsConnection.slice(-4)}`
         : '';
@@ -1001,40 +1020,6 @@ function updateStatus() {
         connectionIcon.textContent = connected ? '✔' : '✖';
         connectionText.textContent = connected ? 'Соединение установлено' : 'Нет соединения';
     }
-
-    const summaryNk = $('nkSummary');
-    if (summaryNk) {
-        summaryNk.textContent = (state.nkActive ? '✅ ' : '🔴 ') + (state.nkActive ? 'Токен НК активен' : 'Токен НК не получен');
-    }
-
-    const summarySuz = $('suzSummary');
-    if (summarySuz) {
-        summarySuz.textContent = (state.suzActive ? '✅ ' : '🔴 ') + (state.suzActive ? 'Токен СУЗ активен' : 'Токен СУЗ не получен');
-    }
-
-    const summaryOms = $('omsSummary');
-    if (summaryOms) {
-        const summaryText = state.omsSaved
-            ? shortConnection
-                ? `OMS настройки сохранены (${shortConnection})`
-                : 'OMS настройки сохранены'
-            : 'OMS настройки не сохранены';
-        summaryOms.textContent = (state.omsSaved ? '✅ ' : '🔴 ') + summaryText;
-    }
-
-    const certSummary = $('certSummary');
-    if (certSummary) {
-        const select = $('certSelect');
-        if (state.currentCert && select && select.options.length) {
-            const currentText = select.options[select.selectedIndex]?.textContent?.trim();
-            certSummary.textContent = currentText
-                ? `Сертификат: ${currentText}`
-                : 'Сертификат: выбран';
-        } else {
-            certSummary.textContent = 'Сертификат: не выбран';
-        }
-    }
-
 
     const hasValidItems = Array.isArray(state.orderItems)
         && state.orderItems.some(item => {
@@ -1282,15 +1267,12 @@ $('certSelect').onchange = (e) => {
     updateStatus();
 };
 
-// Подпись attached (для авторизации)
-// Подпись attached (для авторизации)
 async function signAttached(data, cert) {
     const signer = await cadesplugin.CreateObjectAsync('CAdESCOM.CPSigner');
     await signer.propset_Certificate(cert);
     
     const sd = await cadesplugin.CreateObjectAsync('CAdESCOM.CadesSignedData');
     
-    // Попробуйте явно указать кодировку
     if (typeof sd.propset_ContentEncoding === 'function') {
         try {
             await sd.propset_ContentEncoding(cadesplugin.CADESCOM_STRING_TO_UCS2LE);
@@ -1299,7 +1281,7 @@ async function signAttached(data, cert) {
         }
     }
     
-    await sd.propset_Content(data);  // ← ИСПРАВЛЕНО: было payload, стало data
+    await sd.propset_Content(data);
     
     return sd.SignCades(signer, cadesplugin.CADESCOM_CADES_BES);
 }
@@ -1313,25 +1295,20 @@ function encodeBase64Utf8(data) {
     return btoa(binary);
 }
 
-// Подпись detached (для заказа)
-// Подпись detached (для заказа) - CMS формат
 async function signDetached(data, cert) {
     const signer = await cadesplugin.CreateObjectAsync('CAdESCOM.CPSigner');
     await signer.propset_Certificate(cert);
 
     const sd = await cadesplugin.CreateObjectAsync('CAdESCOM.CadesSignedData');
 
-    // ВАЖНО: подписываем байты HTTP-тела → кодируем JSON в base64 и говорим плагину, что это бинарь
     const base64Payload = encodeBase64Utf8(data);
     if (typeof sd.propset_ContentEncoding === 'function') {
         await sd.propset_ContentEncoding(cadesplugin.CADESCOM_BASE64_TO_BINARY);
     }
     await sd.propset_Content(base64Payload);
 
-    // ВАЖНО: detached = true, БЕЗ кодирования контента
     const signature = await sd.SignCades(signer, cadesplugin.CADESCOM_CADES_BES, true);
 
-    // Удаляем ВСЕ переносы и пробелы
     return signature.replace(/[\r\n\s]/g, '');
 }
 
@@ -1439,7 +1416,7 @@ async function authorizeSuz({auto = false} = {}) {
         suzAuthInProgress = false;
     }
 }
-// Сохранение OMS настроек
+
 $('saveOmsBtn').onclick = async () => {
     const omsConnection = $('omsConnection').value.trim();
     const omsId = $('omsId').value.trim();
@@ -1471,17 +1448,14 @@ $('saveOmsBtn').onclick = async () => {
     }
 };
 
-// Авторизация НК
 $('authNkBtn').onclick = async () => {
     await authorizeNk();
 };
 
-// Авторизация СУЗ
 $('authSuzBtn').onclick = async () => {
     await authorizeSuz();
 };
 
-// Поиск карточки
 $('findCardBtn').onclick = async () => {
     const gtin = $('gtinInput').value.trim();
     if (!gtin) {
@@ -1494,35 +1468,41 @@ $('findCardBtn').onclick = async () => {
         return;
     }
     
+    await findAndDisplayCard(gtin);
+};
+
+async function findAndDisplayCard(gtin) {
     try {
         log('🔍 Поиск карточки...');
-        state.card = await req('card.php?gtin=' + encodeURIComponent(gtin));
+        const card = await req('card.php?gtin=' + encodeURIComponent(gtin));
+        
+        state.card = card;
         
         $('cardInfo').style.display = 'block';
-        $('cardName').textContent = state.card.name || 'Без названия';
+        $('cardName').textContent = card.name || 'Без названия';
         
         const pills = [];
-        if (state.card.goodId) pills.push(`<span class="pill">ID: ${state.card.goodId}</span>`);
-        if (state.card.gtin) pills.push(`<span class="pill">GTIN: ${state.card.gtin}</span>`);
+        if (card.goodId) pills.push(`<span class="pill">ID: ${card.goodId}</span>`);
+        if (card.gtin) pills.push(`<span class="pill">GTIN: ${card.gtin}</span>`);
         $('cardPills').innerHTML = pills.join('');
         
         $('cardDetails').textContent =
-            (state.card.tnved ? `ТН ВЭД: ${state.card.tnved}` : '') +
-            (state.card.productGroup ? ` • Группа: ${state.card.productGroup}` : '');
+            (card.tnved ? `ТН ВЭД: ${card.tnved}` : '') +
+            (card.productGroup ? ` • Группа: ${card.productGroup}` : '');
 
         const cardQuantityInput = $('cardQuantity');
         if (cardQuantityInput) {
             cardQuantityInput.value = '1';
         }
 
-        if (state.card.productGroup) {
-            $('productGroup').value = state.card.productGroup;
-            updatePharmaVisibility();
+        if (card.productGroup) {
+            $('productGroup').value = card.productGroup;
+            updateClothingVisibility();
         }
 
         const codeGtinInput = $('codeGtin');
-        if (codeGtinInput && state.card.gtin) {
-            let normalized = String(state.card.gtin).replace(/\s+/g, '');
+        if (codeGtinInput && card.gtin) {
+            let normalized = String(card.gtin).replace(/\s+/g, '');
             if (/^\d+$/.test(normalized)) {
                 if (normalized.length < 14) {
                     normalized = normalized.padStart(14, '0');
@@ -1530,21 +1510,218 @@ $('findCardBtn').onclick = async () => {
                 if (normalized.length === 14) {
                     codeGtinInput.value = normalized;
                 } else {
-                    codeGtinInput.value = state.card.gtin;
+                    codeGtinInput.value = card.gtin;
                 }
             } else {
-                codeGtinInput.value = state.card.gtin;
+                codeGtinInput.value = card.gtin;
             }
         }
 
         updateStatus();
         log('✅ Карточка найдена');
+        return card;
     } catch (e) {
         log('❌ ' + e.message);
         state.card = null;
         $('cardInfo').style.display = 'none';
         updateStatus();
+        return null;
     }
+}
+
+
+
+// Загружаем библиотеку SheetJS один раз
+let XLSX = null;
+async function loadXLSX() {
+    if (XLSX) return XLSX;
+    
+    return new Promise((resolve, reject) => {
+        if (typeof window.XLSX !== 'undefined') {
+            XLSX = window.XLSX;
+            resolve(XLSX);
+            return;
+        }
+
+        const script = document.createElement('script');
+        script.src = 'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js';
+        script.onload = () => {
+            // Даем библиотеке время на инициализацию
+            setTimeout(() => {
+                if (typeof window.XLSX !== 'undefined') {
+                    XLSX = window.XLSX;
+                    console.log('[XLSX] Библиотека загружена успешно');
+                    resolve(XLSX);
+                } else {
+                    console.error('[XLSX] window.XLSX не определен после загрузки');
+                    reject(new Error('Библиотека загружена, но window.XLSX не определен'));
+                }
+            }, 100);
+        };
+        script.onerror = () => {
+            console.warn('[XLSX] Основной CDN недоступен, пробуем запасной');
+            // Fallback на другой CDN
+            const scriptFallback = document.createElement('script');
+            scriptFallback.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+            scriptFallback.onload = () => {
+                setTimeout(() => {
+                    if (typeof window.XLSX !== 'undefined') {
+                        XLSX = window.XLSX;
+                        console.log('[XLSX] Библиотека загружена с запасного CDN');
+                        resolve(XLSX);
+                    } else {
+                        reject(new Error('Библиотека загружена, но window.XLSX не определен'));
+                    }
+                }, 100);
+            };
+            scriptFallback.onerror = () => {
+                reject(new Error('Не удалось загрузить библиотеку для работы с Excel. Проверьте подключение к интернету.'));
+            };
+            document.head.appendChild(scriptFallback);
+        };
+        document.head.appendChild(script);
+    });
+}
+
+$('excelFileInput').onchange = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    if (!state.nkActive) {
+        log('❌ Сначала получите токен НК');
+        event.target.value = '';
+        return;
+    }
+
+    const progressBlock = $('excelProgress');
+    const progressBar = $('excelProgressBar');
+    const progressText = $('excelProgressText');
+    
+    progressBlock.style.display = 'block';
+    progressText.textContent = 'Загрузка библиотеки Excel...';
+    progressBar.style.width = '5%';
+
+    try {
+        log('📂 Загрузка Excel файла: ' + file.name);
+
+        // Загружаем библиотеку
+        const XLSXLib = await loadXLSX();
+        log('✅ Библиотека Excel загружена');
+        
+        progressText.textContent = 'Чтение файла...';
+        progressBar.style.width = '10%';
+
+        const arrayBuffer = await file.arrayBuffer();
+        
+        progressText.textContent = 'Парсинг Excel...';
+        progressBar.style.width = '20%';
+
+        // Парсим Excel
+        const workbook = XLSXLib.read(arrayBuffer);
+        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+        const data = XLSXLib.utils.sheet_to_json(firstSheet, { header: 1 });
+
+        if (!data || data.length === 0) {
+            throw new Error('Файл пуст');
+        }
+
+        const headers = data[0];
+        const gtinColumnIndex = headers.findIndex(h => 
+            String(h).toLowerCase().includes('gtin')
+        );
+
+        if (gtinColumnIndex === -1) {
+            throw new Error('Колонка GTIN не найдена. Убедитесь, что в первой строке есть заголовок содержащий "GTIN"');
+        }
+
+        const gtins = [];
+        for (let i = 1; i < data.length; i++) {
+            const row = data[i];
+            const gtin = row[gtinColumnIndex];
+            if (gtin && String(gtin).trim()) {
+                gtins.push(String(gtin).trim());
+            }
+        }
+
+        if (gtins.length === 0) {
+            throw new Error('В файле не найдено ни одного GTIN');
+        }
+
+        log(`📊 Найдено ${gtins.length} GTIN в файле`);
+        progressText.textContent = `Обработка 0/${gtins.length} карточек...`;
+        
+        let processed = 0;
+        let successful = 0;
+        let failed = 0;
+
+        for (const gtin of gtins) {
+            try {
+                progressText.textContent = `Обработка ${processed + 1}/${gtins.length}: ${gtin}`;
+                progressBar.style.width = `${20 + (processed / gtins.length) * 70}%`;
+
+                const card = await findAndDisplayCard(gtin);
+                
+                if (card) {
+                    const normalized = normalizeGtin(card.gtin);
+                    if (normalized) {
+                        const existing = state.orderItems.find(item => item.gtin === normalized);
+                        if (existing) {
+                            existing.quantity = parseInt(existing.quantity, 10) + 1;
+                            log(`➕ Количество для GTIN ${normalized} увеличено до ${existing.quantity}`);
+                        } else {
+                            state.orderItems.push({
+                                gtin: normalized,
+                                quantity: 1,
+                                name: card.name || 'Без названия',
+                                templateId: card.templateId || 10,
+                                productGroup: card.productGroup || '',
+                                goodId: card.goodId || ''
+                            });
+                            log(`✅ Добавлена карточка ${normalized}`);
+                        }
+                        successful++;
+                    }
+                } else {
+                    failed++;
+                }
+            } catch (e) {
+                log(`⚠️ Не удалось обработать ${gtin}: ${e.message}`);
+                failed++;
+            }
+            
+            processed++;
+            
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+        progressBar.style.width = '100%';
+        progressText.textContent = `Готово! Успешно: ${successful}, Ошибок: ${failed}`;
+        
+        renderOrderItems();
+        updateStatus();
+        
+        log(`\n📊 Итого обработано ${processed} GTIN:`);
+        log(`   ✅ Успешно добавлено: ${successful}`);
+        log(`   ❌ Ошибок: ${failed}`);
+
+        setTimeout(() => {
+            progressBlock.style.display = 'none';
+        }, 3000);
+
+    } catch (e) {
+        log('❌ Ошибка обработки файла: ' + e.message);
+        progressText.textContent = 'Ошибка: ' + e.message;
+        progressBar.style.width = '100%';
+        progressBar.style.background = '#c53030';
+        
+        // Даем пользователю больше времени прочитать ошибку
+        setTimeout(() => {
+            progressBlock.style.display = 'none';
+            progressBar.style.background = '#667eea'; // Возвращаем цвет
+        }, 10000);
+    }
+
+    event.target.value = '';
 };
 
 $('addCardBtn').onclick = () => {
@@ -1615,7 +1792,6 @@ $('addCardBtn').onclick = () => {
     updateStatus();
 };
 
-// Создание заказа
 $('createOrderBtn').onclick = async () => {
     if (!state.currentCert) {
         log('❌ Выберите сертификат');
@@ -1668,6 +1844,18 @@ $('createOrderBtn').onclick = async () => {
         return;
     }
 
+    const technicalGtinItem = state.orderItems.find(item => {
+        const gtin = String(item.gtin);
+        return gtin.startsWith('029') && gtin.length === 14;
+    });
+    
+    if (technicalGtinItem) {
+        log(`⚠️ Обнаружен технический GTIN ${technicalGtinItem.gtin}`);
+        log(`⚠️ Технические GTIN (диапазон 029...) больше не принимаются для товарной группы "${productGroup}"`);
+        log(`💡 Удалите этот GTIN из заказа и используйте настоящий GTIN товара`);
+        return;
+    }
+
     try {
         const products = state.orderItems.map(item => ({
             gtin: item.gtin,
@@ -1699,25 +1887,30 @@ $('createOrderBtn').onclick = async () => {
 
         const payload = JSON.stringify(order);
 
-        console.log('=== PAYLOAD ===');
+        log(`📦 Подготовка заказа:`);
+        log(`   Товарная группа: ${productGroup}`);
+        log(`   Способ выпуска: ${releaseMethod}`);
+        log(`   Карточек: ${products.length}`);
+        log(`   Всего КМ: ${totalQuantity}`);
+        
+        products.forEach((p, i) => {
+            log(`   ${i + 1}. GTIN: ${p.gtin}, количество: ${p.quantity}, template: ${p.templateId}`);
+        });
+
+        console.log('=== ORDER PAYLOAD ===');
         console.log('Length:', payload.length);
         console.log('Content:', payload);
 
-        log(`📦 В заказе ${products.length} карточ${products.length === 1 ? 'ка' : products.length < 5 ? 'ки' : 'ек'} на ${totalQuantity} КМ`);
         log('✍️ Подпись заказа...');
         const rawSignature = await signDetached(payload, state.currentCert);
         
         console.log('=== SIGNATURE ===');
         console.log('Raw length:', rawSignature.length);
-        console.log('Has newlines:', /[\r\n]/.test(rawSignature));
-        console.log('Has spaces:', /\s/.test(rawSignature));
-        console.log('First 100 chars:', rawSignature.substring(0, 100));
         
-        // Убедитесь что подпись очищена
         const signature = rawSignature.replace(/[\r\n\s]/g, '');
         
         console.log('Cleaned length:', signature.length);
-        log('🔐 Длина подписи: ' + signature.length + ' символов');
+        log('🔑 Длина подписи: ' + signature.length + ' символов');
         
         log('📤 Отправка в СУЗ...');
         const result = await req('order.php', {
@@ -1738,12 +1931,46 @@ $('createOrderBtn').onclick = async () => {
             log('🆔 ID заказа: ' + orderId);
         }
 
+        clearErrorState();
+        
         state.buffers = [];
         updateBufferOptions();
         updateStatus();
     } catch (e) {
         console.error('Full error:', e);
-        log('❌ ' + e.message);
+        
+        let errorMsg = e.message;
+        
+        try {
+            const errorMatch = errorMsg.match(/HTTP \d+: (.+)/);
+            if (errorMatch) {
+                const errorJson = JSON.parse(errorMatch[1]);
+                if (errorJson.globalErrors && Array.isArray(errorJson.globalErrors)) {
+                    log('❌ Ошибки валидации:');
+                    errorJson.globalErrors.forEach(err => {
+                        log(`   • [${err.errorCode}] ${err.error}`);
+                    });
+                    
+                    const techGtinError = errorJson.globalErrors.find(err => 
+                        err.error && err.error.includes('технического диапазона')
+                    );
+                    
+                    if (techGtinError) {
+                        log('\n💡 Рекомендация: Проверьте список карточек в заказе.');
+                        log('   Удалите все карточки с техническими GTIN (начинаются с 029).');
+                        log('   Используйте только настоящие GTIN товаров.');
+                    }
+                } else {
+                    log('❌ ' + errorMsg);
+                }
+            } else {
+                log('❌ ' + errorMsg);
+            }
+        } catch (parseError) {
+            log('❌ ' + errorMsg);
+        }
+        
+        clearErrorState();
     }
 };
 
@@ -1877,7 +2104,7 @@ $('downloadCodesBtn').onclick = async () => {
         if (quantityInput) {
             quantityInput.value = '150000';
         }
-        log('ℹ️ Количество ограничено значением 150 000 КМ');
+        log('ℹ️ Количество ограничено значением 150 000 КМ');
     }
 
     const gtinInput = $('codeGtin');
@@ -2010,7 +2237,6 @@ $('sendUtilisationBtn').onclick = async () => {
     }
 };
 
-// Проверка статуса при загрузке
 (async () => {
     try {
         const status = await req('auth.php?action=status');
