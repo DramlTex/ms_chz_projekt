@@ -1533,54 +1533,115 @@ async function findAndDisplayCard(gtin) {
 
 // Загружаем библиотеку SheetJS один раз
 let XLSX = null;
+let xlsxLoadingPromise = null;
 async function loadXLSX() {
     if (XLSX) return XLSX;
-    
-    return new Promise((resolve, reject) => {
+    if (xlsxLoadingPromise) return xlsxLoadingPromise;
+
+    const resolveFromWindow = () => {
         if (typeof window.XLSX !== 'undefined') {
             XLSX = window.XLSX;
-            resolve(XLSX);
+            return XLSX;
+        }
+        return null;
+    };
+
+    const tryDynamicImport = async () => {
+        try {
+            const module = await import('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm');
+            const xlsxModule = (module && (module.default || module.XLSX)) || module;
+            if (xlsxModule) {
+                XLSX = xlsxModule;
+                console.log('[XLSX] Загружено через ESM import');
+                return XLSX;
+            }
+        } catch (err) {
+            console.warn('[XLSX] Не удалось загрузить ESM версию', err);
+        }
+        return null;
+    };
+
+    const loadViaScript = () => new Promise((resolve, reject) => {
+        const fromWindow = resolveFromWindow();
+        if (fromWindow) {
+            resolve(fromWindow);
             return;
         }
 
         const script = document.createElement('script');
         script.src = 'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js';
-        script.onload = () => {
-            // Даем библиотеке время на инициализацию
+        script.async = true;
+
+        const previousModule = window.module;
+        const previousExports = window.exports;
+        const restoreGlobals = () => {
+            if (previousModule === undefined) {
+                delete window.module;
+            } else {
+                window.module = previousModule;
+            }
+
+            if (previousExports === undefined) {
+                delete window.exports;
+            } else {
+                window.exports = previousExports;
+            }
+        };
+
+        const loadHandler = (label) => {
             setTimeout(() => {
-                if (typeof window.XLSX !== 'undefined') {
-                    XLSX = window.XLSX;
-                    console.log('[XLSX] Библиотека загружена успешно');
-                    resolve(XLSX);
+                const lib = resolveFromWindow();
+                if (lib) {
+                    console.log(`[XLSX] Библиотека загружена ${label}`);
+                    resolve(lib);
                 } else {
-                    console.error('[XLSX] window.XLSX не определен после загрузки');
                     reject(new Error('Библиотека загружена, но window.XLSX не определен'));
                 }
             }, 100);
         };
+
+        script.onload = () => {
+            restoreGlobals();
+            loadHandler('успешно');
+        };
         script.onerror = () => {
             console.warn('[XLSX] Основной CDN недоступен, пробуем запасной');
-            // Fallback на другой CDN
             const scriptFallback = document.createElement('script');
             scriptFallback.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+            scriptFallback.async = true;
             scriptFallback.onload = () => {
-                setTimeout(() => {
-                    if (typeof window.XLSX !== 'undefined') {
-                        XLSX = window.XLSX;
-                        console.log('[XLSX] Библиотека загружена с запасного CDN');
-                        resolve(XLSX);
-                    } else {
-                        reject(new Error('Библиотека загружена, но window.XLSX не определен'));
-                    }
-                }, 100);
+                restoreGlobals();
+                loadHandler('с запасного CDN');
             };
             scriptFallback.onerror = () => {
+                restoreGlobals();
                 reject(new Error('Не удалось загрузить библиотеку для работы с Excel. Проверьте подключение к интернету.'));
             };
             document.head.appendChild(scriptFallback);
         };
+
+        // SheetJS использует UMD. Если глобально определены module/exports, она не прикрепляет XLSX к window.
+        window.module = undefined;
+        window.exports = undefined;
         document.head.appendChild(script);
     });
+
+    xlsxLoadingPromise = (async () => {
+        const fromWindow = resolveFromWindow();
+        if (fromWindow) return fromWindow;
+
+        const fromImport = await tryDynamicImport();
+        if (fromImport) return fromImport;
+
+        return loadViaScript();
+    })().finally(() => {
+        // если загрузка завершилась неудачей, сбрасываем промис, чтобы можно было повторить попытку
+        if (!XLSX) {
+            xlsxLoadingPromise = null;
+        }
+    });
+
+    return xlsxLoadingPromise;
 }
 
 $('excelFileInput').onchange = async (event) => {
