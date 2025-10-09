@@ -9,6 +9,7 @@
     <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 
     <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js" integrity="sha384-aAt6F+u2kLhPNgm6kKiC9JIhbnoAVnX1nvUs61f7oTWJPfm6D/Ejko116IhVQIG2" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bwip-js@3.1.5/dist/bwip-js-min.js"></script>
 
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -195,6 +196,35 @@
             display: flex;
             gap: 0.75rem;
             flex-wrap: wrap;
+        }
+
+        .label-settings {
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            background: #f7fafc;
+            padding: 1rem;
+            margin-top: 0.75rem;
+        }
+
+        .label-settings summary {
+            cursor: pointer;
+            font-weight: 600;
+            color: #4a5568;
+            margin-bottom: 0.5rem;
+        }
+
+        .label-settings[open] summary {
+            margin-bottom: 1rem;
+        }
+
+        .label-settings-grid {
+            display: grid;
+            gap: 0.75rem;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        }
+
+        .label-settings textarea {
+            min-height: 72px;
         }
         
         .card-info {
@@ -622,6 +652,60 @@
             </div>
         </div>
 
+        <div class="form-group">
+            <label>Данные для этикетки (PDF)</label>
+            <details class="label-settings" id="labelSettingsPanel">
+                <summary>Заполнить данные для печати этикетки</summary>
+                <div class="label-settings-grid">
+                    <div>
+                        <label for="labelProductName">Наименование товара</label>
+                        <input type="text" id="labelProductName" placeholder="Юбка полусолнце «Солнечный бегемотик»">
+                    </div>
+                    <div>
+                        <label for="labelBrand">Бренд</label>
+                        <input type="text" id="labelBrand" placeholder="Например: «Честный ЗНАК»">
+                    </div>
+                    <div>
+                        <label for="labelModel">Артикул / модель</label>
+                        <input type="text" id="labelModel" placeholder="MT-58883">
+                    </div>
+                    <div>
+                        <label for="labelTnved">Код ТНВЭД</label>
+                        <input type="text" id="labelTnved" placeholder="6104510000">
+                    </div>
+                    <div>
+                        <label for="labelManufacturer">Производитель</label>
+                        <input type="text" id="labelManufacturer" placeholder="ПАО СБЕРБАНК">
+                    </div>
+                    <div>
+                        <label for="labelManufacturerInn">ИНН производителя</label>
+                        <input type="text" id="labelManufacturerInn" placeholder="7707083893">
+                    </div>
+                    <div>
+                        <label for="labelCountry">Страна производства</label>
+                        <input type="text" id="labelCountry" placeholder="Произведено в РФ">
+                    </div>
+                    <div>
+                        <label for="labelColor">Цвет</label>
+                        <input type="text" id="labelColor" placeholder="Красный">
+                    </div>
+                    <div>
+                        <label for="labelSize">Размер</label>
+                        <input type="text" id="labelSize" placeholder="XXXL">
+                    </div>
+                    <div style="grid-column: 1 / -1;">
+                        <label for="labelComposition">Состав</label>
+                        <textarea id="labelComposition" placeholder="Шерсть — 50%, Полиэстер — 40%, Натуральная кожа — 10%"></textarea>
+                    </div>
+                    <div style="grid-column: 1 / -1;">
+                        <label for="labelAdditional">Дополнительная информация</label>
+                        <textarea id="labelAdditional" placeholder="Например: Уход по инструкции"></textarea>
+                    </div>
+                </div>
+                <p class="hint" style="margin-top: 1rem;">Эти поля используются только при экспорте PDF и помогают сформировать этикетку по шаблону. Поля можно оставить пустыми.</p>
+            </details>
+        </div>
+
         <div class="btn-group">
             <button class="btn btn-primary" id="downloadCodesBtn" disabled>Скачать КМ</button>
             <a class="btn btn-secondary" id="downloadLink" style="display: none;" download>Скачать файл</a>
@@ -798,18 +882,106 @@ function ensureJsPdf() {
     return window.jspdf.jsPDF;
 }
 
-function splitCodeForLabel(code) {
-    const cleaned = String(code || '').trim();
-    if (!cleaned) return [''];
-    const chunkSize = 24;
-    const result = [];
-    for (let i = 0; i < cleaned.length; i += chunkSize) {
-        result.push(cleaned.slice(i, i + chunkSize));
-    }
-    return result;
+function sanitizeCodeForPrint(code) {
+    if (!code && code !== 0) return '';
+    return String(code).replace(/[\x00-\x1f]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
-function generatePdfDocumentFromCodes(codes, metadata = {}) {
+function isBwipReady() {
+    return typeof window !== 'undefined' && typeof window.bwipjs !== 'undefined';
+}
+
+function generateDataMatrixDataUrl(code) {
+    if (!isBwipReady()) {
+        return null;
+    }
+
+    try {
+        const canvas = document.createElement('canvas');
+        window.bwipjs.toCanvas(canvas, {
+            bcid: 'datamatrix',
+            text: String(code || ''),
+            scale: 4,
+            includetext: false,
+            paddingwidth: 0,
+            paddingheight: 0,
+            backgroundcolor: 'FFFFFF'
+        });
+        return canvas.toDataURL('image/png');
+    } catch (e) {
+        console.error('[MS_CHZ] Не удалось сформировать DataMatrix:', e);
+        return null;
+    }
+}
+
+const LABEL_FIELD_CONFIG = {
+    labelProductName: 'productName',
+    labelBrand: 'brand',
+    labelModel: 'model',
+    labelTnved: 'tnved',
+    labelManufacturer: 'manufacturer',
+    labelManufacturerInn: 'manufacturerInn',
+    labelCountry: 'country',
+    labelColor: 'color',
+    labelSize: 'size',
+    labelComposition: 'composition',
+    labelAdditional: 'additional'
+};
+
+const labelDirtyFields = new Set();
+
+function setupLabelFieldTracking() {
+    Object.keys(LABEL_FIELD_CONFIG).forEach(id => {
+        const el = $(id);
+        if (el) {
+            el.addEventListener('input', () => {
+                labelDirtyFields.add(id);
+            });
+        }
+    });
+}
+
+function setLabelFieldValue(id, value) {
+    const el = $(id);
+    if (!el || labelDirtyFields.has(id)) return;
+    el.value = value || '';
+}
+
+function collectLabelSettings() {
+    const settings = {};
+    Object.entries(LABEL_FIELD_CONFIG).forEach(([id, key]) => {
+        const el = $(id);
+        if (!el) return;
+        const value = el.value.trim();
+        if (value) {
+            settings[key] = value;
+        }
+    });
+    return settings;
+}
+
+function applyLabelDefaultsFromCard(card) {
+    if (!card) return;
+    if (card.name) {
+        setLabelFieldValue('labelProductName', card.name);
+    }
+    if (card.tnved) {
+        setLabelFieldValue('labelTnved', card.tnved);
+    }
+    if (card.goodId) {
+        setLabelFieldValue('labelModel', card.goodId);
+    }
+}
+
+setupLabelFieldTracking();
+
+function getSelectedOptionText(select) {
+    if (!select) return '';
+    const option = select.options && select.selectedIndex >= 0 ? select.options[select.selectedIndex] : null;
+    return option ? option.textContent.trim() : '';
+}
+
+function generatePdfDocumentFromCodes(codes, metadata = {}, datamatrixImages = []) {
     const JsPDF = ensureJsPdf();
     const doc = new JsPDF({orientation: 'portrait', unit: 'mm', format: 'a4'});
     const pageWidth = doc.internal.pageSize.getWidth();
@@ -817,11 +989,13 @@ function generatePdfDocumentFromCodes(codes, metadata = {}) {
 
     const marginX = 10;
     const marginY = 12;
-    const labelWidth = 60;
-    const labelHeight = 36;
+    const labelWidth = 85;
+    const labelHeight = 60;
     const columns = Math.max(1, Math.floor((pageWidth - marginX * 2) / labelWidth));
     const rows = Math.max(1, Math.floor((pageHeight - marginY * 2) / labelHeight));
     const labelsPerPage = columns * rows;
+    const leftColumnWidth = labelWidth * 0.6;
+    const rightColumnWidth = labelWidth - leftColumnWidth;
 
     doc.setFont('helvetica', 'normal');
 
@@ -836,47 +1010,147 @@ function generatePdfDocumentFromCodes(codes, metadata = {}) {
 
         const x = marginX + column * labelWidth;
         const y = marginY + row * labelHeight;
+        const padding = 4;
 
-        doc.setDrawColor(180, 180, 180);
-        doc.rect(x, y, labelWidth - 2, labelHeight - 2);
+        doc.setDrawColor(40, 40, 40);
+        doc.setLineWidth(0.35);
+        doc.rect(x, y, labelWidth, labelHeight);
 
-        const labelPaddingX = 4;
-        const labelPaddingY = 6;
-        let cursorY = y + labelPaddingY;
+        doc.setDrawColor(170, 170, 170);
+        doc.setLineWidth(0.25);
+        doc.line(x + leftColumnWidth, y + 2, x + leftColumnWidth, y + labelHeight - 2);
 
-        doc.setTextColor(60, 60, 60);
-        doc.setFontSize(9);
-        doc.text('Код маркировки', x + labelPaddingX, cursorY, {baseline: 'top'});
+        const headerX = x + padding;
+        let cursorY = y + padding + 3;
 
-        cursorY += 6;
-
+        const productName = metadata.productName || 'Наименование товара';
+        doc.setFont('helvetica', 'bold');
         doc.setFontSize(10);
-        const lines = splitCodeForLabel(code);
-        lines.forEach(line => {
-            doc.text(line, x + labelPaddingX, cursorY, {baseline: 'top'});
-            cursorY += 5.2;
+        const headerLines = doc.splitTextToSize(productName, leftColumnWidth - padding * 1.5);
+        doc.text(headerLines, headerX, cursorY);
+        cursorY += headerLines.length * 4;
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        const subLines = [];
+        if (metadata.brand) subLines.push('Бренд: ' + metadata.brand);
+        const groupParts = [];
+        if (metadata.productGroupLabel) groupParts.push(metadata.productGroupLabel);
+        if (metadata.releaseMethodLabel) groupParts.push(metadata.releaseMethodLabel);
+        if (groupParts.length) subLines.push(groupParts.join(' • '));
+        if (metadata.country) subLines.push(metadata.country);
+        if (subLines.length) {
+            const splitted = subLines.flatMap(text => doc.splitTextToSize(text, leftColumnWidth - padding * 1.5));
+            splitted.forEach(line => {
+                doc.text(line, headerX, cursorY);
+                cursorY += 3.6;
+            });
+        }
+
+        cursorY += 1.5;
+        doc.setDrawColor(200, 200, 200);
+        doc.line(headerX, cursorY, x + leftColumnWidth - padding, cursorY);
+        cursorY += 2.5;
+
+        const infoPairs = [
+            {label: 'Состав', value: metadata.composition},
+            {label: 'Код ТНВЭД', value: metadata.tnved},
+            {label: 'Производитель', value: metadata.manufacturer},
+            {label: 'ИНН производителя', value: metadata.manufacturerInn},
+            {label: 'Цвет', value: metadata.color},
+            {label: 'Размер', value: metadata.size},
+            {label: 'Артикул', value: metadata.model}
+        ].filter(item => item.value);
+
+        doc.setFontSize(7.5);
+        doc.setTextColor(60, 60, 60);
+        infoPairs.forEach(item => {
+            const valueLines = doc.splitTextToSize(`${item.label}: ${item.value}`, leftColumnWidth - padding * 1.5);
+            valueLines.forEach(line => {
+                doc.text(line, headerX, cursorY);
+                cursorY += 3.6;
+            });
+            cursorY += 0.8;
         });
 
-        if (metadata.gtin) {
-            cursorY += 1.5;
-            doc.setFontSize(8);
-            doc.setTextColor(100, 100, 100);
-            doc.text('GTIN: ' + metadata.gtin, x + labelPaddingX, cursorY, {baseline: 'top'});
-            cursorY += 4.5;
+        if (metadata.additional) {
+            doc.setFont('helvetica', 'italic');
+            const additionalLines = doc.splitTextToSize(metadata.additional, leftColumnWidth - padding * 1.5);
+            additionalLines.forEach(line => {
+                doc.text(line, headerX, cursorY);
+                cursorY += 3.4;
+            });
+            doc.setFont('helvetica', 'normal');
         }
 
-        if (metadata.orderId) {
-            doc.setFontSize(7.5);
-            doc.setTextColor(130, 130, 130);
-            doc.text('Заказ: ' + metadata.orderId, x + labelPaddingX, cursorY, {baseline: 'top'});
+        const bottomTextY = y + labelHeight - padding - 11;
+        doc.setFontSize(7);
+        doc.setTextColor(45, 45, 45);
+        if (metadata.gtin) {
+            doc.text('GTIN: ' + metadata.gtin, headerX, bottomTextY);
         }
+        if (metadata.orderId) {
+            doc.text('Заказ: ' + metadata.orderId, headerX, bottomTextY + 4);
+        }
+
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(0, 0, 0);
+
+        const matrixPadding = 4;
+        const matrixX = x + leftColumnWidth + matrixPadding;
+        const matrixY = y + padding + 4;
+        const matrixAvailableWidth = rightColumnWidth - matrixPadding * 2;
+        const matrixAvailableHeight = labelHeight - padding * 2 - 18;
+        const matrixSize = Math.max(20, Math.min(matrixAvailableWidth, matrixAvailableHeight));
+        const matrixImage = datamatrixImages[index] || generateDataMatrixDataUrl(code);
+
+        if (matrixImage) {
+            doc.addImage(matrixImage, 'PNG', matrixX, matrixY, matrixSize, matrixSize);
+        } else {
+            doc.setFontSize(7);
+            doc.setTextColor(130, 30, 30);
+            doc.text('DataMatrix недоступен', matrixX, matrixY + 10);
+            doc.setTextColor(0, 0, 0);
+        }
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9);
+        doc.text('EAC', x + labelWidth - padding, y + padding + 6, {align: 'right'});
+
+        const readableCode = sanitizeCodeForPrint(code);
+        const codeLines = readableCode ? doc.splitTextToSize(readableCode, rightColumnWidth - matrixPadding * 2) : [];
+        let codeTextY = matrixY + matrixSize + 4;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(6.5);
+        doc.setTextColor(70, 70, 70);
+        codeLines.forEach(line => {
+            if (codeTextY <= y + labelHeight - padding) {
+                doc.text(line, matrixX, codeTextY);
+                codeTextY += 3;
+            }
+        });
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7);
+        doc.setTextColor(55, 55, 55);
+        doc.text('Честный ЗНАК', x + labelWidth - padding, y + labelHeight - padding, {align: 'right'});
+
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(0, 0, 0);
     });
 
     return doc;
 }
 
 async function createPdfBlobFromCodes(codes, metadata = {}) {
-    const doc = generatePdfDocumentFromCodes(codes, metadata);
+    let datamatrixImages = [];
+    if (isBwipReady()) {
+        datamatrixImages = codes.map(code => generateDataMatrixDataUrl(code));
+    } else {
+        console.warn('[MS_CHZ] Библиотека bwip-js не загружена, DataMatrix на этикетках недоступен');
+    }
+
+    const doc = generatePdfDocumentFromCodes(codes, metadata, datamatrixImages);
     const output = doc.output('blob');
     if (output instanceof Blob) {
         return output;
@@ -1577,9 +1851,10 @@ async function findAndDisplayCard(gtin) {
     try {
         log('🔍 Поиск карточки...');
         const card = await req('card.php?gtin=' + encodeURIComponent(gtin));
-        
+
         state.card = card;
-        
+        applyLabelDefaultsFromCard(card);
+
         $('cardInfo').style.display = 'block';
         $('cardName').textContent = card.name || 'Без названия';
         
@@ -2309,6 +2584,32 @@ $('downloadCodesBtn').onclick = async () => {
     }
 
     try {
+        const labelSettings = collectLabelSettings();
+        const productGroupSelect = $('productGroup');
+        const releaseMethodSelect = $('releaseMethod');
+        const productGroupLabel = getSelectedOptionText(productGroupSelect);
+        const releaseMethodLabel = getSelectedOptionText(releaseMethodSelect);
+        const matchingOrderItem = state.orderItems.find(item => item.gtin === gtin);
+
+        if (matchingOrderItem) {
+            if (!labelSettings.productName && matchingOrderItem.name) {
+                labelSettings.productName = matchingOrderItem.name;
+            }
+            if (!labelSettings.model && matchingOrderItem.goodId) {
+                labelSettings.model = matchingOrderItem.goodId;
+            }
+        }
+
+        if (state.card) {
+            const normalizedCardGtin = normalizeGtin(state.card.gtin);
+            if (!labelSettings.productName && normalizedCardGtin === gtin && state.card.name) {
+                labelSettings.productName = state.card.name;
+            }
+            if (!labelSettings.tnved && state.card.tnved) {
+                labelSettings.tnved = state.card.tnved;
+            }
+        }
+
         log('📦 Запрос кодов маркировки...');
         const params = new URLSearchParams({
             orderId: effectiveOrderId,
@@ -2340,7 +2641,19 @@ $('downloadCodesBtn').onclick = async () => {
             blob = new Blob([blobContent], {type: contentType});
         } else if (normalizedFormat === 'PDF') {
             log('🧾 Формирование PDF с этикетками...');
-            blob = await createPdfBlobFromCodes(codes, {gtin, orderId: effectiveOrderId});
+            const pdfMetadata = {
+                gtin,
+                orderId: effectiveOrderId,
+                ...labelSettings
+            };
+            if (productGroupLabel) {
+                pdfMetadata.productGroupLabel = productGroupLabel;
+            }
+            if (releaseMethodLabel) {
+                pdfMetadata.releaseMethodLabel = releaseMethodLabel;
+            }
+
+            blob = await createPdfBlobFromCodes(codes, pdfMetadata);
             contentType = 'application/pdf';
             ext = 'pdf';
         } else {
