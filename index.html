@@ -882,6 +882,109 @@ function ensureJsPdf() {
     return window.jspdf.jsPDF;
 }
 
+const LABEL_FONT_NAME = 'Roboto';
+const FALLBACK_FONT_NAME = 'helvetica';
+const LABEL_FONT_SOURCES = [
+    {url: 'fonts/Roboto-Regular.ttf', vfsName: 'Roboto-Regular.ttf', fontName: LABEL_FONT_NAME, fontStyle: 'normal'},
+    {url: 'fonts/Roboto-Bold.ttf', vfsName: 'Roboto-Bold.ttf', fontName: LABEL_FONT_NAME, fontStyle: 'bold'},
+    {url: 'fonts/Roboto-Italic.ttf', vfsName: 'Roboto-Italic.ttf', fontName: LABEL_FONT_NAME, fontStyle: 'italic'}
+];
+
+const labelFontState = {
+    data: new Map(),
+    ready: false,
+    loadingPromise: null
+};
+
+function arrayBufferToBase64(buffer) {
+    const bytes = new Uint8Array(buffer);
+    const chunkSize = 0x8000;
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+        const chunk = bytes.subarray(i, i + chunkSize);
+        binary += String.fromCharCode(...chunk);
+    }
+    return btoa(binary);
+}
+
+async function ensureLabelFontsLoaded() {
+    if (labelFontState.ready) {
+        return true;
+    }
+    if (labelFontState.loadingPromise) {
+        return labelFontState.loadingPromise;
+    }
+
+    labelFontState.loadingPromise = (async () => {
+        try {
+            await Promise.all(LABEL_FONT_SOURCES.map(async font => {
+                if (labelFontState.data.has(font.vfsName)) {
+                    return;
+                }
+
+                const response = await fetch(font.url);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status} при загрузке ${font.url}`);
+                }
+
+                const buffer = await response.arrayBuffer();
+                labelFontState.data.set(font.vfsName, arrayBufferToBase64(buffer));
+            }));
+
+            labelFontState.ready = LABEL_FONT_SOURCES.every(font => labelFontState.data.has(font.vfsName));
+            if (!labelFontState.ready) {
+                console.warn('[MS_CHZ] Не все шрифты для PDF были загружены успешно');
+            }
+        } catch (e) {
+            console.error('[MS_CHZ] Не удалось загрузить шрифты для PDF:', e);
+            labelFontState.ready = false;
+        }
+
+        return labelFontState.ready;
+    })();
+
+    const result = await labelFontState.loadingPromise;
+    if (!result) {
+        labelFontState.loadingPromise = null;
+    }
+    return result;
+}
+
+function applyLabelFontsToDoc(doc) {
+    if (!labelFontState.ready) {
+        return;
+    }
+
+    LABEL_FONT_SOURCES.forEach(font => {
+        const data = labelFontState.data.get(font.vfsName);
+        if (!data) {
+            return;
+        }
+
+        try {
+            doc.addFileToVFS(font.vfsName, data);
+            doc.addFont(font.vfsName, font.fontName, font.fontStyle);
+        } catch (e) {
+            console.error('[MS_CHZ] Не удалось зарегистрировать шрифт в jsPDF:', e);
+        }
+    });
+}
+
+function setLabelFont(doc, style = 'normal') {
+    const fontName = labelFontState.ready ? LABEL_FONT_NAME : FALLBACK_FONT_NAME;
+    try {
+        doc.setFont(fontName, style);
+    } catch (e) {
+        console.warn('[MS_CHZ] Не удалось применить шрифт', fontName, 'для PDF. Используем запасной вариант.');
+        try {
+            const fallbackStyle = style;
+            doc.setFont(FALLBACK_FONT_NAME, fallbackStyle);
+        } catch (fallbackError) {
+            console.error('[MS_CHZ] Не удалось применить запасной шрифт для PDF:', fallbackError);
+        }
+    }
+}
+
 function sanitizeCodeForPrint(code) {
     if (!code && code !== 0) return '';
     return String(code).replace(/[\x00-\x1f]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -987,6 +1090,8 @@ function generatePdfDocumentFromCodes(codes, metadata = {}, datamatrixImages = [
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
 
+    applyLabelFontsToDoc(doc);
+
     const marginX = 10;
     const marginY = 12;
     const labelWidth = 85;
@@ -997,11 +1102,13 @@ function generatePdfDocumentFromCodes(codes, metadata = {}, datamatrixImages = [
     const leftColumnWidth = labelWidth * 0.6;
     const rightColumnWidth = labelWidth - leftColumnWidth;
 
-    doc.setFont('helvetica', 'normal');
+    setLabelFont(doc, 'normal');
 
     codes.forEach((code, index) => {
         if (index && index % labelsPerPage === 0) {
             doc.addPage();
+            applyLabelFontsToDoc(doc);
+            setLabelFont(doc, 'normal');
         }
 
         const pageIndex = index % labelsPerPage;
@@ -1024,13 +1131,13 @@ function generatePdfDocumentFromCodes(codes, metadata = {}, datamatrixImages = [
         let cursorY = y + padding + 3;
 
         const productName = metadata.productName || 'Наименование товара';
-        doc.setFont('helvetica', 'bold');
+        setLabelFont(doc, 'bold');
         doc.setFontSize(10);
         const headerLines = doc.splitTextToSize(productName, leftColumnWidth - padding * 1.5);
         doc.text(headerLines, headerX, cursorY);
         cursorY += headerLines.length * 4;
 
-        doc.setFont('helvetica', 'normal');
+        setLabelFont(doc, 'normal');
         doc.setFontSize(8);
         const subLines = [];
         if (metadata.brand) subLines.push('Бренд: ' + metadata.brand);
@@ -1074,13 +1181,13 @@ function generatePdfDocumentFromCodes(codes, metadata = {}, datamatrixImages = [
         });
 
         if (metadata.additional) {
-            doc.setFont('helvetica', 'italic');
+            setLabelFont(doc, 'italic');
             const additionalLines = doc.splitTextToSize(metadata.additional, leftColumnWidth - padding * 1.5);
             additionalLines.forEach(line => {
                 doc.text(line, headerX, cursorY);
                 cursorY += 3.4;
             });
-            doc.setFont('helvetica', 'normal');
+            setLabelFont(doc, 'normal');
         }
 
         const bottomTextY = y + labelHeight - padding - 11;
@@ -1093,7 +1200,7 @@ function generatePdfDocumentFromCodes(codes, metadata = {}, datamatrixImages = [
             doc.text('Заказ: ' + metadata.orderId, headerX, bottomTextY + 4);
         }
 
-        doc.setFont('helvetica', 'normal');
+        setLabelFont(doc, 'normal');
         doc.setTextColor(0, 0, 0);
 
         const matrixPadding = 4;
@@ -1113,14 +1220,14 @@ function generatePdfDocumentFromCodes(codes, metadata = {}, datamatrixImages = [
             doc.setTextColor(0, 0, 0);
         }
 
-        doc.setFont('helvetica', 'bold');
+        setLabelFont(doc, 'bold');
         doc.setFontSize(9);
         doc.text('EAC', x + labelWidth - padding, y + padding + 6, {align: 'right'});
 
         const readableCode = sanitizeCodeForPrint(code);
         const codeLines = readableCode ? doc.splitTextToSize(readableCode, rightColumnWidth - matrixPadding * 2) : [];
         let codeTextY = matrixY + matrixSize + 4;
-        doc.setFont('helvetica', 'normal');
+        setLabelFont(doc, 'normal');
         doc.setFontSize(6.5);
         doc.setTextColor(70, 70, 70);
         codeLines.forEach(line => {
@@ -1130,12 +1237,12 @@ function generatePdfDocumentFromCodes(codes, metadata = {}, datamatrixImages = [
             }
         });
 
-        doc.setFont('helvetica', 'bold');
+        setLabelFont(doc, 'bold');
         doc.setFontSize(7);
         doc.setTextColor(55, 55, 55);
         doc.text('Честный ЗНАК', x + labelWidth - padding, y + labelHeight - padding, {align: 'right'});
 
-        doc.setFont('helvetica', 'normal');
+        setLabelFont(doc, 'normal');
         doc.setTextColor(0, 0, 0);
     });
 
@@ -1143,6 +1250,16 @@ function generatePdfDocumentFromCodes(codes, metadata = {}, datamatrixImages = [
 }
 
 async function createPdfBlobFromCodes(codes, metadata = {}) {
+    let fontsReady = false;
+    try {
+        fontsReady = await ensureLabelFontsLoaded();
+    } catch (e) {
+        console.warn('[MS_CHZ] Ошибка при загрузке шрифтов для PDF:', e);
+    }
+    if (!fontsReady) {
+        console.warn('[MS_CHZ] Используется стандартный шрифт jsPDF, кириллица может отображаться некорректно.');
+    }
+
     let datamatrixImages = [];
     if (isBwipReady()) {
         datamatrixImages = codes.map(code => generateDataMatrixDataUrl(code));
