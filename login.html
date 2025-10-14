@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Вход в систему</title>
+<link rel="stylesheet" href="css/login.css">
+</head>
+<body>
+<div id="loginForm">
+    <h1 style="text-align: center; margin-bottom: 10px; color: #667eea;">🔄 МойСклад → НК</h1>
+    <p style="text-align: center; margin-bottom: 30px; color: #718096; font-size: 14px;">Войдите для начала работы</p>
+    
+    <input type="text" id="login" placeholder="Логин МойСклад" autocomplete="username">
+    <input type="password" id="password" placeholder="Пароль" autocomplete="current-password">
+    <button id="submit" type="button">Войти</button>
+    <div id="error"></div>
+</div>
+<script>
+    function doLogin() {
+        const login = document.getElementById('login').value.trim();
+        const password = document.getElementById('password').value;
+        
+        if (!login || !password) {
+            document.getElementById('error').textContent = 'Заполните все поля';
+            return;
+        }
+        
+        // Скрываем ошибку
+        document.getElementById('error').textContent = '';
+        
+        // Блокируем кнопку
+        const submitBtn = document.getElementById('submit');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Вход...';
+        
+        fetch('api_ms/login.php', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({login, password})
+        }).then(async r => {
+            if (r.ok) return r.json();
+            const data = await r.json().catch(() => ({}));
+            throw new Error(data.error || 'auth');
+        }).then((data) => {
+            console.log('Login successful:', data);
+            location.href = 'index.html';
+        }).catch(err => {
+            console.error('Login error:', err);
+            
+            // Разблокируем кнопку
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Войти';
+            
+            if (err.message === 'no_api_access') {
+                document.getElementById('error').innerHTML = 'Нет доступа к API у сотрудника. <a href="https://online.moysklad.ru/app/#employee" target="_blank">Настройте права</a>';
+            } else if (err.message === 'unauthorized') {
+                document.getElementById('error').textContent = 'Неверный логин или пароль';
+            } else {
+                document.getElementById('error').textContent = 'Ошибка входа. Проверьте данные.';
+            }
+        });
+    }
+    
+    // Клик по кнопке
+    document.getElementById('submit').onclick = doLogin;
+    
+    // Enter для входа
+    document.getElementById('login').addEventListener('keyup', function(e) {
+        if (e.key === 'Enter') doLogin();
+    });
+    
+    document.getElementById('password').addEventListener('keyup', function(e) {
+        if (e.key === 'Enter') doLogin();
+    });
+</script>
+</body>
+</html>
