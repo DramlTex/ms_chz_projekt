@@ -1122,12 +1122,12 @@
                 
                 async signData(data, attached = false) {
                     const cert = this.certificates[this.selectedCertificate].cert;
-                    
+
                     const oSigner = await cadesplugin.CreateObjectAsync("CAdESCOM.CPSigner");
                     await oSigner.propset_Certificate(cert);
-                    
+
                     const oSignedData = await cadesplugin.CreateObjectAsync("CAdESCOM.CadesSignedData");
-                    
+
                     if (attached) {
                         await oSignedData.propset_Content(data);
                         return await oSignedData.SignCades(oSigner, cadesplugin.CADESCOM_CADES_BES);
@@ -1138,49 +1138,49 @@
                         const signature = await oSignedData.SignCades(oSigner, cadesplugin.CADESCOM_CADES_BES, true);
                         return signature.replace(/\s/g, '');
                     }
+                },
+
+                async checkAuth() {
+                    try {
+                        const response = await fetch('api_ms/login.php', {
+                            method: 'GET'
+                        });
+
+                        const data = await response.json();
+
+                        if (data.authenticated) {
+                            this.isAuthenticated = true;
+                            this.auth.moysklad = true;
+                            if (data.user?.login) {
+                                this.credentials.moysklad.login = data.user.login;
+                                localStorage.setItem('ms_login', data.user.login);
+                            }
+                            this.log('Пользователь авторизован: ' + data.user.login, 'success');
+
+                            // Автоматически загружаем товары
+                            this.loadProducts();
+                            this.isAuthChecked = true;
+                        } else {
+                            this.isAuthenticated = false;
+                            // Не авторизован - редирект на login.html
+                            this.log('Не авторизован, редирект на login.html', 'info');
+                            this.isAuthChecked = true;
+                            location.href = 'login.html';
+                        }
+                    } catch (error) {
+                        this.log('Ошибка проверки авторизации', 'error');
+                        this.isAuthenticated = false;
+                        this.isAuthChecked = true;
+                        location.href = 'login.html';
+                    }
                 }
             },
-            
+
             async mounted() {
                 this.log('Приложение запущено', 'info');
 
                 // Проверяем авторизацию
                 await this.checkAuth();
-            },
-
-            async checkAuth() {
-                try {
-                    const response = await fetch('api_ms/login.php', {
-                        method: 'GET'
-                    });
-                    
-                    const data = await response.json();
-                    
-                    if (data.authenticated) {
-                        this.isAuthenticated = true;
-                        this.auth.moysklad = true;
-                        if (data.user?.login) {
-                            this.credentials.moysklad.login = data.user.login;
-                            localStorage.setItem('ms_login', data.user.login);
-                        }
-                        this.log('Пользователь авторизован: ' + data.user.login, 'success');
-
-                        // Автоматически загружаем товары
-                        this.loadProducts();
-                        this.isAuthChecked = true;
-                    } else {
-                        this.isAuthenticated = false;
-                        // Не авторизован - редирект на login.html
-                        this.log('Не авторизован, редирект на login.html', 'info');
-                        this.isAuthChecked = true;
-                        location.href = 'login.html';
-                    }
-                } catch (error) {
-                    this.log('Ошибка проверки авторизации', 'error');
-                    this.isAuthenticated = false;
-                    this.isAuthChecked = true;
-                    location.href = 'login.html';
-                }
             }
         }).mount('#app');
     </script>
