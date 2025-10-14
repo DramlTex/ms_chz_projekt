@@ -55,6 +55,17 @@
             margin: 0 auto;
         }
 
+        /* Loading Screen */
+        .loading-screen {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 80vh;
+            color: white;
+            font-size: 18px;
+            font-weight: 500;
+        }
+
         /* Login Screen */
         .login-screen {
             display: flex;
@@ -429,8 +440,13 @@
 </head>
 <body>
     <div id="app">
+        <!-- Loading Screen -->
+        <div v-if="!isAuthChecked" class="loading-screen">
+            Проверка авторизации...
+        </div>
+
         <!-- Login Screen -->
-        <div v-if="!isAuthenticated" class="login-screen">
+        <div v-else-if="!isAuthenticated" class="login-screen">
             <div class="login-card">
                 <div class="login-header">
                     <h1>🔄 МойСклад → НК</h1>
@@ -733,6 +749,7 @@
                     loadingMessage: 'Загрузка...',
                     showSettings: false,
                     isAuthenticated: false,
+                    isAuthChecked: false,
                     
                     auth: {
                         moysklad: false,
@@ -767,7 +784,7 @@
                     logs: []
                 };
             },
-            
+
             computed: {
                 canAuth() {
                     return this.selectedCertificate !== null;
@@ -822,6 +839,7 @@
 
                         this.auth.moysklad = true;
                         this.isAuthenticated = true;
+                        this.isAuthChecked = true;
                         this.credentials.moysklad.password = '';
 
                         if (data.user?.login) {
@@ -1125,11 +1143,11 @@
             
             async mounted() {
                 this.log('Приложение запущено', 'info');
-                
+
                 // Проверяем авторизацию
                 await this.checkAuth();
             },
-            
+
             async checkAuth() {
                 try {
                     const response = await fetch('api_ms/login.php', {
@@ -1149,15 +1167,18 @@
 
                         // Автоматически загружаем товары
                         this.loadProducts();
+                        this.isAuthChecked = true;
                     } else {
                         this.isAuthenticated = false;
                         // Не авторизован - редирект на login.html
                         this.log('Не авторизован, редирект на login.html', 'info');
+                        this.isAuthChecked = true;
                         location.href = 'login.html';
                     }
                 } catch (error) {
                     this.log('Ошибка проверки авторизации', 'error');
                     this.isAuthenticated = false;
+                    this.isAuthChecked = true;
                     location.href = 'login.html';
                 }
             }
