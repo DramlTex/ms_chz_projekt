@@ -732,6 +732,7 @@
                     loading: false,
                     loadingMessage: 'Загрузка...',
                     showSettings: false,
+                    isAuthenticated: false,
                     
                     auth: {
                         moysklad: false,
@@ -789,6 +790,53 @@
                     this.logs.unshift({ time, message, type });
                     if (this.logs.length > 100) this.logs.pop();
                     console.log(`[${type}] ${message}`);
+                },
+
+                async login() {
+                    if (!this.credentials.moysklad.login || !this.credentials.moysklad.password) {
+                        this.log('Попытка входа с пустыми полями', 'warning');
+                        return;
+                    }
+
+                    this.loading = true;
+                    this.loadingMessage = 'Авторизация...';
+
+                    try {
+                        const response = await fetch('api_ms/login.php', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                login: this.credentials.moysklad.login.trim(),
+                                password: this.credentials.moysklad.password
+                            })
+                        });
+
+                        const data = await response.json();
+
+                        if (!response.ok || data.error) {
+                            const error = data.error || response.statusText;
+                            this.log('Ошибка авторизации: ' + error, 'error');
+                            alert('Ошибка авторизации. Проверьте логин и пароль.');
+                            return;
+                        }
+
+                        this.auth.moysklad = true;
+                        this.isAuthenticated = true;
+                        this.credentials.moysklad.password = '';
+
+                        if (data.user?.login) {
+                            this.credentials.moysklad.login = data.user.login;
+                            localStorage.setItem('ms_login', data.user.login);
+                        }
+
+                        this.log('✓ Авторизация успешна', 'success');
+                        await this.loadProducts();
+                    } catch (error) {
+                        this.log('Ошибка сети при авторизации: ' + error.message, 'error');
+                        alert('Не удалось выполнить вход. Попробуйте позже.');
+                    } finally {
+                        this.loading = false;
+                    }
                 },
                 
                 clearLogs() {
@@ -1102,12 +1150,14 @@
                         // Автоматически загружаем товары
                         this.loadProducts();
                     } else {
+                        this.isAuthenticated = false;
                         // Не авторизован - редирект на login.html
                         this.log('Не авторизован, редирект на login.html', 'info');
                         location.href = 'login.html';
                     }
                 } catch (error) {
                     this.log('Ошибка проверки авторизации', 'error');
+                    this.isAuthenticated = false;
                     location.href = 'login.html';
                 }
             }
