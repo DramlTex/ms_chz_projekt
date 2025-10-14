@@ -4,6 +4,11 @@ require_once __DIR__ . '/../auth.php';
 // Все ответы API возвращаются в формате JSON
 header('Content-Type: application/json; charset=utf-8');
 
+// Проверяем наличие расширения cURL, чтобы не получать фатальную ошибку.
+if (!function_exists('curl_init')) {
+    ms_api_error('missing_php_curl');
+}
+
 function ms_api_mock_enabled(): bool {
     return !empty($_SESSION['ms_api_mock']);
 }
@@ -263,7 +268,14 @@ function ms_api_try(
 function ms_api_error(string $message): void {
     ms_api_close();
     http_response_code(500);
-    echo json_encode(['error' => $message], JSON_UNESCAPED_UNICODE);
+
+    $response = ['error' => $message];
+
+    if ($message === 'missing_php_curl') {
+        $response['message'] = 'Для работы интеграции необходимо PHP-расширение cURL. Установите или включите его и перезапустите сервер.';
+    }
+
+    echo json_encode($response, JSON_UNESCAPED_UNICODE);
     exit;
 }
 ?>
