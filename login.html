@@ -47,15 +47,17 @@
             location.href = 'index.html';
         }).catch(err => {
             console.error('Login error:', err);
-            
+
             // Разблокируем кнопку
             submitBtn.disabled = false;
             submitBtn.textContent = 'Войти';
-            
+
             if (err.message === 'no_api_access') {
                 document.getElementById('error').innerHTML = 'Нет доступа к API у сотрудника. <a href="https://online.moysklad.ru/app/#employee" target="_blank">Настройте права</a>';
             } else if (err.message === 'unauthorized') {
                 document.getElementById('error').textContent = 'Неверный логин или пароль';
+            } else if (err.message === 'missing_php_curl') {
+                document.getElementById('error').innerHTML = 'На сервере не установлено расширение <strong>PHP cURL</strong>. Установите его (например, пакет <code>php-curl</code>) и перезапустите сервер.';
             } else {
                 document.getElementById('error').textContent = 'Ошибка входа. Проверьте данные.';
             }
