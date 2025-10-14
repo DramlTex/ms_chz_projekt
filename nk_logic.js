@@ -97,7 +97,7 @@ const NKLogic = {
             name: product.name,
             article: product.article || null,
             code: product.code || null,
-            tnved: null,
+            tnved: this.extractTNVED(product.tnved) || null,
             country: null,
             countryName: null,
             brand: null,
