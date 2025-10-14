@@ -48,6 +48,48 @@ const NKLogic = {
     },
 
     /**
+     * Привести значение атрибута к строке
+     */
+    formatAttributeValue(value) {
+        if (value === null || value === undefined) {
+            return null;
+        }
+
+        if (typeof value === 'object') {
+            if (Array.isArray(value)) {
+                const items = value
+                    .map(item => this.formatAttributeValue(item))
+                    .filter(Boolean);
+                return items.length ? items.join(', ') : null;
+            }
+
+            if (typeof value.name === 'string') {
+                return value.name;
+            }
+
+            if (typeof value.value !== 'undefined') {
+                return this.formatAttributeValue(value.value);
+            }
+
+            if (typeof value.title === 'string') {
+                return value.title;
+            }
+
+            if (typeof value.label === 'string') {
+                return value.label;
+            }
+
+            return null;
+        }
+
+        if (typeof value === 'boolean') {
+            return value ? 'Да' : 'Нет';
+        }
+
+        return String(value).trim();
+    },
+
+    /**
      * Извлечь данные товара с наследованием от родителя
      */
     async extractProductData(product, msToken) {
@@ -57,34 +99,81 @@ const NKLogic = {
             code: product.code || null,
             tnved: null,
             country: null,
+            countryName: null,
             brand: null,
             color: null,
             size: null,
             composition: null,
             documents: [],
-            gender: null
+            gender: null,
+            productKind: null,
+            sizeType: null,
+            documentType: null,
+            documentNumber: null,
+            documentDate: null
         };
 
         // Если есть атрибуты, извлекаем
         if (product.attributes) {
             for (const attr of product.attributes) {
                 const attrName = attr.name?.toLowerCase() || '';
-                const attrValue = attr.value;
+                const attrValue = this.formatAttributeValue(attr.value);
+
+                if (!attrValue) {
+                    continue;
+                }
 
                 if (attrName.includes('тн вэд') || attrName.includes('тнвэд')) {
                     data.tnved = this.extractTNVED(attrValue);
                 } else if (attrName.includes('страна')) {
                     data.country = this.normalizeCountry(attrValue);
+                    data.countryName = attrValue;
                 } else if (attrName.includes('бренд') || attrName.includes('торговая марка')) {
                     data.brand = attrValue;
                 } else if (attrName.includes('цвет')) {
                     data.color = attrValue;
                 } else if (attrName.includes('размер')) {
-                    data.size = attrValue;
+                    if (attrName.includes('вид размера') || attrName.includes('тип размера')) {
+                        data.sizeType = attrValue;
+                    } else {
+                        data.size = attrValue;
+                    }
                 } else if (attrName.includes('состав')) {
                     data.composition = attrValue;
                 } else if (attrName.includes('пол')) {
                     data.gender = attrValue;
+                } else if (attrName.includes('вид товара')) {
+                    data.productKind = attrValue;
+                } else if (attrName.includes('тип товара')) {
+                    data.productKind = attrValue;
+                } else if (attrName.includes('вид документа') || attrName.includes('тип документа')) {
+                    data.documentType = attrValue;
+                    data.documents.push({
+                        name: attr.name,
+                        type: attrValue,
+                        value: attrValue
+                    });
+                } else if (attrName.includes('номер документа') || attrName.includes('сертификат') || attrName.includes('декларац')) {
+                    if (!data.documentNumber) {
+                        data.documentNumber = attrValue;
+                    }
+                    data.documents.push({
+                        name: attr.name,
+                        number: attrValue,
+                        value: attrValue
+                    });
+                } else if (attrName.includes('дата документа')) {
+                    data.documentDate = attrValue;
+                    data.documents.push({
+                        name: attr.name,
+                        date: attrValue,
+                        value: attrValue
+                    });
+                } else if (attrName.includes('документ')) {
+                    data.documents.push({
+                        name: attr.name,
+                        value: attrValue
+                    });
                 }
             }
         }
