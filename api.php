@@ -128,7 +128,12 @@ function handleGetProducts($data) {
     }
 
     try {
-        $body = ms_api_request(MS_API_URL . '/entity/product?limit=100');
+        $query = http_build_query([
+            'limit' => 100,
+            'expand' => 'product,product.attributes,attributes'
+        ]);
+
+        $body = ms_api_request(MS_API_URL . '/entity/assortment?' . $query);
     } catch (RuntimeException $e) {
         throw new Exception('Ошибка загрузки товаров: ' . $e->getMessage());
     }
@@ -140,19 +145,73 @@ function handleGetProducts($data) {
     $products = [];
 
     foreach ($body['rows'] as $row) {
-        $products[] = [
-            'id' => $row['id'],
-            'name' => $row['name'],
-            'article' => $row['article'] ?? null,
-            'code' => $row['code'] ?? null,
-            'meta' => $row['meta']
-        ];
+        $product = normalize_assortment_row($row);
+
+        if ($product === null) {
+            continue;
+        }
+
+        $products[] = $product;
     }
 
     echo json_encode([
         'success' => true,
         'products' => $products
     ]);
+}
+
+/**
+ * Привести элемент ассортимента МойСклад к единому формату.
+ */
+function normalize_assortment_row(array $row): ?array {
+    $type = $row['meta']['type'] ?? '';
+
+    if (!in_array($type, ['product', 'variant'], true)) {
+        return null;
+    }
+
+    $parent = null;
+
+    if ($type === 'variant' && isset($row['product']) && is_array($row['product'])) {
+        $parent = $row['product'];
+    }
+
+    $attributes = [];
+
+    if ($parent && isset($parent['attributes']) && is_array($parent['attributes'])) {
+        $attributes = array_merge($attributes, $parent['attributes']);
+    }
+
+    if (isset($row['attributes']) && is_array($row['attributes'])) {
+        $attributes = array_merge($attributes, $row['attributes']);
+    }
+
+    $documents = [];
+
+    if ($parent && isset($parent['documents']) && is_array($parent['documents'])) {
+        $documents = array_merge($documents, $parent['documents']);
+    }
+
+    if (isset($row['documents']) && is_array($row['documents'])) {
+        $documents = array_merge($documents, $row['documents']);
+    }
+
+    return [
+        'id' => $row['id'] ?? null,
+        'name' => $row['name'] ?? ($parent['name'] ?? ''),
+        'article' => $row['article'] ?? ($parent['article'] ?? null),
+        'code' => $row['code'] ?? ($parent['code'] ?? null),
+        'externalCode' => $row['externalCode'] ?? ($parent['externalCode'] ?? null),
+        'meta' => $row['meta'] ?? null,
+        'productMeta' => $parent['meta'] ?? null,
+        'assortmentType' => $type,
+        'attributes' => array_values($attributes),
+        'documents' => array_values($documents),
+        'barcodes' => $row['barcodes'] ?? ($parent['barcodes'] ?? []),
+        'characteristics' => $row['characteristics'] ?? [],
+        'uom' => $row['uom'] ?? ($parent['uom'] ?? null),
+        'parentId' => $parent['id'] ?? null
+    ];
 }
 
 /**

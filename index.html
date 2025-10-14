@@ -581,9 +581,20 @@
                             <thead>
                                 <tr>
                                     <th style="width: 50px;">#</th>
-                                    <th>Наименование</th>
-                                    <th style="width: 150px;">Артикул</th>
+                                    <th style="min-width: 220px;">Наименование</th>
+                                    <th style="width: 140px;">Артикул</th>
                                     <th style="width: 120px;">Код</th>
+                                    <th style="width: 120px;">ТН ВЭД</th>
+                                    <th style="width: 140px;">Вид товара</th>
+                                    <th style="width: 120px;">Цвет</th>
+                                    <th style="width: 120px;">Размер</th>
+                                    <th style="width: 130px;">Целевой пол</th>
+                                    <th style="width: 140px;">Вид размера</th>
+                                    <th style="width: 140px;">Страна</th>
+                                    <th style="width: 200px;">Состав</th>
+                                    <th style="width: 160px;">Бренд</th>
+                                    <th style="width: 200px;">Документ</th>
+                                    <th style="width: 160px;">Сертификат</th>
                                     <th style="width: 180px;">Действия</th>
                                 </tr>
                             </thead>
@@ -591,8 +602,6 @@
                                 <tr
                                     v-for="(product, index) in filteredProducts"
                                     :key="product.id"
-                                    :class="{ selected: selectedProductId === product.id }"
-                                    @click="selectProduct(product)"
                                 >
                                     <td>{{ index + 1 }}</td>
                                     <td>
@@ -600,6 +609,17 @@
                                     </td>
                                     <td>{{ product.article || '—' }}</td>
                                     <td>{{ product.code || '—' }}</td>
+                                    <td>{{ product.tnved || '—' }}</td>
+                                    <td>{{ product.productKind || '—' }}</td>
+                                    <td>{{ product.color || '—' }}</td>
+                                    <td>{{ product.size || '—' }}</td>
+                                    <td>{{ product.gender || '—' }}</td>
+                                    <td>{{ product.sizeType || '—' }}</td>
+                                    <td>{{ product.countryName || product.country || '—' }}</td>
+                                    <td>{{ product.composition || '—' }}</td>
+                                    <td>{{ product.brand || '—' }}</td>
+                                    <td>{{ product.documentType || product.documentSummary || '—' }}</td>
+                                    <td>{{ product.documentNumber || '—' }}</td>
                                     <td>
                                         <button
                                             class="btn btn-success btn-sm"
@@ -612,56 +632,6 @@
                                 </tr>
                             </tbody>
                         </table>
-                    </div>
-
-                    <div v-if="selectedProductInfo" class="nk-sync-card">
-                        <div class="nk-sync-header">
-                            <h3>Синхронизация с НК</h3>
-                            <span class="nk-sync-subtitle">Данные из карточки товара в МойСклад</span>
-                        </div>
-
-                        <div v-if="selectedProductError" class="alert alert-warning" style="margin-bottom: 15px;">
-                            {{ selectedProductError }}
-                        </div>
-
-                        <div class="product-table nk-sync-table">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>Наименование</th>
-                                        <th>Артикул</th>
-                                        <th>ТН ВЭД</th>
-                                        <th>Вид товара</th>
-                                        <th>Цвет</th>
-                                        <th>Размер</th>
-                                        <th>Целевой пол</th>
-                                        <th>Вид размера</th>
-                                        <th>Страна</th>
-                                        <th>Состав</th>
-                                        <th>Бренд НК</th>
-                                        <th>Документ</th>
-                                        <th>Сертификат</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td>{{ selectedProductInfo.name || '—' }}</td>
-                                        <td>{{ selectedProductInfo.article || '—' }}</td>
-                                        <td>{{ selectedProductInfo.tnved || '—' }}</td>
-                                        <td>{{ selectedProductInfo.productKind || '—' }}</td>
-                                        <td>{{ selectedProductInfo.color || '—' }}</td>
-                                        <td>{{ selectedProductInfo.size || '—' }}</td>
-                                        <td>{{ selectedProductInfo.gender || '—' }}</td>
-                                        <td>{{ selectedProductInfo.sizeType || '—' }}</td>
-                                        <td>{{ selectedProductInfo.countryName || selectedProductInfo.country || '—' }}</td>
-                                        <td>{{ selectedProductInfo.composition || '—' }}</td>
-                                        <td>{{ selectedProductInfo.brand || '—' }}</td>
-                                        <td>{{ selectedProductInfo.documentType || selectedProductInfo.documentSummary || '—' }}</td>
-                                        <td>{{ selectedProductInfo.documentNumber || '—' }}</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
                     </div>
                 </div>
 
@@ -722,12 +692,12 @@
                 <!-- Сертификат -->
                 <div class="card-section">
                     <h3>Сертификат КриптоПро</h3>
-                    <button 
+                    <button
                         class="btn btn-primary"
                         @click="loadCertificates"
                         :disabled="loading"
                     >
-                        Загрузить сертификаты
+                        Обновить сертификаты
                     </button>
                     <div v-if="certificates.length > 0" class="form-group" style="margin-top: 15px;">
                         <select v-model="selectedCertificate" @change="saveCertificate">
@@ -857,14 +827,10 @@
                     },
                     
                     certificates: [],
-                    selectedCertificate: localStorage.getItem('selected_cert') || null,
-                    
+                    selectedCertificate: localStorage.getItem('selected_cert'),
+
                     products: [],
                     searchQuery: '',
-                    selectedProductId: null,
-                    selectedProductDetails: null,
-                    selectedProductError: null,
-                    productDetailsCache: {},
                     
                     nkOptions: {
                         isTechGtin: localStorage.getItem('nk_tech_gtin') !== 'false',
@@ -878,45 +844,41 @@
 
             computed: {
                 canAuth() {
-                    return this.selectedCertificate !== null;
+                    const index = this.selectedCertificate;
+                    if (index === null || index === undefined || index === '') {
+                        return false;
+                    }
+
+                    return Boolean(this.certificates?.[index]);
                 },
-                
+
                 filteredProducts() {
                     if (!this.searchQuery) return this.products;
                     const q = this.searchQuery.toLowerCase();
-                    return this.products.filter(p =>
-                        p.name.toLowerCase().includes(q) ||
-                        (p.article && p.article.toLowerCase().includes(q)) ||
-                        (p.code && p.code.toLowerCase().includes(q))
-                    );
-                },
+                    return this.products.filter(p => {
+                        const values = [
+                            p.name,
+                            p.article,
+                            p.code,
+                            p.tnved,
+                            p.productKind,
+                            p.color,
+                            p.size,
+                            p.gender,
+                            p.sizeType,
+                            p.countryName,
+                            p.country,
+                            p.composition,
+                            p.brand,
+                            p.documentType,
+                            p.documentSummary,
+                            p.documentNumber
+                        ];
 
-                selectedProductInfo() {
-                    if (!this.selectedProductDetails) {
-                        return null;
-                    }
-
-                    const details = this.selectedProductDetails;
-                    const documents = details.documents || [];
-
-                    const documentType = details.documentType
-                        || this.getDocumentProperty(documents, 'type')
-                        || this.getDocumentProperty(documents, 'name')
-                        || null;
-
-                    const documentNumber = details.documentNumber
-                        || this.getDocumentProperty(documents, 'number')
-                        || this.getDocumentProperty(documents, 'value')
-                        || null;
-
-                    const documentSummary = this.formatDocumentsList(documents);
-
-                    return {
-                        ...details,
-                        documentType,
-                        documentNumber,
-                        documentSummary
-                    };
+                        return values.some(value =>
+                            value && value.toString().toLowerCase().includes(q)
+                        );
+                    });
                 }
             },
             
@@ -928,39 +890,9 @@
                     console.log(`[${type}] ${message}`);
                 },
 
-                async selectProduct(product) {
+                async normalizeProductRow(product) {
                     if (!product || !product.id) {
-                        return;
-                    }
-
-                    if (this.selectedProductId === product.id && this.selectedProductDetails) {
-                        return;
-                    }
-
-                    this.selectedProductId = product.id;
-                    this.selectedProductError = null;
-                    this.selectedProductDetails = null;
-
-                    try {
-                        const details = await this.fetchProductDetails(product);
-                        this.selectedProductDetails = details;
-
-                        if (!details.tnved) {
-                            this.selectedProductError = 'У товара отсутствует ТН ВЭД код. Добавьте значение в МойСклад.';
-                        }
-                    } catch (error) {
-                        this.selectedProductError = error.message || 'Не удалось получить данные товара из МойСклад.';
-                        this.log('Ошибка получения данных товара: ' + this.selectedProductError, 'error');
-                    }
-                },
-
-                async fetchProductDetails(product) {
-                    if (!product || !product.id) {
-                        throw new Error('Некорректный товар');
-                    }
-
-                    if (this.productDetailsCache[product.id]) {
-                        return this.productDetailsCache[product.id];
+                        return null;
                     }
 
                     const details = await NKLogic.extractProductData(product);
@@ -968,15 +900,30 @@
                         ? details.documents.map(doc => ({ ...doc }))
                         : [];
 
+                    const documentType = details.documentType
+                        || this.getDocumentProperty(normalizedDocuments, 'type')
+                        || this.getDocumentProperty(normalizedDocuments, 'name')
+                        || null;
+
+                    const documentNumber = details.documentNumber
+                        || this.getDocumentProperty(normalizedDocuments, 'number')
+                        || this.getDocumentProperty(normalizedDocuments, 'value')
+                        || null;
+
+                    const documentSummary = this.formatDocumentsList(normalizedDocuments);
+
                     const enriched = {
+                        ...product,
                         ...details,
-                        name: product.name || details.name || '',
-                        article: product.article ?? details.article ?? null,
-                        code: product.code ?? details.code ?? null,
-                        documents: normalizedDocuments
+                        name: details.name || product.name || '',
+                        article: details.article ?? product.article ?? null,
+                        code: details.code ?? product.code ?? null,
+                        documents: normalizedDocuments,
+                        documentType,
+                        documentNumber,
+                        documentSummary
                     };
 
-                    this.productDetailsCache[product.id] = enriched;
                     return enriched;
                 },
 
@@ -1097,7 +1044,7 @@
                 async loadProducts() {
                     this.loading = true;
                     this.loadingMessage = 'Загрузка товаров...';
-                    
+
                     try {
                         const response = await fetch('api.php', {
                             method: 'POST',
@@ -1106,19 +1053,29 @@
                                 action: 'get_products'
                             })
                         });
-                        
+
                         const data = await response.json();
-                        
-                        if (data.success) {
-                            this.products = data.products;
-                            this.productDetailsCache = {};
-                            this.selectedProductId = null;
-                            this.selectedProductDetails = null;
-                            this.selectedProductError = null;
-                            this.log(`Загружено ${this.products.length} товаров`, 'success');
-                        } else {
+
+                        if (!data.success) {
                             throw new Error(data.error);
                         }
+
+                        const normalized = await Promise.all(
+                            (data.products || []).map(async product => {
+                                try {
+                                    return await this.normalizeProductRow(product);
+                                } catch (error) {
+                                    this.log('Ошибка обработки товара: ' + (error.message || error), 'error');
+                                    return null;
+                                }
+                            })
+                        );
+
+                        this.products = normalized
+                            .filter(Boolean)
+                            .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ru'));
+
+                        this.log(`Загружено ${this.products.length} товаров`, 'success');
                     } catch (error) {
                         this.log('✗ Ошибка загрузки: ' + error.message, 'error');
                         alert('Ошибка загрузки товаров');
@@ -1132,13 +1089,14 @@
                         return;
                     }
 
-                    this.selectedProductId = product.id;
-
-                    // Загружаем данные для предварительного просмотра (кешируются)
-                    await this.selectProduct(product);
+                    if (!product.tnved) {
+                        alert('У товара отсутствует ТН ВЭД код. Добавьте значение в МойСклад.');
+                        return;
+                    }
 
                     this.loading = true;
-                    
+                    this.loadingMessage = 'Создание карточки НК...';
+
                     try {
                         const nkToken = sessionStorage.getItem('nk_token');
 
@@ -1147,8 +1105,7 @@
                         }
 
                         this.log(`Создание карточки: ${product.name}`, 'info');
-                        this.loadingMessage = 'Создание карточки НК...';
-                        
+
                         const result = await NKLogic.createCard(
                             product,
                             null,
@@ -1207,46 +1164,89 @@
                     }
                 },
                 
-                async loadCertificates() {
-                    this.loading = true;
-                    
+                async loadCertificates(options = {}) {
+                    const auto = typeof options === 'object' && options.auto;
+
+                    if (!auto) {
+                        this.loading = true;
+                        this.loadingMessage = 'Загрузка сертификатов...';
+                    }
+
                     try {
                         await cadesplugin;
                         const oStore = await cadesplugin.CreateObjectAsync("CAdESCOM.Store");
                         await oStore.Open();
-                        
+
                         const certificates = await oStore.Certificates;
                         const count = await certificates.Count;
-                        
-                        this.certificates = [];
-                        
+
+                        const items = [];
+
                         for (let i = 1; i <= count; i++) {
                             const cert = await certificates.Item(i);
                             const validTo = await cert.ValidToDate;
                             const subjectName = await cert.SubjectName;
-                            
+
                             const cnMatch = subjectName.match(/CN=([^,]+)/);
                             const name = cnMatch ? cnMatch[1] : 'Неизвестный';
-                            
-                            this.certificates.push({
+
+                            items.push({
                                 name,
                                 validTo: new Date(validTo).toLocaleDateString(),
                                 cert
                             });
                         }
-                        
+
                         await oStore.Close();
+
+                        this.certificates = items;
+
+                        if (this.certificates.length > 0) {
+                            if (
+                                this.selectedCertificate === null ||
+                                this.selectedCertificate === undefined ||
+                                this.selectedCertificate === '' ||
+                                !this.certificates[this.selectedCertificate]
+                            ) {
+                                this.selectedCertificate = '0';
+                                this.saveCertificate();
+                            }
+                        } else if (!auto) {
+                            this.selectedCertificate = null;
+                            this.saveCertificate();
+                        }
+
                         this.log(`Загружено ${this.certificates.length} сертификатов`, 'success');
                     } catch (error) {
-                        this.log('✗ Ошибка загрузки сертификатов', 'error');
-                        alert('Ошибка загрузки сертификатов');
+                        this.log('✗ Ошибка загрузки сертификатов: ' + (error.message || error), 'error');
+                        if (!auto) {
+                            alert('Ошибка загрузки сертификатов');
+                        }
                     } finally {
-                        this.loading = false;
+                        if (!auto) {
+                            this.loading = false;
+                        }
                     }
                 },
-                
+
                 saveCertificate() {
-                    localStorage.setItem('selected_cert', this.selectedCertificate);
+                    if (
+                        this.selectedCertificate === null ||
+                        this.selectedCertificate === undefined ||
+                        this.selectedCertificate === ''
+                    ) {
+                        localStorage.removeItem('selected_cert');
+                        return;
+                    }
+
+                    const index = String(this.selectedCertificate);
+
+                    if (!this.certificates[index]) {
+                        return;
+                    }
+
+                    this.selectedCertificate = index;
+                    localStorage.setItem('selected_cert', index);
                     this.log('Сертификат сохранен', 'info');
                 },
                 
@@ -1342,7 +1342,16 @@
                 },
                 
                 async signData(data, attached = false) {
-                    const cert = this.certificates[this.selectedCertificate].cert;
+                    const index = this.selectedCertificate;
+                    const certificateEntry = (index !== null && index !== undefined)
+                        ? this.certificates[index]
+                        : null;
+
+                    if (!certificateEntry) {
+                        throw new Error('Сертификат не выбран');
+                    }
+
+                    const cert = certificateEntry.cert;
 
                     const oSigner = await cadesplugin.CreateObjectAsync("CAdESCOM.CPSigner");
                     await oSigner.propset_Certificate(cert);
@@ -1399,6 +1408,9 @@
 
             async mounted() {
                 this.log('Приложение запущено', 'info');
+
+                // Автоматическая загрузка сертификатов
+                this.loadCertificates({ auto: true });
 
                 // Проверяем авторизацию
                 await this.checkAuth();
