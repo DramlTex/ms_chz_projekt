@@ -4,6 +4,8 @@
  */
 
 session_start();
+require_once __DIR__ . '/auth.php';
+
 header('Content-Type: application/json; charset=utf-8');
 
 // Error handling
@@ -103,7 +105,8 @@ function handleLoginMoySklad($data) {
     
     if ($response['code'] === 200) {
         // Save credentials in session
-        $_SESSION['ms_auth'] = $authHeader;
+        set_user($login, $password);
+        $_SESSION['ms_auth'] = get_auth_header();
         $_SESSION['ms_login'] = $login;
         
         echo json_encode([
@@ -119,7 +122,7 @@ function handleLoginMoySklad($data) {
  * Get products from МойСклад
  */
 function handleGetProducts($data) {
-    $authHeader = $_SESSION['ms_auth'] ?? '';
+    $authHeader = get_auth_header() ?? ($_SESSION['ms_auth'] ?? '');
     if (empty($authHeader)) {
         throw new Exception('Не авторизован в МойСклад');
     }
@@ -155,7 +158,7 @@ function handleGetProducts($data) {
  * Update product GTIN in МойСклад
  */
 function handleUpdateGtin($data) {
-    $authHeader = $_SESSION['ms_auth'] ?? '';
+    $authHeader = get_auth_header() ?? ($_SESSION['ms_auth'] ?? '');
     $productId = $data['productId'] ?? '';
     $gtin = $data['gtin'] ?? '';
     
