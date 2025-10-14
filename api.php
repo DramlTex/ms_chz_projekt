@@ -5,6 +5,7 @@
 
 session_start();
 require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/api_ms/ms_api.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -122,22 +123,22 @@ function handleLoginMoySklad($data) {
  * Get products from МойСклад
  */
 function handleGetProducts($data) {
-    $authHeader = get_auth_header() ?? ($_SESSION['ms_auth'] ?? '');
-    if (empty($authHeader)) {
+    if (!is_authenticated()) {
         throw new Exception('Не авторизован в МойСклад');
     }
-    
-    $response = apiRequest(MS_API_URL . '/entity/product?limit=100', 'GET', null, [
-        'Authorization: ' . $authHeader
-    ]);
-    
-    if ($response['code'] !== 200) {
-        throw new Exception('Ошибка загрузки товаров');
+
+    try {
+        $body = ms_api_request(MS_API_URL . '/entity/product?limit=100');
+    } catch (RuntimeException $e) {
+        throw new Exception('Ошибка загрузки товаров: ' . $e->getMessage());
     }
-    
-    $body = json_decode($response['body'], true);
+
+    if (!isset($body['rows']) || !is_array($body['rows'])) {
+        throw new Exception('Ошибка загрузки товаров: некорректный ответ сервера');
+    }
+
     $products = [];
-    
+
     foreach ($body['rows'] as $row) {
         $products[] = [
             'id' => $row['id'],
@@ -147,7 +148,7 @@ function handleGetProducts($data) {
             'meta' => $row['meta']
         ];
     }
-    
+
     echo json_encode([
         'success' => true,
         'products' => $products

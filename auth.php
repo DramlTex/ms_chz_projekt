@@ -32,6 +32,16 @@ function get_user() {
 }
 
 /**
+ * Получить логин и пароль пользователя
+ */
+function get_credentials() {
+    return [
+        $_SESSION['login'] ?? '',
+        $_SESSION['password'] ?? ''
+    ];
+}
+
+/**
  * Получить account пользователя
  */
 function get_account() {
