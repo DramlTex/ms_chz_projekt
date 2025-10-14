@@ -740,6 +740,10 @@
                     },
                     
                     credentials: {
+                        moysklad: {
+                            login: localStorage.getItem('ms_login') || '',
+                            password: ''
+                        },
                         suz: {
                             omsConnection: localStorage.getItem('oms_connection') || '',
                             omsId: localStorage.getItem('oms_id') || ''
@@ -1089,8 +1093,12 @@
                     if (data.authenticated) {
                         this.isAuthenticated = true;
                         this.auth.moysklad = true;
+                        if (data.user?.login) {
+                            this.credentials.moysklad.login = data.user.login;
+                            localStorage.setItem('ms_login', data.user.login);
+                        }
                         this.log('Пользователь авторизован: ' + data.user.login, 'success');
-                        
+
                         // Автоматически загружаем товары
                         this.loadProducts();
                     } else {
