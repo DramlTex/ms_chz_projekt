@@ -316,6 +316,43 @@
             color: var(--gray-900);
         }
 
+        .nk-sync-card {
+            margin-top: 30px;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.12);
+        }
+
+        .nk-sync-header {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: baseline;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .nk-sync-header h3 {
+            color: var(--gray-900);
+            font-size: 18px;
+        }
+
+        .nk-sync-subtitle {
+            color: var(--gray-500);
+            font-size: 13px;
+        }
+
+        .nk-sync-table table {
+            min-width: 1000px;
+        }
+
+        .nk-sync-table th,
+        .nk-sync-table td {
+            white-space: nowrap;
+            font-size: 13px;
+        }
+
         /* Alerts */
         .alert {
             padding: 15px 20px;
@@ -551,10 +588,11 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                <tr 
-                                    v-for="(product, index) in filteredProducts" 
+                                <tr
+                                    v-for="(product, index) in filteredProducts"
                                     :key="product.id"
-                                    :class="{ selected: selectedProduct === index }"
+                                    :class="{ selected: selectedProductId === product.id }"
+                                    @click="selectProduct(product)"
                                 >
                                     <td>{{ index + 1 }}</td>
                                     <td>
@@ -563,9 +601,9 @@
                                     <td>{{ product.article || '—' }}</td>
                                     <td>{{ product.code || '—' }}</td>
                                     <td>
-                                        <button 
+                                        <button
                                             class="btn btn-success btn-sm"
-                                            @click="createCard(index)"
+                                            @click.stop="createCard(product)"
                                             :disabled="!auth.nk || loading"
                                         >
                                             ✨ Создать карточку
@@ -574,6 +612,56 @@
                                 </tr>
                             </tbody>
                         </table>
+                    </div>
+
+                    <div v-if="selectedProductInfo" class="nk-sync-card">
+                        <div class="nk-sync-header">
+                            <h3>Синхронизация с НК</h3>
+                            <span class="nk-sync-subtitle">Данные из карточки товара в МойСклад</span>
+                        </div>
+
+                        <div v-if="selectedProductError" class="alert alert-warning" style="margin-bottom: 15px;">
+                            {{ selectedProductError }}
+                        </div>
+
+                        <div class="product-table nk-sync-table">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Наименование</th>
+                                        <th>Артикул</th>
+                                        <th>ТН ВЭД</th>
+                                        <th>Вид товара</th>
+                                        <th>Цвет</th>
+                                        <th>Размер</th>
+                                        <th>Целевой пол</th>
+                                        <th>Вид размера</th>
+                                        <th>Страна</th>
+                                        <th>Состав</th>
+                                        <th>Бренд НК</th>
+                                        <th>Документ</th>
+                                        <th>Сертификат</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>{{ selectedProductInfo.name || '—' }}</td>
+                                        <td>{{ selectedProductInfo.article || '—' }}</td>
+                                        <td>{{ selectedProductInfo.tnved || '—' }}</td>
+                                        <td>{{ selectedProductInfo.productKind || '—' }}</td>
+                                        <td>{{ selectedProductInfo.color || '—' }}</td>
+                                        <td>{{ selectedProductInfo.size || '—' }}</td>
+                                        <td>{{ selectedProductInfo.gender || '—' }}</td>
+                                        <td>{{ selectedProductInfo.sizeType || '—' }}</td>
+                                        <td>{{ selectedProductInfo.countryName || selectedProductInfo.country || '—' }}</td>
+                                        <td>{{ selectedProductInfo.composition || '—' }}</td>
+                                        <td>{{ selectedProductInfo.brand || '—' }}</td>
+                                        <td>{{ selectedProductInfo.documentType || selectedProductInfo.documentSummary || '—' }}</td>
+                                        <td>{{ selectedProductInfo.documentNumber || '—' }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
 
@@ -773,7 +861,10 @@
                     
                     products: [],
                     searchQuery: '',
-                    selectedProduct: null,
+                    selectedProductId: null,
+                    selectedProductDetails: null,
+                    selectedProductError: null,
+                    productDetailsCache: {},
                     
                     nkOptions: {
                         isTechGtin: localStorage.getItem('nk_tech_gtin') !== 'false',
@@ -793,11 +884,39 @@
                 filteredProducts() {
                     if (!this.searchQuery) return this.products;
                     const q = this.searchQuery.toLowerCase();
-                    return this.products.filter(p => 
+                    return this.products.filter(p =>
                         p.name.toLowerCase().includes(q) ||
                         (p.article && p.article.toLowerCase().includes(q)) ||
                         (p.code && p.code.toLowerCase().includes(q))
                     );
+                },
+
+                selectedProductInfo() {
+                    if (!this.selectedProductDetails) {
+                        return null;
+                    }
+
+                    const details = this.selectedProductDetails;
+                    const documents = details.documents || [];
+
+                    const documentType = details.documentType
+                        || this.getDocumentProperty(documents, 'type')
+                        || this.getDocumentProperty(documents, 'name')
+                        || null;
+
+                    const documentNumber = details.documentNumber
+                        || this.getDocumentProperty(documents, 'number')
+                        || this.getDocumentProperty(documents, 'value')
+                        || null;
+
+                    const documentSummary = this.formatDocumentsList(documents);
+
+                    return {
+                        ...details,
+                        documentType,
+                        documentNumber,
+                        documentSummary
+                    };
                 }
             },
             
@@ -807,6 +926,97 @@
                     this.logs.unshift({ time, message, type });
                     if (this.logs.length > 100) this.logs.pop();
                     console.log(`[${type}] ${message}`);
+                },
+
+                async selectProduct(product) {
+                    if (!product || !product.id) {
+                        return;
+                    }
+
+                    if (this.selectedProductId === product.id && this.selectedProductDetails) {
+                        return;
+                    }
+
+                    this.selectedProductId = product.id;
+                    this.selectedProductError = null;
+                    this.selectedProductDetails = null;
+
+                    try {
+                        const details = await this.fetchProductDetails(product);
+                        this.selectedProductDetails = details;
+
+                        if (!details.tnved) {
+                            this.selectedProductError = 'У товара отсутствует ТН ВЭД код. Добавьте значение в МойСклад.';
+                        }
+                    } catch (error) {
+                        this.selectedProductError = error.message || 'Не удалось получить данные товара из МойСклад.';
+                        this.log('Ошибка получения данных товара: ' + this.selectedProductError, 'error');
+                    }
+                },
+
+                async fetchProductDetails(product) {
+                    if (!product || !product.id) {
+                        throw new Error('Некорректный товар');
+                    }
+
+                    if (this.productDetailsCache[product.id]) {
+                        return this.productDetailsCache[product.id];
+                    }
+
+                    const details = await NKLogic.extractProductData(product);
+                    const normalizedDocuments = Array.isArray(details.documents)
+                        ? details.documents.map(doc => ({ ...doc }))
+                        : [];
+
+                    const enriched = {
+                        ...details,
+                        name: product.name || details.name || '',
+                        article: product.article ?? details.article ?? null,
+                        code: product.code ?? details.code ?? null,
+                        documents: normalizedDocuments
+                    };
+
+                    this.productDetailsCache[product.id] = enriched;
+                    return enriched;
+                },
+
+                getDocumentProperty(documents, key) {
+                    if (!Array.isArray(documents)) {
+                        return null;
+                    }
+
+                    for (const doc of documents) {
+                        if (doc && doc[key]) {
+                            return doc[key];
+                        }
+                        if (doc && key === 'value' && doc.name && doc.value) {
+                            return doc.value;
+                        }
+                    }
+
+                    return null;
+                },
+
+                formatDocumentsList(documents) {
+                    if (!Array.isArray(documents) || documents.length === 0) {
+                        return null;
+                    }
+
+                    const parts = [];
+
+                    for (const doc of documents) {
+                        if (!doc) continue;
+
+                        if (doc.type && doc.number) {
+                            parts.push(`${doc.type}: ${doc.number}`);
+                        } else if (doc.name && doc.value) {
+                            parts.push(`${doc.name}: ${doc.value}`);
+                        } else if (doc.value) {
+                            parts.push(doc.value);
+                        }
+                    }
+
+                    return parts.length ? parts.join('; ') : null;
                 },
 
                 async login() {
@@ -901,6 +1111,10 @@
                         
                         if (data.success) {
                             this.products = data.products;
+                            this.productDetailsCache = {};
+                            this.selectedProductId = null;
+                            this.selectedProductDetails = null;
+                            this.selectedProductError = null;
                             this.log(`Загружено ${this.products.length} товаров`, 'success');
                         } else {
                             throw new Error(data.error);
@@ -913,18 +1127,25 @@
                     }
                 },
                 
-                async createCard(index) {
-                    this.selectedProduct = index;
+                async createCard(product) {
+                    if (!product || !product.id) {
+                        return;
+                    }
+
+                    this.selectedProductId = product.id;
+
+                    // Загружаем данные для предварительного просмотра (кешируются)
+                    await this.selectProduct(product);
+
                     this.loading = true;
                     
                     try {
-                        const product = this.products[index];
                         const nkToken = sessionStorage.getItem('nk_token');
-                        
+
                         if (!nkToken) {
                             throw new Error('Токен НК не найден. Авторизуйтесь через Настройки.');
                         }
-                        
+
                         this.log(`Создание карточки: ${product.name}`, 'info');
                         this.loadingMessage = 'Создание карточки НК...';
                         
