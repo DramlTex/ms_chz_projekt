@@ -93,11 +93,19 @@ const NKLogic = {
      * Извлечь данные товара с наследованием от родителя
      */
     async extractProductData(product, msToken) {
+        const tnvedSource =
+            product?.tnved ||
+            product?.tnved10 ||
+            product?.tnved_code ||
+            product?.tnvedCode ||
+            product?.tn_ved ||
+            null;
+
         const data = {
             name: product.name,
             article: product.article || null,
             code: product.code || null,
-            tnved: this.extractTNVED(product.tnved) || null,
+            tnved: this.extractTNVED(tnvedSource) || null,
             country: null,
             countryName: null,
             brand: null,

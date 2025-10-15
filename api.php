@@ -201,6 +201,8 @@ function normalize_assortment_row(array $row): ?array {
         'name' => $row['name'] ?? ($parent['name'] ?? ''),
         'article' => $row['article'] ?? ($parent['article'] ?? null),
         'code' => $row['code'] ?? ($parent['code'] ?? null),
+        'tnved' => $row['tnved'] ?? ($parent['tnved'] ?? null),
+        'tnved10' => $row['tnved10'] ?? ($parent['tnved10'] ?? null),
         'externalCode' => $row['externalCode'] ?? ($parent['externalCode'] ?? null),
         'meta' => $row['meta'] ?? null,
         'productMeta' => $parent['meta'] ?? null,
@@ -517,7 +519,7 @@ function handleCheckOrderStatus($data) {
     $suzToken = $_SESSION['suz_token'] ?? '';
     $omsId = $data['omsId'] ?? $_SESSION['oms_id'] ?? '';
     $orderId = $data['orderId'] ?? '';
-    
+
     if (empty($suzToken) || empty($omsId) || empty($orderId)) {
         throw new Exception('Missing parameters');
     }
@@ -532,12 +534,32 @@ function handleCheckOrderStatus($data) {
     if ($response['code'] !== 200) {
         throw new Exception('Failed to check status');
     }
-    
+
     $body = json_decode($response['body'], true);
-    
+
+    $orderInfo = $body;
+    if (isset($body['orderInfos']) && is_array($body['orderInfos']) && count($body['orderInfos']) > 0) {
+        $orderInfo = $body['orderInfos'][0];
+    } elseif (isset($body['orderInfo']) && is_array($body['orderInfo'])) {
+        $orderInfo = $body['orderInfo'];
+    }
+
+    $buffers = [];
+    if (isset($orderInfo['buffers']) && is_array($orderInfo['buffers'])) {
+        $buffers = $orderInfo['buffers'];
+    } elseif (isset($body['buffers']) && is_array($body['buffers'])) {
+        $buffers = $body['buffers'];
+    }
+
+    $status = $orderInfo['orderStatus'] ?? ($body['orderStatus'] ?? 'Unknown');
+    $orderIdValue = $orderInfo['orderId'] ?? ($body['orderId'] ?? $orderId);
+
     echo json_encode([
         'success' => true,
-        'status' => $body['orderStatus'] ?? 'Unknown'
+        'status' => $status,
+        'orderId' => $orderIdValue,
+        'buffers' => $buffers,
+        'raw' => $body
     ]);
 }
 
