@@ -473,6 +473,56 @@
         .log-entry.success { color: var(--success); border-left-color: var(--success); }
         .log-entry.error { color: var(--danger); border-left-color: var(--danger); }
         .log-entry.warning { color: var(--warning); border-left-color: var(--warning); }
+
+        .json-preview {
+            background: #0f172a;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+            font-size: 12px;
+            line-height: 1.5;
+            max-height: 240px;
+            overflow-y: auto;
+        }
+
+        .buffer-list {
+            display: grid;
+            gap: 12px;
+            margin-top: 10px;
+        }
+
+        .buffer-card {
+            background: var(--gray-50);
+            border-radius: 8px;
+            padding: 12px;
+            border: 1px solid var(--gray-200);
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 600;
+            background: var(--gray-200);
+            color: var(--gray-700);
+        }
+
+        .badge-success {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .badge-warning {
+            background: #fefcbf;
+            color: #744210;
+        }
+
+        .badge-danger {
+            background: #fed7d7;
+            color: #742a2a;
+        }
     </style>
 </head>
 <body>
@@ -628,6 +678,14 @@
                                         >
                                             ✨ Создать карточку
                                         </button>
+                                        <button
+                                            class="btn btn-primary btn-sm"
+                                            style="margin-top: 8px;"
+                                            @click.stop="prefillKmOrder(product)"
+                                            :disabled="loading"
+                                        >
+                                            🧾 Заказ КМ
+                                        </button>
                                     </td>
                                 </tr>
                             </tbody>
@@ -637,6 +695,164 @@
 
                 <div v-else-if="!loading" class="alert alert-info">
                     📦 Нажмите "Загрузить" для начала
+                </div>
+            </div>
+
+            <!-- KM Order -->
+            <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2>Заказ кодов маркировки</h2>
+                    <div class="status-badge" :class="auth.suz ? 'connected' : 'disconnected'">
+                        <span class="dot"></span>
+                        СУЗ: {{ auth.suz ? 'OK' : 'Не авторизован' }}
+                    </div>
+                </div>
+
+                <div v-if="!auth.suz" class="alert alert-warning">
+                    ⚠️ Авторизуйтесь в СУЗ через Настройки, чтобы отправлять заказы
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>GTIN (14 цифр)</label>
+                        <input
+                            type="text"
+                            v-model="kmOrder.gtin"
+                            maxlength="14"
+                            placeholder="00000000000000"
+                        >
+                    </div>
+                    <div class="form-group">
+                        <label>Количество КМ</label>
+                        <input
+                            type="number"
+                            min="1"
+                            max="150000"
+                            v-model.number="kmOrder.quantity"
+                        >
+                    </div>
+                    <div class="form-group">
+                        <label>Template ID</label>
+                        <input
+                            type="text"
+                            v-model="kmOrder.templateId"
+                            placeholder="Например, 20"
+                        >
+                    </div>
+                    <div class="form-group">
+                        <label>Группа товаров</label>
+                        <input
+                            type="text"
+                            v-model="kmOrder.productGroup"
+                            placeholder="Например, lightindustry"
+                        >
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Способ выпуска</label>
+                        <select v-model="kmOrder.releaseMethodType">
+                            <option value="OWN_PRODUCTION">OWN_PRODUCTION</option>
+                            <option value="CONTRACT_PRODUCTION">CONTRACT_PRODUCTION</option>
+                            <option value="IMPORT">IMPORT</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Тип производства</label>
+                        <select v-model="kmOrder.productionType">
+                            <option value="OWN_PRODUCTION">OWN_PRODUCTION</option>
+                            <option value="CONTRACT_PRODUCTION">CONTRACT_PRODUCTION</option>
+                            <option value="IMPORT">IMPORT</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Тип серийных номеров</label>
+                        <select v-model="kmOrder.serialNumberType">
+                            <option value="OPERATOR">OPERATOR</option>
+                            <option value="SELF">SELF</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Комментарий (опционально)</label>
+                        <input
+                            type="text"
+                            v-model="kmOrder.comment"
+                            placeholder="Например, партия №1"
+                        >
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" v-model="kmOrder.useCustomPayload" @change="handleCustomPayloadToggle">
+                        Редактировать JSON вручную
+                    </label>
+                </div>
+
+                <div class="form-group">
+                    <label>JSON заказа</label>
+                    <textarea
+                        v-if="kmOrder.useCustomPayload"
+                        v-model="kmOrder.customPayload"
+                        rows="8"
+                        spellcheck="false"
+                    ></textarea>
+                    <pre v-else class="json-preview">{{ kmOrderPayloadString }}</pre>
+                </div>
+
+                <div class="form-group">
+                    <label>ID заказа (для проверки статуса)</label>
+                    <input
+                        type="text"
+                        v-model="kmOrder.lastOrderId"
+                        placeholder="UUID заказа"
+                    >
+                </div>
+
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button
+                        class="btn btn-success"
+                        @click="createKMOrder"
+                        :disabled="orderProcessing || !canCreateKMOrder"
+                    >
+                        🧾 Создать заказ КМ
+                    </button>
+                    <button
+                        class="btn btn-primary"
+                        @click="checkKMOrderStatus"
+                        :disabled="orderStatusLoading || !kmOrder.lastOrderId"
+                    >
+                        🔍 Проверить статус
+                    </button>
+                </div>
+
+                <div v-if="kmOrder.lastOrderId" style="margin-top: 20px;">
+                    <h3 style="margin-bottom: 10px;">Последний заказ</h3>
+                    <div class="alert" :class="kmOrderStatusClass">
+                        <div><strong>ID:</strong> {{ kmOrder.lastOrderId }}</div>
+                        <div><strong>Статус:</strong> {{ kmOrder.statusText || '—' }}</div>
+                        <div v-if="kmOrder.lastUpdated"><strong>Обновлено:</strong> {{ kmOrder.lastUpdated }}</div>
+                    </div>
+
+                    <div v-if="kmOrder.buffers.length > 0" class="buffer-list">
+                        <div
+                            v-for="(buffer, idx) in kmOrder.buffers"
+                            :key="idx"
+                            class="buffer-card"
+                        >
+                            <div><strong>GTIN:</strong> {{ buffer.gtin || '—' }}</div>
+                            <div><strong>Шаблон:</strong> {{ buffer.templateId || '—' }}</div>
+                            <div><strong>Всего кодов:</strong> {{ buffer.totalCodes ?? '—' }}</div>
+                            <div><strong>Доступно:</strong> {{ buffer.leftInBuffer ?? '—' }}</div>
+                            <div>
+                                <strong>Статус буфера:</strong>
+                                <span class="badge" :class="bufferStatusClass(buffer.bufferStatus)">
+                                    {{ buffer.bufferStatus || '—' }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -836,9 +1052,31 @@
                         isTechGtin: localStorage.getItem('nk_tech_gtin') !== 'false',
                         autoSaveGtin: localStorage.getItem('nk_auto_save') !== 'false'
                     },
-                    
+
                     lastResult: null,
-                    logs: []
+                    logs: [],
+
+                    kmOrder: {
+                        gtin: '',
+                        quantity: 100,
+                        templateId: '',
+                        productGroup: '',
+                        releaseMethodType: 'OWN_PRODUCTION',
+                        productionType: 'OWN_PRODUCTION',
+                        serialNumberType: 'OPERATOR',
+                        comment: '',
+                        useCustomPayload: false,
+                        customPayload: '',
+                        lastOrderId: localStorage.getItem('last_km_order_id') || '',
+                        status: null,
+                        statusText: '',
+                        statusRaw: null,
+                        buffers: [],
+                        lastUpdated: null
+                    },
+
+                    orderProcessing: false,
+                    orderStatusLoading: false
                 };
             },
 
@@ -879,6 +1117,93 @@
                             value && value.toString().toLowerCase().includes(q)
                         );
                     });
+                },
+
+                kmOrderPayload() {
+                    const quantityValue = Number.isFinite(this.kmOrder.quantity)
+                        ? Math.max(1, Math.round(this.kmOrder.quantity))
+                        : 1;
+
+                    const product = {
+                        gtin: (this.kmOrder.gtin || '').trim(),
+                        quantity: quantityValue
+                    };
+
+                    const payload = {
+                        releaseMethodType: this.kmOrder.releaseMethodType || undefined,
+                        productionType: this.kmOrder.productionType || undefined,
+                        serialNumberType: this.kmOrder.serialNumberType || undefined,
+                        productGroup: this.kmOrder.productGroup || undefined,
+                        templateId: this.kmOrder.templateId || undefined,
+                        comment: this.kmOrder.comment || undefined,
+                        products: [product]
+                    };
+
+                    if (payload.templateId !== undefined) {
+                        const numericTemplate = Number(payload.templateId);
+                        if (!Number.isNaN(numericTemplate)) {
+                            payload.templateId = numericTemplate;
+                        }
+                    }
+
+                    if (!product.gtin) {
+                        delete product.gtin;
+                    }
+
+                    Object.keys(payload).forEach(key => {
+                        if (payload[key] === undefined || payload[key] === '') {
+                            delete payload[key];
+                        }
+                    });
+
+                    return payload;
+                },
+
+                kmOrderPayloadString() {
+                    try {
+                        return JSON.stringify(this.kmOrderPayload, null, 2);
+                    } catch (error) {
+                        return '';
+                    }
+                },
+
+                canCreateKMOrder() {
+                    if (!this.auth.suz || !this.canAuth) {
+                        return false;
+                    }
+
+                    if (!this.credentials.suz.omsId) {
+                        return false;
+                    }
+
+                    if (this.kmOrder.useCustomPayload) {
+                        return Boolean(this.kmOrder.customPayload?.trim());
+                    }
+
+                    const gtin = (this.kmOrder.gtin || '').trim();
+                    const quantity = Number.isFinite(this.kmOrder.quantity)
+                        ? Math.max(1, Math.round(this.kmOrder.quantity))
+                        : 0;
+
+                    return /^\d{14}$/.test(gtin) && quantity > 0;
+                },
+
+                kmOrderStatusClass() {
+                    const status = (this.kmOrder.status || '').toUpperCase();
+
+                    if (['READY', 'COMPLETED', 'DONE'].includes(status)) {
+                        return 'alert-success';
+                    }
+
+                    if (['PROCESSING', 'IN_PROGRESS', 'CREATED', 'NEW'].includes(status)) {
+                        return 'alert-info';
+                    }
+
+                    if (['REJECTED', 'FAILED', 'CANCELLED', 'ERROR'].includes(status)) {
+                        return 'alert-error';
+                    }
+
+                    return 'alert-info';
                 }
             },
             
@@ -888,6 +1213,73 @@
                     this.logs.unshift({ time, message, type });
                     if (this.logs.length > 100) this.logs.pop();
                     console.log(`[${type}] ${message}`);
+                },
+
+                handleCustomPayloadToggle() {
+                    if (this.kmOrder.useCustomPayload) {
+                        this.kmOrder.customPayload = this.kmOrderPayloadString;
+                    } else {
+                        this.kmOrder.customPayload = '';
+                    }
+                },
+
+                prefillKmOrder(product) {
+                    if (!product) {
+                        return;
+                    }
+
+                    const candidates = [];
+
+                    if (typeof product.gtin === 'string') {
+                        candidates.push(product.gtin);
+                    }
+
+                    if (Array.isArray(product.barcodes)) {
+                        for (const barcode of product.barcodes) {
+                            if (!barcode) continue;
+                            if (typeof barcode === 'string') {
+                                candidates.push(barcode);
+                            } else if (typeof barcode.value === 'string') {
+                                candidates.push(barcode.value);
+                            } else if (typeof barcode.gtin === 'string') {
+                                candidates.push(barcode.gtin);
+                            }
+                        }
+                    }
+
+                    if (this.lastResult?.gtin) {
+                        candidates.push(this.lastResult.gtin);
+                    }
+
+                    const gtin = candidates.find(code => typeof code === 'string' && /^\d{14}$/.test(code));
+
+                    if (gtin) {
+                        this.kmOrder.gtin = gtin;
+                    }
+
+                    if (product.name) {
+                        this.kmOrder.comment = product.name.substring(0, 120);
+                    }
+
+                    this.log(`Товар «${product.name || product.id}» подготовлен для заказа КМ`, 'info');
+                },
+
+                bufferStatusClass(status) {
+                    const value = (status || '').toUpperCase();
+
+                    if (['ACTIVE', 'READY', 'AVAILABLE'].includes(value)) {
+                        return 'badge-success';
+                    }
+
+                    if (['PROCESSING', 'CREATED', 'IN_PROGRESS', 'NEW'].includes(value)) {
+                        return 'badge-warning';
+                    }
+
+                    if (['FAILED', 'BLOCKED', 'ERROR', 'REJECTED'].includes(value)) {
+                        return 'badge-danger';
+                    }
+
+                    return '';
                 },
 
                 async normalizeProductRow(product) {
@@ -1122,9 +1514,14 @@
                                 gtin: result.gtin,
                                 productName: product.name
                             };
-                            
+
                             this.log(`✓ Карточка создана. GTIN: ${result.gtin}`, 'success');
-                            
+
+                            this.kmOrder.gtin = result.gtin;
+                            if (!this.kmOrder.useCustomPayload) {
+                                this.kmOrder.customPayload = this.kmOrderPayloadString;
+                            }
+
                             if (this.nkOptions.autoSaveGtin) {
                                 await this.updateProductGtin(product.id, result.gtin);
                             }
@@ -1163,7 +1560,162 @@
                         this.log('✗ Ошибка записи GTIN: ' + error.message, 'error');
                     }
                 },
-                
+
+                async createKMOrder() {
+                    if (!this.canCreateKMOrder) {
+                        this.log('Заполните параметры заказа и выберите сертификат', 'warning');
+                        return;
+                    }
+
+                    this.orderProcessing = true;
+                    this.loading = true;
+                    this.loadingMessage = 'Создание заказа КМ...';
+
+                    try {
+                        let orderData = '';
+
+                        if (this.kmOrder.useCustomPayload) {
+                            orderData = (this.kmOrder.customPayload || '').trim();
+
+                            if (!orderData) {
+                                throw new Error('JSON заказа пуст');
+                            }
+
+                            try {
+                                JSON.parse(orderData);
+                            } catch (error) {
+                                throw new Error('Некорректный JSON заказа: ' + error.message);
+                            }
+                        } else {
+                            this.kmOrder.quantity = Math.max(1, Math.round(this.kmOrder.quantity || 1));
+                            const payload = this.kmOrderPayload;
+
+                            if (!payload.products || !payload.products[0]?.gtin) {
+                                throw new Error('Укажите GTIN товара');
+                            }
+
+                            orderData = JSON.stringify(payload, null, 2);
+                            this.kmOrder.customPayload = orderData;
+                        }
+
+                        const signature = await this.signData(orderData, false);
+
+                        const response = await fetch('api.php', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                action: 'create_km_order',
+                                orderData,
+                                signature,
+                                omsId: this.credentials.suz.omsId
+                            })
+                        });
+
+                        const data = await response.json();
+
+                        if (!data.success) {
+                            throw new Error(data.error || 'Не удалось создать заказ');
+                        }
+
+                        if (data.orderId) {
+                            this.kmOrder.lastOrderId = data.orderId;
+                            localStorage.setItem('last_km_order_id', data.orderId);
+                        }
+
+                        this.kmOrder.status = 'CREATED';
+                        this.kmOrder.statusText = data.status || 'CREATED';
+                        this.kmOrder.statusRaw = data;
+                        this.kmOrder.buffers = [];
+                        this.kmOrder.lastUpdated = this.formatTimestamp(new Date());
+
+                        const currentOrderId = this.kmOrder.lastOrderId || '(нет orderId)';
+                        this.log(`✓ Заказ КМ создан. ID: ${currentOrderId}`, 'success');
+                    } catch (error) {
+                        const message = error?.message || String(error);
+                        this.log('✗ Ошибка создания заказа: ' + message, 'error');
+                        alert('Ошибка создания заказа КМ: ' + message);
+                    } finally {
+                        this.orderProcessing = false;
+                        this.loading = false;
+                        this.loadingMessage = 'Загрузка...';
+                    }
+                },
+
+                async checkKMOrderStatus() {
+                    const orderId = (this.kmOrder.lastOrderId || '').trim();
+
+                    if (!orderId) {
+                        alert('Сначала создайте заказ КМ');
+                        return;
+                    }
+
+                    if (!this.auth.suz) {
+                        alert('Авторизуйтесь в СУЗ перед проверкой статуса заказа');
+                        return;
+                    }
+
+                    if (!this.credentials.suz.omsId) {
+                        alert('Укажите OMS ID в настройках');
+                        return;
+                    }
+
+                    this.orderStatusLoading = true;
+                    this.loading = true;
+                    this.loadingMessage = 'Проверка статуса заказа...';
+
+                    try {
+                        const response = await fetch('api.php', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                action: 'check_order_status',
+                                orderId,
+                                omsId: this.credentials.suz.omsId
+                            })
+                        });
+
+                        const data = await response.json();
+
+                        if (!data.success) {
+                            throw new Error(data.error || 'Не удалось получить статус заказа');
+                        }
+
+                        if (data.orderId) {
+                            this.kmOrder.lastOrderId = data.orderId;
+                            localStorage.setItem('last_km_order_id', data.orderId);
+                        }
+
+                        this.kmOrder.status = data.status || null;
+                        this.kmOrder.statusText = data.status || '';
+                        this.kmOrder.buffers = Array.isArray(data.buffers) ? data.buffers : [];
+                        this.kmOrder.statusRaw = data.raw || data;
+                        this.kmOrder.lastUpdated = this.formatTimestamp(new Date());
+
+                        const currentOrderId = this.kmOrder.lastOrderId || orderId;
+                        this.log(`Статус заказа ${currentOrderId}: ${this.kmOrder.statusText || 'Unknown'}`, 'info');
+                    } catch (error) {
+                        const message = error?.message || String(error);
+                        this.log('✗ Ошибка проверки статуса: ' + message, 'error');
+                        alert('Ошибка проверки статуса заказа: ' + message);
+                    } finally {
+                        this.orderStatusLoading = false;
+                        this.loading = false;
+                        this.loadingMessage = 'Загрузка...';
+                    }
+                },
+
+                formatTimestamp(value) {
+                    try {
+                        const date = value instanceof Date ? value : new Date(value);
+                        if (Number.isNaN(date.getTime())) {
+                            return null;
+                        }
+                        return date.toLocaleString();
+                    } catch (error) {
+                        return null;
+                    }
+                },
+
                 async loadCertificates(options = {}) {
                     const auto = typeof options === 'object' && options.auto;
 
@@ -1408,6 +1960,20 @@
 
             async mounted() {
                 this.log('Приложение запущено', 'info');
+
+                const nkToken = sessionStorage.getItem('nk_token');
+                if (nkToken) {
+                    this.auth.nk = true;
+                }
+
+                const suzToken = sessionStorage.getItem('suz_token');
+                if (suzToken) {
+                    this.auth.suz = true;
+                }
+
+                if (this.kmOrder.lastOrderId) {
+                    this.log('Найден сохранённый заказ КМ: ' + this.kmOrder.lastOrderId, 'info');
+                }
 
                 // Автоматическая загрузка сертификатов
                 this.loadCertificates({ auto: true });
