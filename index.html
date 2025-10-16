@@ -659,7 +659,17 @@
                                     </td>
                                     <td>{{ product.article || '—' }}</td>
                                     <td>{{ product.code || '—' }}</td>
-                                    <td>{{ product.tnved || '—' }}</td>
+                                    <td>
+                                        <span v-if="product.tnved">{{ product.tnved }}</span>
+                                        <span v-else>—</span>
+                                        <div
+                                            v-if="product.validationErrors && product.validationErrors.length"
+                                            class="badge badge-warning"
+                                            style="margin-top: 6px;"
+                                        >
+                                            {{ product.validationErrors[0] }}
+                                        </div>
+                                    </td>
                                     <td>{{ product.productKind || '—' }}</td>
                                     <td>{{ product.color || '—' }}</td>
                                     <td>{{ product.size || '—' }}</td>
@@ -674,7 +684,7 @@
                                         <button
                                             class="btn btn-success btn-sm"
                                             @click.stop="createCard(product)"
-                                            :disabled="!auth.nk || loading"
+                                            :disabled="!auth.nk || loading || !product.tnved"
                                         >
                                             ✨ Создать карточку
                                         </button>
@@ -1466,8 +1476,17 @@
                             })
                         );
 
-                        this.products = normalized
-                            .filter(Boolean)
+                        const processed = normalized.filter(Boolean);
+
+                        processed
+                            .filter(item => Array.isArray(item.validationErrors) && item.validationErrors.length)
+                            .forEach(item => {
+                                item.validationErrors.forEach(message => {
+                                    this.log(`⚠️ ${item.name || item.id}: ${message}`, 'warning');
+                                });
+                            });
+
+                        this.products = processed
                             .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ru'));
 
                         this.log(`Загружено ${this.products.length} товаров`, 'success');
