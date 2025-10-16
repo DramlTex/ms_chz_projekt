@@ -1,16 +1,18 @@
 <?php
 /**
  * API Backend для интеграции МойСклад ↔ НК ↔ Честный знак
- * ИСПРАВЛЕНО: Полное проксирование всех запросов для обхода CORS
+ * ИСПРАВЛЕНО: Использует существующую систему авторизации + проксирование для обхода CORS
  */
 
-session_start();
+// Подключаем существующие модули
+require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/api_ms/ms_api.php';
 
 header('Content-Type: application/json; charset=utf-8');
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
 
-// CORS headers - обязательно для работы из браузера
+// CORS headers
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization');
@@ -24,7 +26,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 // Configuration
 define('NK_API_URL', 'https://markirovka.crpt.ru/api/v3');
 define('SUZ_API_URL', 'https://suzgrid.crpt.ru/api/v3');
-define('MS_API_URL', 'https://api.moysklad.ru/api/remap/1.2');
 
 // Get request data
 $input = file_get_contents('php://input');
@@ -33,11 +34,9 @@ $action = $data['action'] ?? $_GET['action'] ?? '';
 
 try {
     switch ($action) {
-        // МойСклад
-        case 'login_moysklad':
-            handleLoginMoySklad($data);
-            break;
-            
+        // МойСклад API (используем существующие функции из api_ms/)
+        // Авторизация через login.html → api_ms/login.php!
+        
         case 'get_products':
             handleGetProducts($data);
             break;
@@ -68,7 +67,7 @@ try {
             handleSaveOMS($data);
             break;
             
-        // НК API - НОВОЕ! Проксирование запросов
+        // НК API - Проксирование запросов
         case 'nk_check_feacn':
             handleNKCheckFeacn($data);
             break;
@@ -109,63 +108,100 @@ try {
     ]);
 }
 
-/**
- * МойСклад - Авторизация
- */
-function handleLoginMoySklad($data) {
-    $login = $data['login'] ?? '';
-    $password = $data['password'] ?? '';
-    
-    if (empty($login) || empty($password)) {
-        throw new Exception('Логин и пароль обязательны');
-    }
-    
-    $authHeader = 'Basic ' . base64_encode($login . ':' . $password);
-    
-    $response = apiRequest(MS_API_URL . '/entity/product?limit=1', 'GET', null, [
-        'Authorization: ' . $authHeader
-    ]);
-    
-    if ($response['code'] === 200) {
-        $_SESSION['ms_login'] = $login;
-        $_SESSION['ms_password'] = $password;
-        
-        echo json_encode([
-            'success' => true,
-            'message' => 'Авторизация успешна'
-        ]);
-    } else {
-        throw new Exception('Неверный логин или пароль');
-    }
-}
+// ============================================
+// МойСклад функции
+// ============================================
 
 /**
- * МойСклад - Получить товары
+ * Получить товары из МойСклад
+ * Использует существующую систему авторизации из auth.php
  */
 function handleGetProducts($data) {
-    if (!isset($_SESSION['ms_login']) || !isset($_SESSION['ms_password'])) {
+    // Проверяем авторизацию через существующую функцию
+    if (!is_authenticated()) {
         throw new Exception('Не авторизован в МойСклад');
     }
     
-    $authHeader = 'Basic ' . base64_encode($_SESSION['ms_login'] . ':' . $_SESSION['ms_password']);
-    $limit = $data['limit'] ?? 100;
-    $offset = $data['offset'] ?? 0;
-    
-    $response = apiRequest(
-        MS_API_URL . '/entity/product?limit=' . $limit . '&offset=' . $offset,
-        'GET',
-        null,
-        ['Authorization: ' . $authHeader]
-    );
-    
-    echo $response['body'];
+    try {
+        // Используем ms_api_request из api_ms/ms_api.php
+        $limit = $data['limit'] ?? 100;
+        $offset = $data['offset'] ?? 0;
+        
+        $url = 'https://api.moysklad.ru/api/remap/1.2/entity/assortment';
+        $url .= '?limit=' . $limit;
+        $url .= '&offset=' . $offset;
+        $url .= '&expand=product,product.attributes,attributes';
+        
+        // ms_api_request автоматически берёт credentials из сессии!
+        $body = ms_api_request($url);
+        
+        if (!isset($body['rows']) || !is_array($body['rows'])) {
+            throw new Exception('Некорректный ответ сервера');
+        }
+        
+        $products = [];
+        
+        foreach ($body['rows'] as $row) {
+            $product = normalize_assortment_row($row);
+            
+            if ($product !== null) {
+                $products[] = $product;
+            }
+        }
+        
+        echo json_encode([
+            'success' => true,
+            'products' => $products
+        ]);
+        
+    } catch (RuntimeException $e) {
+        throw new Exception('Ошибка загрузки товаров: ' . $e->getMessage());
+    }
 }
 
 /**
- * МойСклад - Обновить GTIN
+ * Привести товар/вариант МойСклад к единому формату
+ */
+function normalize_assortment_row(array $row): ?array {
+    $type = $row['meta']['type'] ?? '';
+    
+    if (!in_array($type, ['product', 'variant'], true)) {
+        return null;
+    }
+    
+    $parent = null;
+    
+    if ($type === 'variant' && isset($row['product']) && is_array($row['product'])) {
+        $parent = $row['product'];
+    }
+    
+    $attributes = [];
+    
+    if ($parent && isset($parent['attributes']) && is_array($parent['attributes'])) {
+        $attributes = array_merge($attributes, $parent['attributes']);
+    }
+    
+    if (isset($row['attributes']) && is_array($row['attributes'])) {
+        $attributes = array_merge($attributes, $row['attributes']);
+    }
+    
+    return [
+        'id' => $row['id'] ?? null,
+        'name' => $row['name'] ?? ($parent['name'] ?? ''),
+        'code' => $row['code'] ?? ($parent['code'] ?? ''),
+        'article' => $row['article'] ?? ($parent['article'] ?? ''),
+        'description' => $row['description'] ?? ($parent['description'] ?? ''),
+        'attributes' => $attributes,
+        'type' => $type,
+        'parent' => $parent
+    ];
+}
+
+/**
+ * Обновить GTIN товара в МойСклад
  */
 function handleUpdateGtin($data) {
-    if (!isset($_SESSION['ms_login']) || !isset($_SESSION['ms_password'])) {
+    if (!is_authenticated()) {
         throw new Exception('Не авторизован в МойСклад');
     }
     
@@ -176,40 +212,33 @@ function handleUpdateGtin($data) {
         throw new Exception('Не указан ID товара или GTIN');
     }
     
-    $authHeader = 'Basic ' . base64_encode($_SESSION['ms_login'] . ':' . $_SESSION['ms_password']);
-    
-    // Получаем текущий товар
-    $response = apiRequest(
-        MS_API_URL . '/entity/product/' . $productId,
-        'GET',
-        null,
-        ['Authorization: ' . $authHeader]
-    );
-    
-    $product = json_decode($response['body'], true);
-    
-    // Добавляем GTIN в штрихкоды
-    $barcodes = $product['barcodes'] ?? [];
-    $barcodes[] = ['ean13' => $gtin];
-    
-    // Обновляем товар
-    $updateData = ['barcodes' => $barcodes];
-    
-    $updateResponse = apiRequest(
-        MS_API_URL . '/entity/product/' . $productId,
-        'PUT',
-        json_encode($updateData),
-        [
-            'Authorization: ' . $authHeader,
-            'Content-Type: application/json'
-        ]
-    );
-    
-    echo json_encode([
-        'success' => true,
-        'message' => 'GTIN успешно добавлен'
-    ]);
+    try {
+        // Получаем текущий товар
+        $url = 'https://api.moysklad.ru/api/remap/1.2/entity/product/' . $productId;
+        $product = ms_api_request($url);
+        
+        // Добавляем GTIN в штрихкоды
+        $barcodes = $product['barcodes'] ?? [];
+        $barcodes[] = ['ean13' => $gtin];
+        
+        // Обновляем товар
+        $updateData = ['barcodes' => $barcodes];
+        $result = ms_api_request($url, null, null, 'PUT', $updateData);
+        
+        echo json_encode([
+            'success' => true,
+            'message' => 'GTIN успешно добавлен',
+            'product' => $result
+        ]);
+        
+    } catch (RuntimeException $e) {
+        throw new Exception('Ошибка обновления GTIN: ' . $e->getMessage());
+    }
 }
+
+// ============================================
+// НК Авторизация
+// ============================================
 
 /**
  * НК - Получить challenge для авторизации
@@ -264,6 +293,10 @@ function handleNKSignIn($data) {
         throw new Exception('Ошибка авторизации в НК: ' . $response['body']);
     }
 }
+
+// ============================================
+// СУЗ Авторизация
+// ============================================
 
 /**
  * СУЗ - Получить challenge
@@ -342,9 +375,12 @@ function handleSaveOMS($data) {
     ]);
 }
 
+// ============================================
+// НК API - Проксирование
+// ============================================
+
 /**
  * НК - Проверить ТН ВЭД (маркируемость)
- * НОВОЕ! Проксирование для обхода CORS
  */
 function handleNKCheckFeacn($data) {
     $tnved = $data['tnved'] ?? '';
@@ -381,7 +417,6 @@ function handleNKCheckFeacn($data) {
 
 /**
  * НК - Получить категорию по ТН ВЭД
- * НОВОЕ! Проксирование для обхода CORS
  */
 function handleNKGetCategory($data) {
     $tnved = $data['tnved'] ?? '';
@@ -411,7 +446,6 @@ function handleNKGetCategory($data) {
 
 /**
  * НК - Создать карточку
- * НОВОЕ! Проксирование для обхода CORS
  */
 function handleNKCreateCard($data) {
     $cardData = $data['cardData'] ?? null;
@@ -444,7 +478,6 @@ function handleNKCreateCard($data) {
 
 /**
  * НК - Получить статус обработки карточки
- * НОВОЕ! Проксирование для обхода CORS
  */
 function handleNKFeedStatus($data) {
     $feedId = $data['feedId'] ?? '';
@@ -474,7 +507,6 @@ function handleNKFeedStatus($data) {
 
 /**
  * НК - Получить технический GTIN
- * НОВОЕ! Проксирование для обхода CORS
  */
 function handleNKGetGtin($data) {
     $quantity = $data['quantity'] ?? 1;
@@ -497,6 +529,10 @@ function handleNKGetGtin($data) {
         throw new Exception('Ошибка получения GTIN: ' . $response['body']);
     }
 }
+
+// ============================================
+// СУЗ API
+// ============================================
 
 /**
  * СУЗ - Создать заказ КМ
@@ -564,8 +600,13 @@ function handleSUZCheckStatus($data) {
     }
 }
 
+// ============================================
+// Вспомогательные функции
+// ============================================
+
 /**
  * Выполнить API запрос
+ * Используется для НК и СУЗ (не для МойСклад!)
  */
 function apiRequest($url, $method = 'GET', $body = null, $headers = []) {
     $ch = curl_init();
