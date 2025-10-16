@@ -89,7 +89,8 @@ const NKLogic = {
             size: '',
             composition: [],
             documents: [],
-            attributes: {}
+            attributes: {},
+            validationErrors: []
         };
 
         // Извлечь атрибуты
@@ -145,7 +146,7 @@ const NKLogic = {
 
         // Если нет ТН ВЭД - ошибка
         if (!data.tnved) {
-            throw new Error('У товара не указан ТН ВЭД код');
+            data.validationErrors.push('У товара не указан ТН ВЭД код');
         }
 
         return data;
