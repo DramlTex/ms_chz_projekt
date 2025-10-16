@@ -36,6 +36,7 @@
         
         fetch('api_ms/login.php', {
             method: 'POST',
+            credentials: 'include',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({login, password})
         }).then(async r => {

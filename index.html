@@ -1370,6 +1370,7 @@
                     try {
                         const response = await fetch('api_ms/login.php', {
                             method: 'POST',
+                            credentials: 'include',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 login: this.credentials.moysklad.login.trim(),
@@ -1415,7 +1416,8 @@
                         try {
                             // Удаляем сессию на сервере
                             await fetch('api_ms/login.php', {
-                                method: 'DELETE'
+                                method: 'DELETE',
+                                credentials: 'include'
                             });
                             
                             // Очищаем токены
@@ -1440,6 +1442,7 @@
                     try {
                         const response = await fetch('api.php', {
                             method: 'POST',
+                            credentials: 'include',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 action: 'get_products'
@@ -1543,6 +1546,7 @@
                     try {
                         const response = await fetch('api.php', {
                             method: 'POST',
+                            credentials: 'include',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 action: 'update_gtin',
@@ -1602,9 +1606,10 @@
 
                         const response = await fetch('api.php', {
                             method: 'POST',
+                            credentials: 'include',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
-                                action: 'create_km_order',
+                                action: 'suz_create_order',
                                 orderData,
                                 signature,
                                 omsId: this.credentials.suz.omsId
@@ -1666,9 +1671,10 @@
                     try {
                         const response = await fetch('api.php', {
                             method: 'POST',
+                            credentials: 'include',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
-                                action: 'check_order_status',
+                                action: 'suz_check_status',
                                 orderId,
                                 omsId: this.credentials.suz.omsId
                             })
@@ -1816,6 +1822,7 @@
                     try {
                         const challengeResp = await fetch('api.php', {
                             method: 'POST',
+                            credentials: 'include',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ action: 'nk_challenge' })
                         });
@@ -1827,6 +1834,7 @@
                         
                         const authResp = await fetch('api.php', {
                             method: 'POST',
+                            credentials: 'include',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 action: 'nk_signin',
@@ -1855,6 +1863,7 @@
                     try {
                         const challengeResp = await fetch('api.php', {
                             method: 'POST',
+                            credentials: 'include',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ 
                                 action: 'suz_challenge',
@@ -1869,6 +1878,7 @@
                         
                         const authResp = await fetch('api.php', {
                             method: 'POST',
+                            credentials: 'include',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 action: 'suz_signin',
@@ -1925,7 +1935,8 @@
                 async checkAuth() {
                     try {
                         const response = await fetch('api_ms/login.php', {
-                            method: 'GET'
+                            method: 'GET',
+                            credentials: 'include'
                         });
 
                         const data = await response.json();

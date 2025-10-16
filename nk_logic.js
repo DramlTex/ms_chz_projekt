@@ -188,6 +188,7 @@ const NKLogic = {
         // ✅ Используем ПРОКСИ вместо прямого запроса!
         const checkResponse = await fetch('api.php', {
             method: 'POST',
+            credentials: 'include',
             headers: {
                 'Content-Type': 'application/json'
             },
@@ -212,6 +213,7 @@ const NKLogic = {
         // ✅ Получение категории через ПРОКСИ
         const categoryResponse = await fetch('api.php', {
             method: 'POST',
+            credentials: 'include',
             headers: {
                 'Content-Type': 'application/json'
             },
@@ -246,6 +248,7 @@ const NKLogic = {
         // ✅ Используем ПРОКСИ
         const response = await fetch('api.php', {
             method: 'POST',
+            credentials: 'include',
             headers: {
                 'Content-Type': 'application/json'
             },
@@ -378,6 +381,7 @@ const NKLogic = {
         // ✅ Используем ПРОКСИ
         const response = await fetch('api.php', {
             method: 'POST',
+            credentials: 'include',
             headers: {
                 'Content-Type': 'application/json'
             },
@@ -414,6 +418,7 @@ const NKLogic = {
             // ✅ Используем ПРОКСИ
             const response = await fetch('api.php', {
                 method: 'POST',
+                credentials: 'include',
                 headers: {
                     'Content-Type': 'application/json'
                 },
@@ -463,6 +468,7 @@ const NKLogic = {
     async updateMSGtin(productId, gtin, msToken) {
         const response = await fetch('api.php', {
             method: 'POST',
+            credentials: 'include',
             headers: {
                 'Content-Type': 'application/json'
             },

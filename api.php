@@ -7,6 +7,7 @@
 // Подключаем существующие модули
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/api_ms/ms_api.php';
+require_once __DIR__ . '/crpt_api.php';
 
 header('Content-Type: application/json; charset=utf-8');
 error_reporting(E_ALL);
@@ -22,10 +23,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit;
 }
-
-// Configuration
-define('NK_API_URL', 'https://markirovka.crpt.ru/api/v3');
-define('SUZ_API_URL', 'https://suzgrid.crpt.ru/api/v3');
 
 // Get request data
 $input = file_get_contents('php://input');
@@ -244,18 +241,17 @@ function handleUpdateGtin($data) {
  * НК - Получить challenge для авторизации
  */
 function handleNKChallenge() {
-    $response = apiRequest(NK_API_URL . '/true-api/auth/key', 'GET');
-    
-    if ($response['code'] === 200) {
-        $body = json_decode($response['body'], true);
-        echo json_encode([
-            'success' => true,
-            'uuid' => $body['uuid'],
-            'data' => $body['data']
-        ]);
-    } else {
+    $response = apiRequest(TRUE_API_URL . '/auth/key');
+
+    if (empty($response['uuid']) || empty($response['data'])) {
         throw new Exception('Ошибка получения challenge');
     }
+
+    echo json_encode([
+        'success' => true,
+        'uuid' => $response['uuid'],
+        'data' => $response['data']
+    ], JSON_UNESCAPED_UNICODE);
 }
 
 /**
@@ -264,34 +260,38 @@ function handleNKChallenge() {
 function handleNKSignIn($data) {
     $uuid = $data['uuid'] ?? '';
     $signature = $data['signature'] ?? '';
-    
+
     if (empty($uuid) || empty($signature)) {
         throw new Exception('UUID или подпись не указаны');
     }
-    
-    $body = json_encode([
-        'uuid' => $uuid,
-        'data' => $signature
-    ]);
-    
+
     $response = apiRequest(
-        NK_API_URL . '/true-api/auth/simpleSignIn',
+        TRUE_API_URL . '/auth/simpleSignIn',
         'POST',
-        $body,
-        ['Content-Type: application/json']
+        null,
+        [
+            'uuid' => $uuid,
+            'data' => $signature,
+            'unitedToken' => true
+        ]
     );
-    
-    if ($response['code'] === 200) {
-        $responseData = json_decode($response['body'], true);
-        $_SESSION['nk_token'] = $responseData['token'];
-        
-        echo json_encode([
-            'success' => true,
-            'token' => $responseData['token']
-        ]);
-    } else {
-        throw new Exception('Ошибка авторизации в НК: ' . $response['body']);
+
+    $token = $response['uuidToken'] ?? $response['token'] ?? null;
+
+    if (!$token) {
+        throw new Exception('Токен НК не получен');
     }
+
+    $expiresIn = $response['expiresIn'] ?? $response['expires_in'] ?? null;
+    $expiresAt = $expiresIn ? time() + (int)$expiresIn : null;
+
+    setToken('nk_token', $token, $expiresAt);
+
+    echo json_encode([
+        'success' => true,
+        'token' => $token,
+        'expiresAt' => $expiresAt
+    ], JSON_UNESCAPED_UNICODE);
 }
 
 // ============================================
@@ -302,18 +302,17 @@ function handleNKSignIn($data) {
  * СУЗ - Получить challenge
  */
 function handleSUZChallenge($data) {
-    $response = apiRequest(NK_API_URL . '/true-api/auth/key', 'GET');
-    
-    if ($response['code'] === 200) {
-        $body = json_decode($response['body'], true);
-        echo json_encode([
-            'success' => true,
-            'uuid' => $body['uuid'],
-            'data' => $body['data']
-        ]);
-    } else {
+    $response = apiRequest(TRUE_API_URL . '/auth/key');
+
+    if (empty($response['uuid']) || empty($response['data'])) {
         throw new Exception('Ошибка получения challenge для СУЗ');
     }
+
+    echo json_encode([
+        'success' => true,
+        'uuid' => $response['uuid'],
+        'data' => $response['data']
+    ], JSON_UNESCAPED_UNICODE);
 }
 
 /**
@@ -322,37 +321,46 @@ function handleSUZChallenge($data) {
 function handleSUZSignIn($data) {
     $uuid = $data['uuid'] ?? '';
     $signature = $data['signature'] ?? '';
-    $omsConnection = $data['omsConnection'] ?? $_SESSION['oms_connection'] ?? '';
-    $omsId = $data['omsId'] ?? $_SESSION['oms_id'] ?? '';
-    
+    $omsSettings = getOmsSettings();
+    $omsConnection = $data['omsConnection'] ?? ($omsSettings['connection'] ?? '');
+    $omsId = $data['omsId'] ?? ($omsSettings['id'] ?? '');
+
     if (empty($uuid) || empty($signature) || empty($omsConnection)) {
         throw new Exception('Не все данные для авторизации СУЗ указаны');
     }
-    
-    $body = json_encode([
-        'uuid' => $uuid,
-        'data' => $signature
-    ]);
-    
-    $response = apiRequest(
-        NK_API_URL . '/auth/simpleSignIn/' . $omsConnection,
-        'POST',
-        $body,
-        ['Content-Type: application/json']
-    );
-    
-    if ($response['code'] === 200) {
-        $responseData = json_decode($response['body'], true);
-        $_SESSION['suz_token'] = $responseData['token'];
-        $_SESSION['oms_id'] = $omsId;
-        
-        echo json_encode([
-            'success' => true,
-            'token' => $responseData['token']
-        ]);
-    } else {
-        throw new Exception('Ошибка авторизации в СУЗ: ' . $response['body']);
+
+    if (empty($omsId)) {
+        throw new Exception('OMS ID не указан');
     }
+
+    $response = apiRequest(
+        TRUE_API_URL . '/auth/simpleSignIn/' . urlencode($omsConnection),
+        'POST',
+        null,
+        [
+            'uuid' => $uuid,
+            'data' => $signature,
+            'unitedToken' => true
+        ]
+    );
+
+    $token = $response['client_token'] ?? $response['clientToken'] ?? $response['uuidToken'] ?? $response['token'] ?? null;
+
+    if (!$token) {
+        throw new Exception('clientToken не получен');
+    }
+
+    $expiresIn = $response['expires_in'] ?? $response['expiresIn'] ?? null;
+    $expiresAt = $expiresIn ? time() + (int)$expiresIn : null;
+
+    setToken('suz_token', $token, $expiresAt);
+    setOmsSettings($omsConnection, $omsId);
+
+    echo json_encode([
+        'success' => true,
+        'token' => $token,
+        'expiresAt' => $expiresAt
+    ], JSON_UNESCAPED_UNICODE);
 }
 
 /**
@@ -361,18 +369,17 @@ function handleSUZSignIn($data) {
 function handleSaveOMS($data) {
     $omsConnection = $data['omsConnection'] ?? '';
     $omsId = $data['omsId'] ?? '';
-    
+
     if (empty($omsConnection) || empty($omsId)) {
         throw new Exception('OMS Connection и OMS ID обязательны');
     }
-    
-    $_SESSION['oms_connection'] = $omsConnection;
-    $_SESSION['oms_id'] = $omsId;
-    
+
+    setOmsSettings($omsConnection, $omsId);
+
     echo json_encode([
         'success' => true,
         'message' => 'OMS настройки сохранены'
-    ]);
+    ], JSON_UNESCAPED_UNICODE);
 }
 
 // ============================================
@@ -384,35 +391,30 @@ function handleSaveOMS($data) {
  */
 function handleNKCheckFeacn($data) {
     $tnved = $data['tnved'] ?? '';
-    $token = $_SESSION['nk_token'] ?? '';
-    
+    $token = getToken('nk_token');
+
     if (empty($tnved)) {
         throw new Exception('ТН ВЭД код не указан');
     }
-    
+
     if (empty($token)) {
         throw new Exception('Не авторизован в НК');
     }
-    
-    $body = json_encode([
-        'feacn' => [substr($tnved, 0, 4)]
-    ]);
-    
+
     $response = apiRequest(
         NK_API_URL . '/check/feacn',
         'POST',
-        $body,
         [
             'Content-Type: application/json',
+            'Accept: application/json',
             'Authorization: Bearer ' . $token
+        ],
+        [
+            'feacn' => [substr($tnved, 0, 4)]
         ]
     );
-    
-    if ($response['code'] === 200) {
-        echo $response['body'];
-    } else {
-        throw new Exception('Ошибка проверки ТН ВЭД: ' . $response['body']);
-    }
+
+    echo json_encode($response, JSON_UNESCAPED_UNICODE);
 }
 
 /**
@@ -420,28 +422,26 @@ function handleNKCheckFeacn($data) {
  */
 function handleNKGetCategory($data) {
     $tnved = $data['tnved'] ?? '';
-    $token = $_SESSION['nk_token'] ?? '';
-    
+    $token = getToken('nk_token');
+
     if (empty($tnved)) {
         throw new Exception('ТН ВЭД код не указан');
     }
-    
+
     if (empty($token)) {
         throw new Exception('Не авторизован в НК');
     }
-    
+
     $response = apiRequest(
         NK_API_URL . '/categories/by-feacn?feacn=' . substr($tnved, 0, 4),
         'GET',
-        null,
-        ['Authorization: Bearer ' . $token]
+        [
+            'Accept: application/json',
+            'Authorization: Bearer ' . $token
+        ]
     );
-    
-    if ($response['code'] === 200) {
-        echo $response['body'];
-    } else {
-        throw new Exception('Ошибка получения категории: ' . $response['body']);
-    }
+
+    echo json_encode($response, JSON_UNESCAPED_UNICODE);
 }
 
 /**
@@ -449,31 +449,28 @@ function handleNKGetCategory($data) {
  */
 function handleNKCreateCard($data) {
     $cardData = $data['cardData'] ?? null;
-    $token = $_SESSION['nk_token'] ?? '';
-    
+    $token = getToken('nk_token');
+
     if (empty($cardData)) {
         throw new Exception('Данные карточки не указаны');
     }
-    
+
     if (empty($token)) {
         throw new Exception('Не авторизован в НК');
     }
-    
+
     $response = apiRequest(
         NK_API_URL . '/feed',
         'POST',
-        json_encode($cardData),
         [
             'Content-Type: application/json',
+            'Accept: application/json',
             'Authorization: Bearer ' . $token
-        ]
+        ],
+        $cardData
     );
-    
-    if ($response['code'] === 200) {
-        echo $response['body'];
-    } else {
-        throw new Exception('Ошибка создания карточки: ' . $response['body']);
-    }
+
+    echo json_encode($response, JSON_UNESCAPED_UNICODE);
 }
 
 /**
@@ -481,28 +478,26 @@ function handleNKCreateCard($data) {
  */
 function handleNKFeedStatus($data) {
     $feedId = $data['feedId'] ?? '';
-    $token = $_SESSION['nk_token'] ?? '';
-    
+    $token = getToken('nk_token');
+
     if (empty($feedId)) {
         throw new Exception('Feed ID не указан');
     }
-    
+
     if (empty($token)) {
         throw new Exception('Не авторизован в НК');
     }
-    
+
     $response = apiRequest(
         NK_API_URL . '/feed-status?feed_id=' . $feedId,
         'GET',
-        null,
-        ['Authorization: Bearer ' . $token]
+        [
+            'Accept: application/json',
+            'Authorization: Bearer ' . $token
+        ]
     );
-    
-    if ($response['code'] === 200) {
-        echo $response['body'];
-    } else {
-        throw new Exception('Ошибка получения статуса: ' . $response['body']);
-    }
+
+    echo json_encode($response, JSON_UNESCAPED_UNICODE);
 }
 
 /**
@@ -510,24 +505,22 @@ function handleNKFeedStatus($data) {
  */
 function handleNKGetGtin($data) {
     $quantity = $data['quantity'] ?? 1;
-    $token = $_SESSION['nk_token'] ?? '';
-    
+    $token = getToken('nk_token');
+
     if (empty($token)) {
         throw new Exception('Не авторизован в НК');
     }
-    
+
     $response = apiRequest(
         NK_API_URL . '/gtin/retrieve?quantity=' . $quantity,
         'GET',
-        null,
-        ['Authorization: Bearer ' . $token]
+        [
+            'Accept: application/json',
+            'Authorization: Bearer ' . $token
+        ]
     );
-    
-    if ($response['code'] === 200) {
-        echo $response['body'];
-    } else {
-        throw new Exception('Ошибка получения GTIN: ' . $response['body']);
-    }
+
+    echo json_encode($response, JSON_UNESCAPED_UNICODE);
 }
 
 // ============================================
@@ -540,107 +533,93 @@ function handleNKGetGtin($data) {
 function handleSUZCreateOrder($data) {
     $orderData = $data['orderData'] ?? null;
     $signature = $data['signature'] ?? '';
-    $token = $_SESSION['suz_token'] ?? '';
-    $omsId = $_SESSION['oms_id'] ?? '';
-    
+    $token = getToken('suz_token');
+    $omsSettings = getOmsSettings();
+    $omsId = $omsSettings['id'] ?? '';
+
     if (empty($orderData) || empty($signature)) {
         throw new Exception('Данные заказа или подпись не указаны');
     }
-    
+
+    $cleanSignature = preg_replace('/[\r\n\s]+/', '', $signature);
+
+    if (empty($cleanSignature)) {
+        throw new Exception('Подпись не может быть пустой');
+    }
+
     if (empty($token) || empty($omsId)) {
         throw new Exception('Не авторизован в СУЗ');
     }
-    
+
     $response = apiRequest(
         SUZ_API_URL . '/order?omsId=' . $omsId,
         'POST',
-        json_encode($orderData),
         [
             'Content-Type: application/json',
+            'Accept: application/json',
             'clientToken: ' . $token,
-            'X-Signature: ' . $signature
-        ]
+            'OMS-Id: ' . $omsId,
+            'X-Signature: ' . $cleanSignature
+        ],
+        $orderData
     );
-    
-    if ($response['code'] === 200) {
-        echo $response['body'];
-    } else {
-        throw new Exception('Ошибка создания заказа: ' . $response['body']);
-    }
+
+    $orderId = $response['orderId'] ?? $response['omsOrderId'] ?? $response['id'] ?? null;
+    $status = $response['status'] ?? $response['state'] ?? null;
+
+    echo json_encode([
+        'success' => true,
+        'orderId' => $orderId,
+        'status' => $status,
+        'raw' => $response
+    ], JSON_UNESCAPED_UNICODE);
 }
 
 /**
  * СУЗ - Проверить статус заказа
  */
 function handleSUZCheckStatus($data) {
+    $omsSettings = getOmsSettings();
+    $omsId = $omsSettings['id'] ?? '';
+    $omsConnection = $omsSettings['connection'] ?? '';
+    $token = getToken('suz_token');
+
+    if (empty($omsId) || empty($token) || empty($omsConnection)) {
+        throw new Exception('Нет данных для проверки статуса');
+    }
+
     $orderId = $data['orderId'] ?? '';
-    $token = $_SESSION['suz_token'] ?? '';
-    $omsId = $_SESSION['oms_id'] ?? '';
-    
-    if (empty($token) || empty($omsId)) {
-        throw new Exception('Не авторизован в СУЗ');
+    if (empty($orderId)) {
+        throw new Exception('Не указан номер заказа');
     }
-    
+
     $url = SUZ_API_URL . '/order/status?omsId=' . $omsId;
-    if (!empty($orderId)) {
-        $url .= '&orderId=' . $orderId;
-    }
-    
+    $url .= '&omsConnection=' . urlencode($omsConnection);
+    $url .= '&orderId=' . urlencode($orderId);
+
     $response = apiRequest(
         $url,
         'GET',
-        null,
-        ['clientToken: ' . $token]
+        [
+            'Accept: application/json',
+            'clientToken: ' . $token,
+            'OMS-Id: ' . $omsId
+        ]
     );
-    
-    if ($response['code'] === 200) {
-        echo $response['body'];
-    } else {
-        throw new Exception('Ошибка получения статуса: ' . $response['body']);
-    }
+
+    $orderId = $response['orderId'] ?? $response['omsOrderId'] ?? $response['id'] ?? $orderId;
+    $status = $response['status'] ?? $response['state'] ?? null;
+    $buffers = $response['buffers'] ?? [];
+
+    echo json_encode([
+        'success' => true,
+        'orderId' => $orderId,
+        'status' => $status,
+        'buffers' => is_array($buffers) ? $buffers : [],
+        'raw' => $response
+    ], JSON_UNESCAPED_UNICODE);
 }
 
 // ============================================
 // Вспомогательные функции
 // ============================================
-
-/**
- * Выполнить API запрос
- * Используется для НК и СУЗ (не для МойСклад!)
- */
-function apiRequest($url, $method = 'GET', $body = null, $headers = []) {
-    $ch = curl_init();
-    
-    curl_setopt($ch, CURLOPT_URL, $url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_HEADER, false);
-    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
-    
-    if ($body !== null) {
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
-    }
-    
-    if (!empty($headers)) {
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-    }
-    
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-    
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $error = curl_error($ch);
-    
-    curl_close($ch);
-    
-    if ($error) {
-        throw new Exception('CURL error: ' . $error);
-    }
-    
-    return [
-        'code' => $httpCode,
-        'body' => $response
-    ];
-}
