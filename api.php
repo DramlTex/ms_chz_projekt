@@ -173,15 +173,45 @@ function normalize_assortment_row(array $row): ?array {
     }
     
     $attributes = [];
-    
+
     if ($parent && isset($parent['attributes']) && is_array($parent['attributes'])) {
         $attributes = array_merge($attributes, $parent['attributes']);
     }
-    
+
     if (isset($row['attributes']) && is_array($row['attributes'])) {
         $attributes = array_merge($attributes, $row['attributes']);
     }
-    
+
+    $barcodes = [];
+
+    if ($parent && isset($parent['barcodes']) && is_array($parent['barcodes'])) {
+        $barcodes = array_merge($barcodes, $parent['barcodes']);
+    }
+
+    if (isset($row['barcodes']) && is_array($row['barcodes'])) {
+        $barcodes = array_merge($barcodes, $row['barcodes']);
+    }
+
+    $barcodes = array_values(array_filter($barcodes, function ($barcode) {
+        return is_array($barcode) || is_string($barcode);
+    }));
+
+    $characteristics = [];
+
+    if ($parent && isset($parent['characteristics']) && is_array($parent['characteristics'])) {
+        $characteristics = array_merge($characteristics, $parent['characteristics']);
+    }
+
+    if (isset($row['characteristics']) && is_array($row['characteristics'])) {
+        $characteristics = array_merge($characteristics, $row['characteristics']);
+    }
+
+    $tnved = $row['tnved'] ?? null;
+
+    if (!$tnved && $parent) {
+        $tnved = $parent['tnved'] ?? null;
+    }
+
     return [
         'id' => $row['id'] ?? null,
         'name' => $row['name'] ?? ($parent['name'] ?? ''),
@@ -190,7 +220,10 @@ function normalize_assortment_row(array $row): ?array {
         'description' => $row['description'] ?? ($parent['description'] ?? ''),
         'attributes' => $attributes,
         'type' => $type,
-        'parent' => $parent
+        'parent' => $parent,
+        'tnved' => $tnved,
+        'barcodes' => $barcodes,
+        'characteristics' => array_values($characteristics)
     ];
 }
 
