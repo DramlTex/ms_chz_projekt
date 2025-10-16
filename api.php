@@ -1,22 +1,19 @@
 <?php
 /**
  * API Backend для интеграции МойСклад ↔ НК ↔ Честный знак
+ * ИСПРАВЛЕНО: Полное проксирование всех запросов для обхода CORS
  */
 
 session_start();
-require_once __DIR__ . '/auth.php';
-require_once __DIR__ . '/api_ms/ms_api.php';
 
 header('Content-Type: application/json; charset=utf-8');
-
-// Error handling
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
 
-// CORS headers
+// CORS headers - обязательно для работы из браузера
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
+header('Access-Control-Allow-Headers: Content-Type, Authorization');
 
 // Handle preflight
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -32,10 +29,11 @@ define('MS_API_URL', 'https://api.moysklad.ru/api/remap/1.2');
 // Get request data
 $input = file_get_contents('php://input');
 $data = json_decode($input, true);
-$action = $data['action'] ?? '';
+$action = $data['action'] ?? $_GET['action'] ?? '';
 
 try {
     switch ($action) {
+        // МойСклад
         case 'login_moysklad':
             handleLoginMoySklad($data);
             break;
@@ -48,6 +46,7 @@ try {
             handleUpdateGtin($data);
             break;
             
+        // НК Авторизация
         case 'nk_challenge':
             handleNKChallenge();
             break;
@@ -56,6 +55,7 @@ try {
             handleNKSignIn($data);
             break;
             
+        // СУЗ Авторизация
         case 'suz_challenge':
             handleSUZChallenge($data);
             break;
@@ -64,22 +64,45 @@ try {
             handleSUZSignIn($data);
             break;
             
-        case 'create_nk_card':
-            handleCreateNKCard($data);
+        case 'save_oms':
+            handleSaveOMS($data);
             break;
             
-        case 'create_km_order':
-            handleCreateKMOrder($data);
+        // НК API - НОВОЕ! Проксирование запросов
+        case 'nk_check_feacn':
+            handleNKCheckFeacn($data);
             break;
             
-        case 'check_order_status':
-            handleCheckOrderStatus($data);
+        case 'nk_get_category':
+            handleNKGetCategory($data);
+            break;
+            
+        case 'nk_create_card':
+            handleNKCreateCard($data);
+            break;
+            
+        case 'nk_feed_status':
+            handleNKFeedStatus($data);
+            break;
+            
+        case 'nk_get_gtin':
+            handleNKGetGtin($data);
+            break;
+            
+        // СУЗ API
+        case 'suz_create_order':
+            handleSUZCreateOrder($data);
+            break;
+            
+        case 'suz_check_status':
+            handleSUZCheckStatus($data);
             break;
             
         default:
             throw new Exception('Unknown action: ' . $action);
     }
 } catch (Exception $e) {
+    http_response_code(500);
     echo json_encode([
         'success' => false,
         'error' => $e->getMessage()
@@ -87,7 +110,7 @@ try {
 }
 
 /**
- * Login to МойСклад with Basic Auth
+ * МойСклад - Авторизация
  */
 function handleLoginMoySklad($data) {
     $login = $data['login'] ?? '';
@@ -97,7 +120,6 @@ function handleLoginMoySklad($data) {
         throw new Exception('Логин и пароль обязательны');
     }
     
-    // Test connection with Basic Auth
     $authHeader = 'Basic ' . base64_encode($login . ':' . $password);
     
     $response = apiRequest(MS_API_URL . '/entity/product?limit=1', 'GET', null, [
@@ -105,14 +127,12 @@ function handleLoginMoySklad($data) {
     ]);
     
     if ($response['code'] === 200) {
-        // Save credentials in session
-        set_user($login, $password);
-        $_SESSION['ms_auth'] = get_auth_header();
         $_SESSION['ms_login'] = $login;
+        $_SESSION['ms_password'] = $password;
         
         echo json_encode([
             'success' => true,
-            'message' => 'Успешный вход в МойСклад'
+            'message' => 'Авторизация успешна'
         ]);
     } else {
         throw new Exception('Неверный логин или пароль');
@@ -120,451 +140,432 @@ function handleLoginMoySklad($data) {
 }
 
 /**
- * Get products from МойСклад
+ * МойСклад - Получить товары
  */
 function handleGetProducts($data) {
-    if (!is_authenticated()) {
+    if (!isset($_SESSION['ms_login']) || !isset($_SESSION['ms_password'])) {
         throw new Exception('Не авторизован в МойСклад');
     }
-
-    try {
-        $query = http_build_query([
-            'limit' => 100,
-            'expand' => 'product,product.attributes,attributes'
-        ]);
-
-        $body = ms_api_request(MS_API_URL . '/entity/assortment?' . $query);
-    } catch (RuntimeException $e) {
-        throw new Exception('Ошибка загрузки товаров: ' . $e->getMessage());
-    }
-
-    if (!isset($body['rows']) || !is_array($body['rows'])) {
-        throw new Exception('Ошибка загрузки товаров: некорректный ответ сервера');
-    }
-
-    $products = [];
-
-    foreach ($body['rows'] as $row) {
-        $product = normalize_assortment_row($row);
-
-        if ($product === null) {
-            continue;
-        }
-
-        $products[] = $product;
-    }
-
-    echo json_encode([
-        'success' => true,
-        'products' => $products
-    ]);
+    
+    $authHeader = 'Basic ' . base64_encode($_SESSION['ms_login'] . ':' . $_SESSION['ms_password']);
+    $limit = $data['limit'] ?? 100;
+    $offset = $data['offset'] ?? 0;
+    
+    $response = apiRequest(
+        MS_API_URL . '/entity/product?limit=' . $limit . '&offset=' . $offset,
+        'GET',
+        null,
+        ['Authorization: ' . $authHeader]
+    );
+    
+    echo $response['body'];
 }
 
 /**
- * Привести элемент ассортимента МойСклад к единому формату.
- */
-function normalize_assortment_row(array $row): ?array {
-    $type = $row['meta']['type'] ?? '';
-
-    if (!in_array($type, ['product', 'variant'], true)) {
-        return null;
-    }
-
-    $parent = null;
-
-    if ($type === 'variant' && isset($row['product']) && is_array($row['product'])) {
-        $parent = $row['product'];
-    }
-
-    $attributes = [];
-
-    if ($parent && isset($parent['attributes']) && is_array($parent['attributes'])) {
-        $attributes = array_merge($attributes, $parent['attributes']);
-    }
-
-    if (isset($row['attributes']) && is_array($row['attributes'])) {
-        $attributes = array_merge($attributes, $row['attributes']);
-    }
-
-    $documents = [];
-
-    if ($parent && isset($parent['documents']) && is_array($parent['documents'])) {
-        $documents = array_merge($documents, $parent['documents']);
-    }
-
-    if (isset($row['documents']) && is_array($row['documents'])) {
-        $documents = array_merge($documents, $row['documents']);
-    }
-
-    return [
-        'id' => $row['id'] ?? null,
-        'name' => $row['name'] ?? ($parent['name'] ?? ''),
-        'article' => $row['article'] ?? ($parent['article'] ?? null),
-        'code' => $row['code'] ?? ($parent['code'] ?? null),
-        'tnved' => $row['tnved'] ?? ($parent['tnved'] ?? null),
-        'tnved10' => $row['tnved10'] ?? ($parent['tnved10'] ?? null),
-        'externalCode' => $row['externalCode'] ?? ($parent['externalCode'] ?? null),
-        'meta' => $row['meta'] ?? null,
-        'productMeta' => $parent['meta'] ?? null,
-        'assortmentType' => $type,
-        'attributes' => array_values($attributes),
-        'documents' => array_values($documents),
-        'barcodes' => $row['barcodes'] ?? ($parent['barcodes'] ?? []),
-        'characteristics' => $row['characteristics'] ?? [],
-        'uom' => $row['uom'] ?? ($parent['uom'] ?? null),
-        'parentId' => $parent['id'] ?? null
-    ];
-}
-
-/**
- * Update product GTIN in МойСклад
+ * МойСклад - Обновить GTIN
  */
 function handleUpdateGtin($data) {
-    $authHeader = get_auth_header() ?? ($_SESSION['ms_auth'] ?? '');
+    if (!isset($_SESSION['ms_login']) || !isset($_SESSION['ms_password'])) {
+        throw new Exception('Не авторизован в МойСклад');
+    }
+    
     $productId = $data['productId'] ?? '';
     $gtin = $data['gtin'] ?? '';
     
-    if (empty($authHeader) || empty($productId) || empty($gtin)) {
-        throw new Exception('Отсутствуют необходимые параметры');
+    if (empty($productId) || empty($gtin)) {
+        throw new Exception('Не указан ID товара или GTIN');
     }
     
-    // Get current product data
-    $getResponse = apiRequest(
+    $authHeader = 'Basic ' . base64_encode($_SESSION['ms_login'] . ':' . $_SESSION['ms_password']);
+    
+    // Получаем текущий товар
+    $response = apiRequest(
         MS_API_URL . '/entity/product/' . $productId,
         'GET',
         null,
         ['Authorization: ' . $authHeader]
     );
     
-    if ($getResponse['code'] !== 200) {
-        throw new Exception('Ошибка получения данных товара');
-    }
+    $product = json_decode($response['body'], true);
     
-    $product = json_decode($getResponse['body'], true);
-    
-    // Add GTIN to barcodes
+    // Добавляем GTIN в штрихкоды
     $barcodes = $product['barcodes'] ?? [];
+    $barcodes[] = ['ean13' => $gtin];
     
-    // Format GTIN to 14 digits
-    $formattedGtin = str_pad($gtin, 14, '0', STR_PAD_LEFT);
+    // Обновляем товар
+    $updateData = ['barcodes' => $barcodes];
     
-    // Check if GTIN already exists
-    $exists = false;
-    foreach ($barcodes as $barcode) {
-        if ($barcode['ean13'] === $formattedGtin) {
-            $exists = true;
-            break;
-        }
-    }
-    
-    if (!$exists) {
-        $barcodes[] = [
-            'ean13' => $formattedGtin
-        ];
-    }
-    
-    // Update product
     $updateResponse = apiRequest(
         MS_API_URL . '/entity/product/' . $productId,
         'PUT',
-        json_encode(['barcodes' => $barcodes]),
+        json_encode($updateData),
         [
             'Authorization: ' . $authHeader,
             'Content-Type: application/json'
         ]
     );
     
-    if ($updateResponse['code'] === 200) {
-        echo json_encode([
-            'success' => true,
-            'message' => 'GTIN успешно добавлен'
-        ]);
-    } else {
-        throw new Exception('Ошибка обновления GTIN');
-    }
-}
-
-/**
- * Get НК challenge
- */
-function handleNKChallenge() {
-    $response = apiRequest(
-        NK_API_URL . '/true-api/auth/key',
-        'GET'
-    );
-    
-    if ($response['code'] !== 200) {
-        throw new Exception('Failed to get НК challenge');
-    }
-    
-    $body = json_decode($response['body'], true);
-    
     echo json_encode([
         'success' => true,
-        'uuid' => $body['uuid'],
-        'data' => $body['data']
+        'message' => 'GTIN успешно добавлен'
     ]);
 }
 
 /**
- * Sign in to НК
+ * НК - Получить challenge для авторизации
+ */
+function handleNKChallenge() {
+    $response = apiRequest(NK_API_URL . '/true-api/auth/key', 'GET');
+    
+    if ($response['code'] === 200) {
+        $body = json_decode($response['body'], true);
+        echo json_encode([
+            'success' => true,
+            'uuid' => $body['uuid'],
+            'data' => $body['data']
+        ]);
+    } else {
+        throw new Exception('Ошибка получения challenge');
+    }
+}
+
+/**
+ * НК - Авторизация с подписью
  */
 function handleNKSignIn($data) {
     $uuid = $data['uuid'] ?? '';
     $signature = $data['signature'] ?? '';
     
     if (empty($uuid) || empty($signature)) {
-        throw new Exception('Missing parameters');
+        throw new Exception('UUID или подпись не указаны');
     }
+    
+    $body = json_encode([
+        'uuid' => $uuid,
+        'data' => $signature
+    ]);
     
     $response = apiRequest(
         NK_API_URL . '/true-api/auth/simpleSignIn',
         'POST',
-        json_encode([
-            'uuid' => $uuid,
-            'data' => $signature,
-            'unitedToken' => true
-        ]),
+        $body,
         ['Content-Type: application/json']
     );
     
-    if ($response['code'] !== 200) {
-        throw new Exception('Failed to sign in to НК');
+    if ($response['code'] === 200) {
+        $responseData = json_decode($response['body'], true);
+        $_SESSION['nk_token'] = $responseData['token'];
+        
+        echo json_encode([
+            'success' => true,
+            'token' => $responseData['token']
+        ]);
+    } else {
+        throw new Exception('Ошибка авторизации в НК: ' . $response['body']);
     }
-    
-    $body = json_decode($response['body'], true);
-    $_SESSION['nk_token'] = $body['token'];
-    
-    echo json_encode([
-        'success' => true,
-        'token' => $body['token']
-    ]);
 }
 
 /**
- * Get СУЗ challenge
+ * СУЗ - Получить challenge
  */
 function handleSUZChallenge($data) {
-    $omsConnection = $data['omsConnection'] ?? '';
+    $response = apiRequest(NK_API_URL . '/true-api/auth/key', 'GET');
     
-    $response = apiRequest(
-        SUZ_API_URL . '/auth/key?omsId=' . urlencode($omsConnection),
-        'GET'
-    );
-    
-    if ($response['code'] !== 200) {
-        throw new Exception('Failed to get СУЗ challenge');
+    if ($response['code'] === 200) {
+        $body = json_decode($response['body'], true);
+        echo json_encode([
+            'success' => true,
+            'uuid' => $body['uuid'],
+            'data' => $body['data']
+        ]);
+    } else {
+        throw new Exception('Ошибка получения challenge для СУЗ');
     }
-    
-    $body = json_decode($response['body'], true);
-    
-    echo json_encode([
-        'success' => true,
-        'uuid' => $body['uuid'],
-        'data' => $body['data']
-    ]);
 }
 
 /**
- * Sign in to СУЗ
+ * СУЗ - Авторизация
  */
 function handleSUZSignIn($data) {
     $uuid = $data['uuid'] ?? '';
     $signature = $data['signature'] ?? '';
-    $omsConnection = $data['omsConnection'] ?? '';
-    $omsId = $data['omsId'] ?? '';
+    $omsConnection = $data['omsConnection'] ?? $_SESSION['oms_connection'] ?? '';
+    $omsId = $data['omsId'] ?? $_SESSION['oms_id'] ?? '';
     
     if (empty($uuid) || empty($signature) || empty($omsConnection)) {
-        throw new Exception('Missing parameters');
+        throw new Exception('Не все данные для авторизации СУЗ указаны');
     }
     
+    $body = json_encode([
+        'uuid' => $uuid,
+        'data' => $signature
+    ]);
+    
     $response = apiRequest(
-        SUZ_API_URL . '/auth/simpleSignIn/' . $omsConnection,
+        NK_API_URL . '/auth/simpleSignIn/' . $omsConnection,
         'POST',
-        json_encode([
-            'uuid' => $uuid,
-            'data' => $signature
-        ]),
+        $body,
         ['Content-Type: application/json']
     );
     
-    if ($response['code'] !== 200) {
-        throw new Exception('Failed to sign in to СУЗ');
+    if ($response['code'] === 200) {
+        $responseData = json_decode($response['body'], true);
+        $_SESSION['suz_token'] = $responseData['token'];
+        $_SESSION['oms_id'] = $omsId;
+        
+        echo json_encode([
+            'success' => true,
+            'token' => $responseData['token']
+        ]);
+    } else {
+        throw new Exception('Ошибка авторизации в СУЗ: ' . $response['body']);
+    }
+}
+
+/**
+ * Сохранить OMS настройки
+ */
+function handleSaveOMS($data) {
+    $omsConnection = $data['omsConnection'] ?? '';
+    $omsId = $data['omsId'] ?? '';
+    
+    if (empty($omsConnection) || empty($omsId)) {
+        throw new Exception('OMS Connection и OMS ID обязательны');
     }
     
-    $body = json_decode($response['body'], true);
-    $_SESSION['suz_token'] = $body['token'];
     $_SESSION['oms_connection'] = $omsConnection;
     $_SESSION['oms_id'] = $omsId;
     
     echo json_encode([
         'success' => true,
-        'token' => $body['token']
+        'message' => 'OMS настройки сохранены'
     ]);
 }
 
 /**
- * Create НК card
+ * НК - Проверить ТН ВЭД (маркируемость)
+ * НОВОЕ! Проксирование для обхода CORS
  */
-function handleCreateNKCard($data) {
-    $nkToken = $_SESSION['nk_token'] ?? '';
-    if (empty($nkToken)) {
-        throw new Exception('Not authorized in НК');
+function handleNKCheckFeacn($data) {
+    $tnved = $data['tnved'] ?? '';
+    $token = $_SESSION['nk_token'] ?? '';
+    
+    if (empty($tnved)) {
+        throw new Exception('ТН ВЭД код не указан');
     }
     
-    $product = $data['product'] ?? [];
-    $options = $data['options'] ?? [];
+    if (empty($token)) {
+        throw new Exception('Не авторизован в НК');
+    }
     
-    // Build card data (simplified version - you'll need to adapt from your Flask logic)
-    $cardData = [
-        'is_tech_gtin' => $options['isTechGtin'] ?? true,
-        'good_name' => $product['name'],
-        'moderation' => $options['moderation'] ? 1 : 0
-    ];
+    $body = json_encode([
+        'feacn' => [substr($tnved, 0, 4)]
+    ]);
     
-    // Send to НК feed
+    $response = apiRequest(
+        NK_API_URL . '/check/feacn',
+        'POST',
+        $body,
+        [
+            'Content-Type: application/json',
+            'Authorization: Bearer ' . $token
+        ]
+    );
+    
+    if ($response['code'] === 200) {
+        echo $response['body'];
+    } else {
+        throw new Exception('Ошибка проверки ТН ВЭД: ' . $response['body']);
+    }
+}
+
+/**
+ * НК - Получить категорию по ТН ВЭД
+ * НОВОЕ! Проксирование для обхода CORS
+ */
+function handleNKGetCategory($data) {
+    $tnved = $data['tnved'] ?? '';
+    $token = $_SESSION['nk_token'] ?? '';
+    
+    if (empty($tnved)) {
+        throw new Exception('ТН ВЭД код не указан');
+    }
+    
+    if (empty($token)) {
+        throw new Exception('Не авторизован в НК');
+    }
+    
+    $response = apiRequest(
+        NK_API_URL . '/categories/by-feacn?feacn=' . substr($tnved, 0, 4),
+        'GET',
+        null,
+        ['Authorization: Bearer ' . $token]
+    );
+    
+    if ($response['code'] === 200) {
+        echo $response['body'];
+    } else {
+        throw new Exception('Ошибка получения категории: ' . $response['body']);
+    }
+}
+
+/**
+ * НК - Создать карточку
+ * НОВОЕ! Проксирование для обхода CORS
+ */
+function handleNKCreateCard($data) {
+    $cardData = $data['cardData'] ?? null;
+    $token = $_SESSION['nk_token'] ?? '';
+    
+    if (empty($cardData)) {
+        throw new Exception('Данные карточки не указаны');
+    }
+    
+    if (empty($token)) {
+        throw new Exception('Не авторизован в НК');
+    }
+    
     $response = apiRequest(
         NK_API_URL . '/feed',
         'POST',
         json_encode($cardData),
         [
             'Content-Type: application/json',
-            'Authorization: Bearer ' . $nkToken
+            'Authorization: Bearer ' . $token
         ]
     );
     
-    if ($response['code'] !== 200) {
-        throw new Exception('Failed to create НК card');
+    if ($response['code'] === 200) {
+        echo $response['body'];
+    } else {
+        throw new Exception('Ошибка создания карточки: ' . $response['body']);
     }
-    
-    $body = json_decode($response['body'], true);
-    $feedId = $body['result']['feed_id'] ?? null;
-    
-    if (!$feedId) {
-        throw new Exception('No feed_id in response');
-    }
-    
-    // Poll for status
-    $gtin = null;
-    for ($i = 0; $i < 30; $i++) {
-        sleep(2);
-        
-        $statusResponse = apiRequest(
-            NK_API_URL . '/feed-status?feed_id=' . $feedId,
-            'GET',
-            null,
-            ['Authorization: Bearer ' . $nkToken]
-        );
-        
-        if ($statusResponse['code'] === 200) {
-            $status = json_decode($statusResponse['body'], true);
-            
-            if ($status['status'] === 'Processed') {
-                $gtin = $status['item']['gtin'] ?? null;
-                break;
-            } elseif ($status['status'] === 'Rejected') {
-                throw new Exception('Card rejected: ' . json_encode($status['errors']));
-            }
-        }
-    }
-    
-    echo json_encode([
-        'success' => true,
-        'feedId' => $feedId,
-        'gtin' => $gtin
-    ]);
 }
 
 /**
- * Create КМ order
+ * НК - Получить статус обработки карточки
+ * НОВОЕ! Проксирование для обхода CORS
  */
-function handleCreateKMOrder($data) {
-    $suzToken = $_SESSION['suz_token'] ?? '';
-    $omsId = $data['omsId'] ?? $_SESSION['oms_id'] ?? '';
+function handleNKFeedStatus($data) {
+    $feedId = $data['feedId'] ?? '';
+    $token = $_SESSION['nk_token'] ?? '';
     
-    if (empty($suzToken) || empty($omsId)) {
-        throw new Exception('Not authorized in СУЗ');
+    if (empty($feedId)) {
+        throw new Exception('Feed ID не указан');
     }
     
-    $orderData = $data['orderData'] ?? '';
-    $signature = $data['signature'] ?? '';
+    if (empty($token)) {
+        throw new Exception('Не авторизован в НК');
+    }
     
     $response = apiRequest(
-        SUZ_API_URL . '/order?omsId=' . urlencode($omsId),
+        NK_API_URL . '/feed-status?feed_id=' . $feedId,
+        'GET',
+        null,
+        ['Authorization: Bearer ' . $token]
+    );
+    
+    if ($response['code'] === 200) {
+        echo $response['body'];
+    } else {
+        throw new Exception('Ошибка получения статуса: ' . $response['body']);
+    }
+}
+
+/**
+ * НК - Получить технический GTIN
+ * НОВОЕ! Проксирование для обхода CORS
+ */
+function handleNKGetGtin($data) {
+    $quantity = $data['quantity'] ?? 1;
+    $token = $_SESSION['nk_token'] ?? '';
+    
+    if (empty($token)) {
+        throw new Exception('Не авторизован в НК');
+    }
+    
+    $response = apiRequest(
+        NK_API_URL . '/gtin/retrieve?quantity=' . $quantity,
+        'GET',
+        null,
+        ['Authorization: Bearer ' . $token]
+    );
+    
+    if ($response['code'] === 200) {
+        echo $response['body'];
+    } else {
+        throw new Exception('Ошибка получения GTIN: ' . $response['body']);
+    }
+}
+
+/**
+ * СУЗ - Создать заказ КМ
+ */
+function handleSUZCreateOrder($data) {
+    $orderData = $data['orderData'] ?? null;
+    $signature = $data['signature'] ?? '';
+    $token = $_SESSION['suz_token'] ?? '';
+    $omsId = $_SESSION['oms_id'] ?? '';
+    
+    if (empty($orderData) || empty($signature)) {
+        throw new Exception('Данные заказа или подпись не указаны');
+    }
+    
+    if (empty($token) || empty($omsId)) {
+        throw new Exception('Не авторизован в СУЗ');
+    }
+    
+    $response = apiRequest(
+        SUZ_API_URL . '/order?omsId=' . $omsId,
         'POST',
-        $orderData,
+        json_encode($orderData),
         [
             'Content-Type: application/json',
-            'clientToken: ' . $suzToken,
+            'clientToken: ' . $token,
             'X-Signature: ' . $signature
         ]
     );
     
-    if ($response['code'] !== 200) {
-        throw new Exception('Failed to create order');
+    if ($response['code'] === 200) {
+        echo $response['body'];
+    } else {
+        throw new Exception('Ошибка создания заказа: ' . $response['body']);
     }
-    
-    $body = json_decode($response['body'], true);
-    
-    echo json_encode([
-        'success' => true,
-        'orderId' => $body['orderId'] ?? null
-    ]);
 }
 
 /**
- * Check order status
+ * СУЗ - Проверить статус заказа
  */
-function handleCheckOrderStatus($data) {
-    $suzToken = $_SESSION['suz_token'] ?? '';
-    $omsId = $data['omsId'] ?? $_SESSION['oms_id'] ?? '';
+function handleSUZCheckStatus($data) {
     $orderId = $data['orderId'] ?? '';
-
-    if (empty($suzToken) || empty($omsId) || empty($orderId)) {
-        throw new Exception('Missing parameters');
+    $token = $_SESSION['suz_token'] ?? '';
+    $omsId = $_SESSION['oms_id'] ?? '';
+    
+    if (empty($token) || empty($omsId)) {
+        throw new Exception('Не авторизован в СУЗ');
+    }
+    
+    $url = SUZ_API_URL . '/order/status?omsId=' . $omsId;
+    if (!empty($orderId)) {
+        $url .= '&orderId=' . $orderId;
     }
     
     $response = apiRequest(
-        SUZ_API_URL . '/order/status?omsId=' . urlencode($omsId) . '&orderId=' . urlencode($orderId),
+        $url,
         'GET',
         null,
-        ['clientToken: ' . $suzToken]
+        ['clientToken: ' . $token]
     );
     
-    if ($response['code'] !== 200) {
-        throw new Exception('Failed to check status');
+    if ($response['code'] === 200) {
+        echo $response['body'];
+    } else {
+        throw new Exception('Ошибка получения статуса: ' . $response['body']);
     }
-
-    $body = json_decode($response['body'], true);
-
-    $orderInfo = $body;
-    if (isset($body['orderInfos']) && is_array($body['orderInfos']) && count($body['orderInfos']) > 0) {
-        $orderInfo = $body['orderInfos'][0];
-    } elseif (isset($body['orderInfo']) && is_array($body['orderInfo'])) {
-        $orderInfo = $body['orderInfo'];
-    }
-
-    $buffers = [];
-    if (isset($orderInfo['buffers']) && is_array($orderInfo['buffers'])) {
-        $buffers = $orderInfo['buffers'];
-    } elseif (isset($body['buffers']) && is_array($body['buffers'])) {
-        $buffers = $body['buffers'];
-    }
-
-    $status = $orderInfo['orderStatus'] ?? ($body['orderStatus'] ?? 'Unknown');
-    $orderIdValue = $orderInfo['orderId'] ?? ($body['orderId'] ?? $orderId);
-
-    echo json_encode([
-        'success' => true,
-        'status' => $status,
-        'orderId' => $orderIdValue,
-        'buffers' => $buffers,
-        'raw' => $body
-    ]);
 }
 
 /**
- * Make API request
+ * Выполнить API запрос
  */
 function apiRequest($url, $method = 'GET', $body = null, $headers = []) {
     $ch = curl_init();
@@ -585,6 +586,7 @@ function apiRequest($url, $method = 'GET', $body = null, $headers = []) {
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
     curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
     curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
     
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);

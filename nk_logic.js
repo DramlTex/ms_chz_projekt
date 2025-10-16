@@ -1,189 +1,151 @@
 /**
- * НК Logic Module
- * Логика создания карточек в Национальном каталоге
- * Адаптировано из Flask проекта
+ * НК Logic - Логика работы с Национальным Каталогом
+ * ИСПРАВЛЕНО: Все запросы идут через api.php прокси для обхода CORS
  */
 
 const NKLogic = {
-    /**
-     * Карта стран: русское название → ISO-2 код
-     */
+    // Маппинг стран
     COUNTRY_MAP: {
         'россия': 'RU',
-        'российская федерация': 'RU',
+        'russia': 'RU',
         'рф': 'RU',
         'китай': 'CN',
+        'china': 'CN',
         'турция': 'TR',
-        'казахстан': 'KZ',
+        'turkey': 'TR',
         'беларусь': 'BY',
-        'узбекистан': 'UZ',
-        'индия': 'IN',
-        'бангладеш': 'BD',
-        'вьетнам': 'VN'
+        'belarus': 'BY',
+        'казахстан': 'KZ',
+        'kazakhstan': 'KZ'
     },
 
     /**
-     * Категории, требующие полный 10-значный ТН ВЭД
+     * Главная функция - создать карточку НК
      */
-    CATEGORIES_WITH_FULL_TNVED: new Set([
-        30933, // Одежда
-        // Добавьте другие категории по необходимости
-    ]),
-
-    /**
-     * ID атрибутов НК
-     */
-    ATTR_IDS: {
-        COUNTRY: 2630,        // Страна производства
-        PRODUCT_NAME: 2478,   // Наименование
-        BRAND: 2504,          // Бренд
-        TNVED_DETAILED: 13933, // Детальный ТН ВЭД
-        PRODUCT_KIND: 12,     // Вид товара
-        COLOR: 36,            // Цвет
-        SIZE: 35,             // Размер
-        COMPOSITION: 2483,    // Состав
-        CERT: 13836,          // Документ
-        ARTICLE: 13914,       // Артикул
-        GENDER: 14013         // Целевой пол
+    async createCard(product, msToken, nkToken, options = {}) {
+        try {
+            // 1. Извлечь данные товара
+            console.log('Извлечение данных товара...');
+            const productData = await this.extractProductData(product, msToken);
+            
+            // 2. Определить категорию по ТН ВЭД
+            console.log('Определение категории...');
+            const categoryInfo = await this.detectCategory(productData.tnved, nkToken);
+            
+            // 3. Получить технический GTIN (если нужен)
+            if (options.isTechGtin !== false) {
+                console.log('Получение технического GTIN...');
+                productData.gtin = await this.getTechGtin(nkToken);
+            }
+            
+            // 4. Сформировать данные карточки
+            console.log('Формирование карточки...');
+            const cardData = this.createCardData(productData, categoryInfo, options);
+            
+            // 5. Отправить карточку в НК
+            console.log('Отправка карточки в НК...');
+            const feedId = await this.sendCardToNK(cardData, nkToken);
+            
+            // 6. Ждать результата обработки
+            console.log('Ожидание обработки карточки...');
+            const result = await this.waitForFeedStatus(feedId, nkToken);
+            
+            if (!result.success) {
+                throw new Error('Карточка отклонена: ' + (result.errors || 'Неизвестная ошибка'));
+            }
+            
+            // 7. Обновить GTIN в МойСклад (если нужно)
+            if (options.updateMS !== false && result.gtin) {
+                console.log('Обновление GTIN в МойСклад...');
+                await this.updateMSGtin(product.id, result.gtin, msToken);
+            }
+            
+            return {
+                success: true,
+                gtin: result.gtin,
+                feedId: feedId,
+                cardData: cardData
+            };
+            
+        } catch (error) {
+            console.error('Ошибка создания карточки:', error);
+            throw error;
+        }
     },
 
     /**
-     * Привести значение атрибута к строке
-     */
-    formatAttributeValue(value) {
-        if (value === null || value === undefined) {
-            return null;
-        }
-
-        if (typeof value === 'object') {
-            if (Array.isArray(value)) {
-                const items = value
-                    .map(item => this.formatAttributeValue(item))
-                    .filter(Boolean);
-                return items.length ? items.join(', ') : null;
-            }
-
-            if (typeof value.name === 'string') {
-                return value.name;
-            }
-
-            if (typeof value.value !== 'undefined') {
-                return this.formatAttributeValue(value.value);
-            }
-
-            if (typeof value.title === 'string') {
-                return value.title;
-            }
-
-            if (typeof value.label === 'string') {
-                return value.label;
-            }
-
-            return null;
-        }
-
-        if (typeof value === 'boolean') {
-            return value ? 'Да' : 'Нет';
-        }
-
-        return String(value).trim();
-    },
-
-    /**
-     * Извлечь данные товара с наследованием от родителя
+     * Извлечь данные товара из МойСклад
      */
     async extractProductData(product, msToken) {
-        const tnvedSource =
-            product?.tnved ||
-            product?.tnved10 ||
-            product?.tnved_code ||
-            product?.tnvedCode ||
-            product?.tn_ved ||
-            null;
-
         const data = {
+            id: product.id,
             name: product.name,
-            article: product.article || null,
-            code: product.code || null,
-            tnved: this.extractTNVED(tnvedSource) || null,
-            country: null,
-            countryName: null,
-            brand: null,
-            color: null,
-            size: null,
-            composition: null,
+            article: product.article || product.code || '',
+            description: product.description || '',
+            tnved: null,
+            country: 'RU',
+            brand: '',
+            color: '',
+            size: '',
+            composition: [],
             documents: [],
-            gender: null,
-            productKind: null,
-            sizeType: null,
-            documentType: null,
-            documentNumber: null,
-            documentDate: null
+            attributes: {}
         };
 
-        // Если есть атрибуты, извлекаем
+        // Извлечь атрибуты
         if (product.attributes) {
             for (const attr of product.attributes) {
-                const attrName = attr.name?.toLowerCase() || '';
-                const attrValue = this.formatAttributeValue(attr.value);
+                const attrName = (attr.name || '').toLowerCase();
+                const attrValue = attr.value?.name || attr.value || '';
 
-                if (!attrValue) {
-                    continue;
+                data.attributes[attr.name] = attrValue;
+
+                // ТН ВЭД
+                if (attrName.includes('тн вэд') || attrName.includes('тнвэд') || attrName === 'tnved') {
+                    data.tnved = this.extractTNVED(attrValue);
                 }
 
-                if (attrName.includes('тн вэд') || attrName.includes('тнвэд')) {
-                    data.tnved = this.extractTNVED(attrValue);
-                } else if (attrName.includes('страна')) {
+                // Страна
+                if (attrName.includes('страна')) {
                     data.country = this.normalizeCountry(attrValue);
-                    data.countryName = attrValue;
-                } else if (attrName.includes('бренд') || attrName.includes('торговая марка')) {
+                }
+
+                // Бренд
+                if (attrName.includes('бренд') || attrName.includes('производитель')) {
                     data.brand = attrValue;
-                } else if (attrName.includes('цвет')) {
+                }
+
+                // Цвет
+                if (attrName.includes('цвет')) {
                     data.color = attrValue;
-                } else if (attrName.includes('размер')) {
-                    if (attrName.includes('вид размера') || attrName.includes('тип размера')) {
-                        data.sizeType = attrValue;
-                    } else {
-                        data.size = attrValue;
-                    }
-                } else if (attrName.includes('состав')) {
-                    data.composition = attrValue;
-                } else if (attrName.includes('пол')) {
-                    data.gender = attrValue;
-                } else if (attrName.includes('вид товара')) {
-                    data.productKind = attrValue;
-                } else if (attrName.includes('тип товара')) {
-                    data.productKind = attrValue;
-                } else if (attrName.includes('вид документа') || attrName.includes('тип документа')) {
-                    data.documentType = attrValue;
-                    data.documents.push({
-                        name: attr.name,
-                        type: attrValue,
-                        value: attrValue
+                }
+
+                // Размер
+                if (attrName.includes('размер') || attrName === 'size') {
+                    data.size = attrValue;
+                }
+
+                // Состав
+                if (attrName.includes('состав')) {
+                    data.composition.push({
+                        material: attrValue,
+                        percentage: 100
                     });
-                } else if (attrName.includes('номер документа') || attrName.includes('сертификат') || attrName.includes('декларац')) {
-                    if (!data.documentNumber) {
-                        data.documentNumber = attrValue;
-                    }
-                    data.documents.push({
-                        name: attr.name,
-                        number: attrValue,
-                        value: attrValue
-                    });
-                } else if (attrName.includes('дата документа')) {
-                    data.documentDate = attrValue;
-                    data.documents.push({
-                        name: attr.name,
-                        date: attrValue,
-                        value: attrValue
-                    });
-                } else if (attrName.includes('документ')) {
+                }
+
+                // Документы
+                if (attrName.includes('документ') || attrName.includes('сертификат')) {
                     data.documents.push({
                         name: attr.name,
                         value: attrValue
                     });
                 }
             }
+        }
+
+        // Если нет ТН ВЭД - ошибка
+        if (!data.tnved) {
+            throw new Error('У товара не указан ТН ВЭД код');
         }
 
         return data;
@@ -195,10 +157,8 @@ const NKLogic = {
     extractTNVED(value) {
         if (!value) return null;
         
-        // Убираем все кроме цифр
         const digits = value.toString().replace(/\D/g, '');
         
-        // Берем первые 4-10 цифр
         if (digits.length >= 4) {
             return digits.substring(0, Math.min(10, digits.length));
         }
@@ -218,26 +178,28 @@ const NKLogic = {
 
     /**
      * Определить категорию по ТН ВЭД
+     * ИСПРАВЛЕНО: Использует api.php прокси
      */
     async detectCategory(tnved, nkToken) {
         if (!tnved || tnved.length < 4) {
             throw new Error('ТН ВЭД код должен содержать минимум 4 цифры');
         }
 
-        // Проверка маркируемости
-        const checkResponse = await fetch('https://markirovka.crpt.ru/api/v3/check/feacn', {
+        // ✅ Используем ПРОКСИ вместо прямого запроса!
+        const checkResponse = await fetch('api.php', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'Bearer ' + nkToken
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                feacn: [tnved.substring(0, 4)]
+                action: 'nk_check_feacn',
+                tnved: tnved
             })
         });
 
         if (!checkResponse.ok) {
-            throw new Error('Ошибка проверки ТН ВЭД');
+            const errorText = await checkResponse.text();
+            throw new Error('Ошибка проверки ТН ВЭД: ' + errorText);
         }
 
         const checkData = await checkResponse.json();
@@ -247,18 +209,21 @@ const NKLogic = {
             throw new Error('Товар с данным ТН ВЭД не подлежит маркировке');
         }
 
-        // Получение категории
-        const categoryResponse = await fetch(
-            'https://markirovka.crpt.ru/api/v3/categories/by-feacn?feacn=' + tnved.substring(0, 4),
-            {
-                headers: {
-                    'Authorization': 'Bearer ' + nkToken
-                }
-            }
-        );
+        // ✅ Получение категории через ПРОКСИ
+        const categoryResponse = await fetch('api.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                action: 'nk_get_category',
+                tnved: tnved
+            })
+        });
 
         if (!categoryResponse.ok) {
-            throw new Error('Ошибка получения категории');
+            const errorText = await categoryResponse.text();
+            throw new Error('Ошибка получения категории: ' + errorText);
         }
 
         const categories = await categoryResponse.json();
@@ -274,13 +239,48 @@ const NKLogic = {
     },
 
     /**
+     * Получить технический GTIN
+     * ИСПРАВЛЕНО: Использует api.php прокси
+     */
+    async getTechGtin(nkToken, quantity = 1) {
+        // ✅ Используем ПРОКСИ
+        const response = await fetch('api.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                action: 'nk_get_gtin',
+                quantity: quantity
+            })
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error('Ошибка получения GTIN: ' + errorText);
+        }
+
+        const data = await response.json();
+        
+        if (!data.codes || data.codes.length === 0) {
+            throw new Error('Не удалось получить GTIN');
+        }
+
+        return data.codes[0];
+    },
+
+    /**
      * Создать данные карточки НК
      */
     createCardData(productData, categoryInfo, options = {}) {
         const {
             isTechGtin = true,
             moderation = false,
-            nameOptions = { includeArticle: true, includeSize: true, includeColor: true }
+            nameOptions = { 
+                includeArticle: true, 
+                includeSize: true, 
+                includeColor: true 
+            }
         } = options;
 
         // Формируем полное название
@@ -298,158 +298,105 @@ const NKLogic = {
             fullName += ' ' + productData.color;
         }
 
+        // Обрезаем до 500 символов
+        if (fullName.length > 500) {
+            fullName = fullName.substring(0, 500);
+        }
+
         // Базовая структура карточки
         const card = {
             is_tech_gtin: isTechGtin,
             good_name: fullName,
-            moderation: moderation ? 1 : 0,
-            categories: [categoryInfo.categoryId],
-            good_attrs: []
+            moderation: moderation ? 'true' : 'false',
+            product_group_code: categoryInfo.productGroupCode,
+            good_description: productData.description || fullName,
+            tnveds: [productData.tnved],
+            attributes: []
         };
 
-        // Добавляем ТН ВЭД
-        if (productData.tnved) {
-            card.tnved = productData.tnved.substring(0, 4);
-            
-            // Если категория требует полный ТН ВЭД
-            if (this.CATEGORIES_WITH_FULL_TNVED.has(categoryInfo.categoryId)) {
-                if (productData.tnved.length >= 10) {
-                    card.good_attrs.push({
-                        attr_id: this.ATTR_IDS.TNVED_DETAILED,
-                        attr_value: productData.tnved.substring(0, 10)
-                    });
-                }
-            }
+        // Добавляем GTIN если есть
+        if (productData.gtin) {
+            card.gtin = productData.gtin;
         }
 
-        // Добавляем product_group_code если есть
-        if (categoryInfo.productGroupCode) {
-            card.product_group_code = categoryInfo.productGroupCode;
+        // Добавляем категорию
+        if (categoryInfo.categoryId) {
+            card.category_id = categoryInfo.categoryId;
         }
 
-        // Добавляем бренд
-        if (productData.brand) {
-            card.brand = productData.brand;
-            card.good_attrs.push({
-                attr_id: this.ATTR_IDS.BRAND,
-                attr_value: productData.brand
-            });
-        }
+        // Атрибуты
+        const attributes = [];
 
-        // Обязательные атрибуты
-        
         // Страна производства
-        card.good_attrs.push({
-            attr_id: this.ATTR_IDS.COUNTRY,
-            attr_value: productData.country || 'RU'
+        attributes.push({
+            id: 'country',
+            value: productData.country
         });
 
-        // Наименование
-        card.good_attrs.push({
-            attr_id: this.ATTR_IDS.PRODUCT_NAME,
-            attr_value: fullName
-        });
+        // Бренд
+        if (productData.brand) {
+            attributes.push({
+                id: 'brand',
+                value: productData.brand
+            });
+        }
 
-        // Опциональные атрибуты
-        
+        // Цвет
         if (productData.color) {
-            card.good_attrs.push({
-                attr_id: this.ATTR_IDS.COLOR,
-                attr_value: productData.color.toUpperCase()
+            attributes.push({
+                id: 'color',
+                value: productData.color
             });
         }
 
+        // Размер
         if (productData.size) {
-            card.good_attrs.push({
-                attr_id: this.ATTR_IDS.SIZE,
-                attr_value: productData.size,
-                attr_value_type: 'МЕЖДУНАРОДНЫЙ'
+            attributes.push({
+                id: 'size',
+                value: productData.size
             });
         }
 
-        if (productData.composition) {
-            card.good_attrs.push({
-                attr_id: this.ATTR_IDS.COMPOSITION,
-                attr_value: productData.composition
+        // Состав
+        if (productData.composition.length > 0) {
+            attributes.push({
+                id: 'composition',
+                value: productData.composition
             });
         }
 
-        if (productData.article) {
-            card.good_attrs.push({
-                attr_id: this.ATTR_IDS.ARTICLE,
-                attr_value: productData.article,
-                attr_value_type: 'Артикул'
-            });
-        }
-
-        if (productData.gender) {
-            const genderMap = {
-                'мужской': 'МУЖСКОЙ',
-                'женский': 'ЖЕНСКИЙ',
-                'унисекс': 'УНИСЕКС',
-                'детский': 'ДЕТСКИЙ'
-            };
-            
-            const normalizedGender = genderMap[productData.gender.toLowerCase()] || 'УНИСЕКС';
-            
-            card.good_attrs.push({
-                attr_id: this.ATTR_IDS.GENDER,
-                attr_value: normalizedGender
-            });
-        }
+        card.attributes = attributes;
 
         return card;
     },
 
     /**
-     * Получить боевой GTIN
-     */
-    async getLiveGTIN(nkToken, quantity = 1) {
-        const response = await fetch(
-            'https://markirovka.crpt.ru/api/v3/true-api/generate-gtins?quantity=' + quantity,
-            {
-                method: 'GET',
-                headers: {
-                    'Authorization': 'Bearer ' + nkToken
-                }
-            }
-        );
-
-        if (!response.ok) {
-            throw new Error('Ошибка получения GTIN');
-        }
-
-        const data = await response.json();
-        
-        if (!data.drafts || data.drafts.length === 0) {
-            throw new Error('GTIN не получен');
-        }
-
-        return data.drafts[0].gtin;
-    },
-
-    /**
      * Отправить карточку в НК
+     * ИСПРАВЛЕНО: Использует api.php прокси
      */
     async sendCardToNK(cardData, nkToken) {
-        const response = await fetch('https://markirovka.crpt.ru/api/v3/feed', {
+        // ✅ Используем ПРОКСИ
+        const response = await fetch('api.php', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'Bearer ' + nkToken
+                'Content-Type': 'application/json'
             },
-            body: JSON.stringify(cardData)
+            body: JSON.stringify({
+                action: 'nk_create_card',
+                cardData: cardData
+            })
         });
 
         if (!response.ok) {
-            throw new Error('Ошибка отправки карточки');
+            const errorText = await response.text();
+            throw new Error('Ошибка отправки карточки: ' + errorText);
         }
 
         const data = await response.json();
         const feedId = data.result?.feed_id;
 
         if (!feedId) {
-            throw new Error('feed_id не получен');
+            throw new Error('feed_id не получен из ответа');
         }
 
         return feedId;
@@ -457,90 +404,91 @@ const NKLogic = {
 
     /**
      * Опросить статус обработки карточки
+     * ИСПРАВЛЕНО: Использует api.php прокси
      */
     async waitForFeedStatus(feedId, nkToken, maxRetries = 30, interval = 2000) {
         for (let i = 0; i < maxRetries; i++) {
+            // Ждем перед проверкой
             await new Promise(resolve => setTimeout(resolve, interval));
 
-            const response = await fetch(
-                'https://markirovka.crpt.ru/api/v3/feed-status?feed_id=' + feedId,
-                {
-                    headers: {
-                        'Authorization': 'Bearer ' + nkToken
-                    }
-                }
-            );
+            // ✅ Используем ПРОКСИ
+            const response = await fetch('api.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    action: 'nk_feed_status',
+                    feedId: feedId
+                })
+            });
 
             if (!response.ok) {
+                console.warn('Ошибка получения статуса, повтор...');
                 continue;
             }
 
             const status = await response.json();
 
+            console.log(`Попытка ${i + 1}/${maxRetries}: статус = ${status.status}`);
+
+            // Успешно обработано
             if (status.status === 'Processed') {
                 return {
                     success: true,
                     gtin: status.item?.gtin,
                     status: status.status
                 };
-            } else if (status.status === 'Rejected') {
+            } 
+            // Отклонено
+            else if (status.status === 'Rejected') {
+                const errors = status.errors || [];
+                const errorText = errors.map(e => e.error_description || e.message).join('; ');
+                
                 return {
                     success: false,
                     status: status.status,
-                    errors: status.errors || [],
-                    validation_errors: status.validation_errors || []
+                    errors: errorText || 'Карточка отклонена без описания ошибки'
                 };
             }
-            // Если Processing или InProgress - продолжаем опрос
+            // Продолжаем ждать
         }
 
-        return {
-            success: false,
-            status: 'Timeout',
-            error: 'Превышено время ожидания'
-        };
+        throw new Error('Превышено время ожидания обработки карточки (60 секунд)');
     },
 
     /**
-     * Полный процесс создания карточки
+     * Обновить GTIN в МойСклад
      */
-    async createCard(product, msToken, nkToken, options = {}) {
-        console.log('Step 1: Извлечение данных товара...');
-        const productData = await this.extractProductData(product, msToken);
-        
-        if (!productData.tnved) {
-            throw new Error('У товара отсутствует ТН ВЭД код');
+    async updateMSGtin(productId, gtin, msToken) {
+        const response = await fetch('api.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                action: 'update_gtin',
+                productId: productId,
+                gtin: gtin
+            })
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error('Ошибка обновления GTIN: ' + errorText);
         }
 
-        console.log('Step 2: Определение категории по ТН ВЭД...');
-        const categoryInfo = await this.detectCategory(productData.tnved, nkToken);
+        const data = await response.json();
         
-        console.log('Step 3: Формирование данных карточки...');
-        let cardData = this.createCardData(productData, categoryInfo, options);
-
-        // Если нужен боевой GTIN
-        if (!options.isTechGtin) {
-            console.log('Step 4: Получение боевого GTIN...');
-            const gtin = await this.getLiveGTIN(nkToken);
-            cardData.gtin = gtin;
+        if (!data.success) {
+            throw new Error(data.error || 'Неизвестная ошибка при обновлении GTIN');
         }
 
-        console.log('Step 5: Отправка карточки в НК...');
-        const feedId = await this.sendCardToNK(cardData, nkToken);
-
-        console.log('Step 6: Ожидание обработки...');
-        const result = await this.waitForFeedStatus(feedId, nkToken);
-
-        return {
-            ...result,
-            feedId: feedId,
-            productData: productData,
-            categoryInfo: categoryInfo
-        };
+        return true;
     }
 };
 
-// Export для использования в разных средах
+// Экспортируем для использования
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = NKLogic;
 }
