@@ -84,11 +84,19 @@ const NKLogic = {
             description: product.description || '',
             tnved: null,
             country: 'RU',
+            countryName: '',
             brand: '',
             color: '',
             size: '',
+            productKind: '',
+            gender: '',
+            sizeType: '',
             composition: [],
+            compositionText: '',
             documents: [],
+            documentType: null,
+            documentNumber: null,
+            documentDate: null,
             attributes: {},
             validationErrors: []
         };
@@ -97,51 +105,130 @@ const NKLogic = {
         if (product.attributes) {
             for (const attr of product.attributes) {
                 const attrName = (attr.name || '').toLowerCase();
-                const attrValue = attr.value?.name || attr.value || '';
+                const attrRawValue = attr?.value;
+                const attrValue = (attrRawValue && typeof attrRawValue === 'object' && attrRawValue.name)
+                    ? attrRawValue.name
+                    : attrRawValue ?? '';
+                const attrValueString = typeof attrValue === 'string'
+                    ? attrValue.trim()
+                    : (typeof attrValue === 'boolean'
+                        ? (attrValue ? 'Да' : 'Нет')
+                        : attrValue);
 
-                data.attributes[attr.name] = attrValue;
+                data.attributes[attr.name] = attrValueString;
 
                 // ТН ВЭД
                 if (attrName.includes('тн вэд') || attrName.includes('тнвэд') || attrName === 'tnved') {
-                    data.tnved = this.extractTNVED(attrValue);
+                    data.tnved = this.extractTNVED(attrValueString);
                 }
 
                 // Страна
                 if (attrName.includes('страна')) {
-                    data.country = this.normalizeCountry(attrValue);
+                    data.country = this.normalizeCountry(attrValueString);
+                    data.countryName = attrValueString;
                 }
 
                 // Бренд
                 if (attrName.includes('бренд') || attrName.includes('производитель')) {
-                    data.brand = attrValue;
+                    data.brand = attrValueString;
+                }
+
+                // Вид товара
+                if (attrName.includes('вид товара')) {
+                    data.productKind = attrValueString;
                 }
 
                 // Цвет
                 if (attrName.includes('цвет')) {
-                    data.color = attrValue;
+                    data.color = attrValueString;
                 }
 
                 // Размер
-                if (attrName.includes('размер') || attrName === 'size') {
-                    data.size = attrValue;
+                if ((attrName.includes('размер') && !attrName.includes('вид размера')) || attrName === 'size') {
+                    data.size = attrValueString;
+                }
+
+                // Целевой пол
+                if (attrName.includes('целевой пол') || attrName.includes('пол')) {
+                    if (!attrName.includes('материал')) {
+                        data.gender = attrValueString;
+                    }
+                }
+
+                // Вид размера
+                if (attrName.includes('вид размера')) {
+                    data.sizeType = attrValueString;
                 }
 
                 // Состав
                 if (attrName.includes('состав')) {
-                    data.composition.push({
-                        material: attrValue,
-                        percentage: 100
-                    });
+                    const parsedComposition = this.parseComposition(attrValueString);
+
+                    if (parsedComposition.length > 0) {
+                        data.composition.push(...parsedComposition);
+                    } else if (attrValueString) {
+                        data.composition.push({
+                            material: attrValueString,
+                            percentage: null
+                        });
+                    }
+
+                    data.compositionText = this.formatComposition(data.composition);
                 }
 
                 // Документы
                 if (attrName.includes('документ') || attrName.includes('сертификат')) {
-                    data.documents.push({
-                        name: attr.name,
-                        value: attrValue
-                    });
+                    const document = this.parseDocumentAttribute(attr.name, attrValueString);
+
+                    if (document) {
+                        data.documents.push(document);
+
+                        if (!data.documentType && document.type) {
+                            data.documentType = document.type;
+                        }
+
+                        if (!data.documentNumber && document.number) {
+                            data.documentNumber = document.number;
+                        }
+
+                        if (!data.documentDate && document.date) {
+                            data.documentDate = document.date;
+                        }
+                    } else {
+                        data.documents.push({
+                            name: attr.name,
+                            value: attrValueString
+                        });
+                    }
+                }
+
+                // Декларации (частный случай)
+                if (!attrName.includes('документ')
+                    && !attrName.includes('сертификат')
+                    && attrName.includes('деклара')) {
+                    const document = this.parseDocumentAttribute(attr.name, attrValueString);
+
+                    if (document) {
+                        data.documents.push(document);
+
+                        if (!data.documentType && document.type) {
+                            data.documentType = document.type;
+                        }
+
+                        if (!data.documentNumber && document.number) {
+                            data.documentNumber = document.number;
+                        }
+
+                        if (!data.documentDate && document.date) {
+                            data.documentDate = document.date;
+                        }
+                    }
                 }
             }
+        }
+
+        if (!data.tnved && product.tnved) {
+            data.tnved = this.extractTNVED(product.tnved);
         }
 
         // Если нет ТН ВЭД - ошибка
@@ -150,6 +237,125 @@ const NKLogic = {
         }
 
         return data;
+    },
+
+    /**
+     * Разобрать строку состава в структуру
+     */
+    parseComposition(value) {
+        if (!value) {
+            return [];
+        }
+
+        if (Array.isArray(value)) {
+            return value;
+        }
+
+        const text = value.toString().trim();
+
+        if (!text) {
+            return [];
+        }
+
+        const parts = text.split(/[,;]+/);
+        const result = [];
+
+        for (const part of parts) {
+            const segment = part.trim();
+
+            if (!segment) {
+                continue;
+            }
+
+            let material = segment;
+            let percentage = null;
+
+            const percentFirst = segment.match(/^([0-9]+(?:[.,][0-9]+)?)\s*%?\s*(.+)$/i);
+
+            if (percentFirst) {
+                percentage = Number.parseFloat(percentFirst[1].replace(',', '.'));
+                material = percentFirst[2].trim();
+            } else {
+                const percentLast = segment.match(/^(.+?)\s*([0-9]+(?:[.,][0-9]+)?)\s*%?$/i);
+
+                if (percentLast) {
+                    material = percentLast[1].trim();
+                    percentage = Number.parseFloat(percentLast[2].replace(',', '.'));
+                }
+            }
+
+            result.push({
+                material,
+                percentage: Number.isFinite(percentage)
+                    ? Math.round(percentage)
+                    : null
+            });
+        }
+
+        return result;
+    },
+
+    /**
+     * Сформировать строку состава для отображения
+     */
+    formatComposition(list) {
+        if (!Array.isArray(list) || list.length === 0) {
+            return '';
+        }
+
+        const parts = list
+            .map(item => {
+                if (!item) {
+                    return '';
+                }
+
+                const material = (item.material || item.value || '').toString().trim();
+                const percentage = Number.isFinite(item.percentage)
+                    ? `${item.percentage}%`
+                    : '';
+
+                return [percentage, material].filter(Boolean).join(' ').trim();
+            })
+            .filter(Boolean);
+
+        return parts.join(', ');
+    },
+
+    /**
+     * Разобрать атрибут документа
+     */
+    parseDocumentAttribute(name, value) {
+        if (value === undefined || value === null) {
+            return null;
+        }
+
+        const raw = value.toString().trim();
+
+        if (!raw) {
+            return {
+                name,
+                type: name || null,
+                value: raw
+            };
+        }
+
+        const parts = raw.split(':::').map(part => part.trim()).filter(Boolean);
+
+        const document = {
+            name,
+            type: name || null,
+            value: raw
+        };
+
+        if (parts.length > 0) {
+            document.number = parts[0];
+        }
+
+        if (parts.length > 1) {
+            document.date = parts[parts.length - 1];
+        }
+
+        return document;
     },
 
     /**

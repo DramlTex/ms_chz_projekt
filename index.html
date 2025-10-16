@@ -1120,7 +1120,8 @@
                             p.brand,
                             p.documentType,
                             p.documentSummary,
-                            p.documentNumber
+                            p.documentNumber,
+                            p.documentDate
                         ];
 
                         return values.some(value =>
@@ -1312,7 +1313,15 @@
                         || this.getDocumentProperty(normalizedDocuments, 'value')
                         || null;
 
+                    const documentDate = details.documentDate
+                        || this.getDocumentProperty(normalizedDocuments, 'date')
+                        || null;
+
                     const documentSummary = this.formatDocumentsList(normalizedDocuments);
+
+                    const compositionSummary = details.compositionText
+                        || NKLogic.formatComposition(details.composition)
+                        || null;
 
                     const enriched = {
                         ...product,
@@ -1321,8 +1330,14 @@
                         article: details.article ?? product.article ?? null,
                         code: details.code ?? product.code ?? null,
                         documents: normalizedDocuments,
+                        productKind: details.productKind || product.productKind || null,
+                        gender: details.gender || product.gender || null,
+                        sizeType: details.sizeType || product.sizeType || null,
+                        countryName: details.countryName || product.countryName || null,
+                        composition: compositionSummary,
                         documentType,
                         documentNumber,
+                        documentDate,
                         documentSummary
                     };
 
@@ -1357,7 +1372,13 @@
                         if (!doc) continue;
 
                         if (doc.type && doc.number) {
-                            parts.push(`${doc.type}: ${doc.number}`);
+                            const chunks = [`${doc.type}: ${doc.number}`];
+
+                            if (doc.date) {
+                                chunks.push(doc.date);
+                            }
+
+                            parts.push(chunks.join(' · '));
                         } else if (doc.name && doc.value) {
                             parts.push(`${doc.name}: ${doc.value}`);
                         } else if (doc.value) {
